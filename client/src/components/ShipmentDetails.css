@@ -1,0 +1,105 @@
+.details-header {
+  position: relative; 
+  display: flex;
+  align-items: center;
+  justify-content: center; 
+  padding: 20px;
+  padding-bottom: 10px; 
+  margin-bottom: 10px;
+}
+
+.details-container {
+  background-color: #F9FAFB;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px; 
+  margin: 0 auto;  
+  
+  position: relative;
+}
+
+.back-btn-absolute {
+  position: absolute;
+  left: 20px; 
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px; 
+  height: 40px;
+  margin-left: -10px; 
+}
+
+.shipment-title-inline {
+  font-size: 1.4em;
+  color: black;
+  margin: 0; 
+  text-align: center;
+}
+
+.shipment-title {
+    display: none; 
+}
+
+.shipment-title {
+  text-align: center; font-size: 1.4em; font-weight: bold; margin: 20px 0 10px 0;
+}
+
+.info-box {
+  background-color: #E0E0E0; margin: 0 20px 20px 20px; padding: 15px;
+  font-size: 0.9em; color: #333;
+}
+
+.info-row { margin-bottom: 5px; }
+
+.steps-container {
+  padding: 0 20px; display: flex; flex-direction: column; gap: 12px;
+}
+
+.step-button {
+  width: 100%; border: none; padding: 15px 0; border-radius: 4px;
+  display: flex; justify-content: center; align-items: center; position: relative;
+  font-size: 0.9em; text-transform: uppercase;
+  cursor: default; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.step-content { display: flex; align-items: center; gap: 12px; }
+
+.step-status-icon { position: absolute; right: 20px; display: flex; align-items: center; }
+
+.step-icon svg, .step-status-icon svg { width: 24px; height: 24px; fill: black; display: block; }
+
+.step-done { background-color: #81C784; color: #2e7d32; }
+.step-active { background-color: #C0CA33; color: black; cursor: pointer; transform: scale(1.02); }
+.step-pending { background-color: #E2E2E2; color: #9E9E9E; }
+
+.completion-banner {
+  background-color: #2E7D32; 
+  color: white;  
+  margin: 0 20px 20px 20px;
+  padding: 18px; 
+  border-radius: 8px;  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px; 
+  font-weight: 900;
+  font-size: 1.2em; 
+  letter-spacing: 1px;
+  border: none;
+  box-shadow: 0 4px 10px rgba(46, 125, 50, 0.4);
+  animation: popIn 0.3s ease-out;
+}
+
+.banner-icon svg {
+  width: 32px; 
+  height: 32px;
+  fill: white; 
+}
+
+@keyframes popIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}

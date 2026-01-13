@@ -1,0 +1,72 @@
+.dashboard-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;       
+  overflow: hidden;   
+}
+
+.dashboard-container {
+  padding: 20px;
+  padding-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%; 
+  max-width: 800px;
+  margin: 0 auto;
+  
+  flex: 1;            
+  overflow-y: auto;   
+}
+
+.empty-state {
+    text-align: center;
+    color: #888;
+    margin-top: 20px;
+}
+
+.shipment-card {
+  position: relative !important;   
+  border-radius: 12px;
+  padding: 16px !important;  
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  cursor: pointer;
+  min-height: 120px;  
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.shipment-card:active { transform: scale(0.98); }
+
+/* Card Gradients based on status */
+.card-blue {
+  background: linear-gradient(90deg, #FFFFFF 40%, #90CAF9 100%);
+  border: 1px solid #E3F2FD;
+}
+.card-yellow {
+  background: linear-gradient(90deg, #FFFFFF 40%, #FFF59D 100%);
+  border: 1px solid #FFF9C4;
+}
+.card-green {
+  background: linear-gradient(90deg, #FFFFFF 40%, #A5D6A7 100%);
+  border: 1px solid #C8E6C9;
+}
+
+.card-id { font-weight: 700; font-size: 1.15em; margin-bottom: 6px; color: #222; }
+.card-client { font-weight: 500; font-size: 1em; color: #333; }
+.card-location { font-size: 0.9em; color: #555; margin-top: 3px; }
+.card-date { font-size: 0.9em; color: #555; margin-top: 3px; }
+
+.card-status-label {
+  position: absolute !important; 
+  right: 16px !important;
+  
+  margin: 0 !important;
+  
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #444;
+  z-index: 10;
+}

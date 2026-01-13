@@ -1,0 +1,219 @@
+.desktop-layout {
+    display: flex;
+    min-height: 100vh;
+    width: 100vw;
+    background-color: #FFFFFF;
+    font-family: 'Segoe UI', sans-serif;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    position: absolute;
+    top: 0;
+    left: 0;
+}
+
+.sidebar-rail {
+    width: 110px;
+    background-color: #D9D9D9;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 30px;
+    padding-bottom: 20px;
+    flex-shrink: 0;
+}
+
+.rail-logo img {
+    width: 90px;
+    height: auto;
+    margin-bottom: 40px;
+    filter: drop-shadow(0 4px 4px rgba(0,0,0,0.1));
+    object-fit: contain;
+}
+
+.rail-menu {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    width: 100%;
+    padding: 0 10px;
+}
+
+.rail-btn {
+    width: 100%;
+    height: 50px; 
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 8px; 
+    transition: all 0.2s ease;
+    color: #333; 
+}
+
+.rail-btn svg {
+    width: 28px;
+    height: 28px;
+    fill: #333;
+    transition: transform 0.2s;
+}
+
+.rail-btn:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+    transform: translateY(-1px);
+}
+
+.rail-btn.active {
+    background-color: var(--primary-orange);
+    color: black; 
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+    transform: none;
+}
+
+.rail-btn.active svg {
+    fill: black !important;
+}
+
+.rail-footer {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
+.rail-profile {
+    width: 45px;
+    height: 45px;
+    background: black;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    color: white;
+}
+
+.rail-profile svg {
+    width: 30px;
+    height: 30px;
+    fill: white;
+}
+
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 30px 40px;
+    overflow: hidden;
+}
+
+.top-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 40px;
+}
+
+.top-header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.header-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 15px;
+}
+
+.welcome-box {
+    text-align: right;
+}
+
+.welcome-text {
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.date-text {
+    font-size: 14px;
+    color: #666;
+}
+
+.new-shipment-btn {
+    background-color: #2D9CDB; 
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.content-body {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+}
+
+.custom-table th {
+    text-align: left;
+    padding: 15px 10px;
+    color: #555;
+    font-weight: 600;
+    border-bottom: 2px solid #333; 
+}
+
+.custom-table td {
+    padding: 20px 10px;
+    border-bottom: 1px solid #E0E0E0;
+    vertical-align: middle;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.crew-avatars {
+    display: flex;
+    gap: 5px;
+}
+
+.mini-avatar {
+    width: 24px;
+    height: 24px;
+    background: black;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+}
+
+.mini-avatar svg {
+    width: 16px;
+    height: 16px;
+    fill: white;
+}
+
+.expand-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+}

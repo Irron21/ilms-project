@@ -1,0 +1,144 @@
+.mobile-app {
+  width: 100%;
+  min-height: 100vh;
+  background-color: #F9FAFB;
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-header {
+  background-color: var(--primary-orange);
+  padding: 15px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  z-index: 100;
+  height: 80px
+}
+
+.header-logo {
+  height: 32px;
+  max-width: 200px;
+  object-fit: contain;
+}
+
+.profile-icon {
+  position: absolute;
+  left: 20px;
+  width: 40px; 
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 101;
+}
+
+.header-profile-svg {
+  width: 38px;
+  height: 38px;
+  fill: black !important; 
+  background: white; 
+  border-radius: 50%;
+}
+
+.header-logo {
+  height: 40px; 
+  width: auto;
+  object-fit: contain;
+}
+
+.tabs {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  margin-top: 20px;
+  font-weight: bold;
+  color: #757575;
+}
+
+.tab {
+  cursor: pointer;
+  padding-bottom: 5px;
+}
+
+.tab.active {
+  color: black;
+  border-bottom: 3px solid var(--primary-orange);
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s;
+}
+
+.modal-box {
+  background: white;
+  width: 85%;
+  max-width: 320px;
+  padding: 24px;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  animation: popIn 0.2s;
+}
+
+.modal-title {
+  font-size: 1.2em;
+  font-weight: bold;
+  margin-bottom: 10px;
+  color: var(--primary-orange);
+}
+
+.modal-text {
+  color: #555;
+  margin-bottom: 25px;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.modal-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-weight: bold;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.btn-cancel {
+  background-color: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+}
+
+.btn-confirm {
+  background-color: var(--primary-orange);
+  color: white;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes popIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
