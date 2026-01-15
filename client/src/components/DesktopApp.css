@@ -1,48 +1,52 @@
-.desktop-layout {
-    display: flex;
-    min-height: 100vh;
-    width: 100vw;
-    background-color: #FFFFFF;
-    font-family: 'Segoe UI', sans-serif;
-    color: #333;
+/* --- GLOBAL LAYOUT & RESET --- */
+body {
     margin: 0;
     padding: 0;
-    position: absolute;
-    top: 0;
-    left: 0;
+    font-family: 'Segoe UI', sans-serif;
+    background-color: #F5F7FA;
 }
 
+.desktop-layout {
+    display: flex;
+    height: 100vh;       /* 🔒 Locks app to screen height */
+    width: 100vw;
+    overflow: hidden;    /* 🔒 Prevents main window scrolling */
+    color: #333;
+}
+
+/* --- SIDEBAR RAIL --- */
 .sidebar-rail {
-    width: 110px;
+    width: 125px;
     background-color: #D9D9D9;
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding-top: 30px;
+    padding-top: 20px;
     padding-bottom: 20px;
+    height: 100%;
     flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .rail-logo img {
-    width: 90px;
+    width: 70px;
     height: auto;
-    margin-bottom: 40px;
+    margin-bottom: 25px;
     filter: drop-shadow(0 4px 4px rgba(0,0,0,0.1));
-    object-fit: contain;
 }
 
 .rail-menu {
-    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 15px;
+    gap: 8px;
     width: 100%;
-    padding: 0 10px;
+    padding: 0 8px;
+    box-sizing: border-box;
 }
 
 .rail-btn {
     width: 100%;
-    height: 50px; 
+    height: 60px;
     border: none;
     background: transparent;
     cursor: pointer;
@@ -53,167 +57,166 @@
     transition: all 0.2s ease;
     color: #333; 
 }
-
-.rail-btn svg {
-    width: 28px;
-    height: 28px;
-    fill: #333;
-    transition: transform 0.2s;
-}
-
-.rail-btn:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-    transform: translateY(-1px);
-}
-
+.rail-btn svg { width: 40px; height: 40px; fill: #333; }
+.rail-btn:hover { background-color: rgba(0, 0, 0, 0.05); }
 .rail-btn.active {
     background-color: var(--primary-orange);
     color: black; 
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
-    transform: none;
-}
-
-.rail-btn.active svg {
-    fill: black !important;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
 }
 
 .rail-footer {
     width: 100%;
     display: flex;
     justify-content: center;
+    margin-top: auto; /* Pushes profile to bottom */
 }
 
 .rail-profile {
-    width: 45px;
-    height: 45px;
-    background: black;
-    border-radius: 50%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    color: white;
+    width: 40px; height: 40px;
+    background: black; border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+    cursor: pointer; color: white;
 }
 
-.rail-profile svg {
-    width: 30px;
-    height: 30px;
-    fill: white;
+.rail-profile svg{
+    width: 20px; height: 20px; fill: white;
 }
 
+/* --- MAIN CONTENT AREA --- */
 .main-content {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 30px 40px;
+    padding: 20px 50px;
+    height: 100%;
     overflow: hidden;
+    box-sizing: border-box;
 }
 
 .top-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 40px;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-shrink: 0;
 }
-
 .top-header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    margin: 0;
+    font-size: 30px; font-weight: 800;
+    color: #2D3436; margin: 0;
+    letter-spacing: -0.5px;
 }
 
-.header-right {
+.welcome-box { text-align: right; display: flex; flex-direction: column; }
+.welcome-text { font-size: 24px; font-weight: 700; }
+.date-text { font-size: 13px; color: #666; }
+
+/* The White Content Box */
+.content-body {
+    flex: 1;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    overflow: hidden !important; /* Force disable scroll on parent */
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+}
+
+/* --- PROFILE POPUP MENU --- */
+
+/* Ensure the footer is a positioning context */
+.rail-footer {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    margin-top: auto;
+    position: relative; /* Crucial for absolute positioning of popup */
+}
+
+.rail-profile.active {
+    box-shadow: 0 0 0 4px rgba(45, 156, 219, 0.2);
+    background-color: #333;
+}
+
+.profile-popup-menu {
+    position: absolute;
+    bottom: 10px;
+    left: 70px; /* Pushes it to the right of the sidebar */
+    width: 220px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+    border: 1px solid #E0E0E0;
+    padding: 20px;
+    z-index: 3000;
+    animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    display: flex;
+    flex-direction: column;
     gap: 15px;
 }
 
-.welcome-box {
-    text-align: right;
+/* Animation for the pop-up */
+@keyframes popIn {
+    from { opacity: 0; transform: scale(0.9) translateX(-10px); }
+    to { opacity: 1; transform: scale(1) translateX(0); }
 }
 
-.welcome-text {
-    font-size: 18px;
+.menu-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.menu-avatar {
+    width: 36px; height: 36px;
+    background: black; /* Orange Brand Color */
+    border-radius: 50%;
+    display: flex; justify-content: center; align-items: center;
+}
+.menu-avatar svg { width: 18px; fill: white; }
+
+.menu-info { display: flex; flex-direction: column; }
+.menu-name {
     font-weight: 700;
-}
-
-.date-text {
     font-size: 14px;
-    color: #666;
+    color: #333;
+    line-height: 1.2;
 }
 
-.new-shipment-btn {
-    background-color: #2D9CDB; 
-    color: white;
-    border: none;
-    padding: 8px 20px;
-    border-radius: 20px;
+/* 2. The Role Subtext (Small, Grey, Uppercase) */
+.menu-role-sub {
+    font-size: 11px;
+    color: #888;
     font-weight: 600;
-    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+/* Ensure the info container aligns text properly */
+.menu-info {
     display: flex;
-    align-items: center;
-    gap: 5px;
-}
-
-.content-body {
-    flex: 1;
-    overflow-y: auto;
-}
-
-.custom-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-}
-
-.custom-table th {
-    text-align: left;
-    padding: 15px 10px;
-    color: #555;
-    font-weight: 600;
-    border-bottom: 2px solid #333; 
-}
-
-.custom-table td {
-    padding: 20px 10px;
-    border-bottom: 1px solid #E0E0E0;
-    vertical-align: middle;
-}
-
-.status-dot {
-    display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 8px;
-}
-
-.crew-avatars {
-    display: flex;
-    gap: 5px;
-}
-
-.mini-avatar {
-    width: 24px;
-    height: 24px;
-    background: black;
-    border-radius: 50%;
-    display: flex;
+    flex-direction: column;
     justify-content: center;
-    align-items: center;
-    color: white;
 }
+.menu-status { font-size: 11px; color: #27AE60; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+.menu-status::before { content: ''; display: block; width: 6px; height: 6px; background: #27AE60; border-radius: 50%; }
 
-.mini-avatar svg {
-    width: 16px;
-    height: 16px;
-    fill: white;
-}
+.menu-divider { height: 1px; background: #EEE; width: 100%; }
 
-.expand-btn {
-    background: none;
-    border: none;
+.menu-logout-btn {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #EB5757;
+    background: #FFF;
+    color: #EB5757;
+    border-radius: 6px;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.menu-logout-btn:hover {
+    background: #EB5757;
+    color: white;
 }

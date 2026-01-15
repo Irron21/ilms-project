@@ -1,7 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react'; 
 import './Dashboard.css';
-
 function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
+
+  const [formData, setFormData] = useState({
+    shipmentID: '',
+    destName: '',
+    destLocation: '',
+    vehicleID: '',
+    driverID: '',
+    helperID: ''
+  });
 
   const getCardStyle = (status) => {
     if (status === 'Completed') return { class: 'card-green', label: 'COMPLETED' };
@@ -49,7 +57,7 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
             >
               <div>
                 <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>
-                <div className="card-client">{shipment.clientName}</div>
+                <div className="card-client">{shipment.destName}</div>
                 <div className="card-location">{shipment.destLocation}</div>
                 <div className="card-date">
                   {new Date(shipment.creationTimestamp).toLocaleString()}

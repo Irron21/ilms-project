@@ -127,6 +127,21 @@ function App() {
     }
   };
 
+  const getStepStatus = (stepName, currentStatus) => {
+    // 🆕 HANDLE PENDING: Nothing is done yet
+    if (currentStatus === 'Pending') return 'inactive'; 
+
+    const phases = ['Arrival', 'Start Unload', 'Finish Unload', 'Handover Invoice', 'Invoice Receive', 'Departure', 'Completed'];
+    
+    // If status matches exactly, it's "Active" (In Progress)
+    if (currentStatus === stepName) return 'active';
+    
+    // If current status is AFTER this step, this step is "Completed"
+    if (phases.indexOf(currentStatus) > phases.indexOf(stepName)) return 'completed';
+    
+    return 'inactive';
+};
+
   // --- RENDER LOGIC ---
 
   // 1. Not Logged In? -> Login Screen
