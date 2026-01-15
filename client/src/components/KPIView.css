@@ -1,0 +1,66 @@
+.kpi-dashboard {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px 20px 20px;
+    background-color: #F8F9FA;
+}
+
+.kpi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.kpi-header h2 { font-size: 22px; font-weight: 700; color: #2D3436; }
+
+.kpi-controls { display: flex; gap: 10px; }
+.kpi-upload-btn {
+    background-color: #2D9CDB;
+    color: white; border: none; padding: 8px 15px;
+    border-radius: 6px; cursor: pointer; font-weight: 600;
+}
+.kpi-period-select { padding: 8px; border-radius: 6px; border: 1px solid #DDD; }
+
+.kpi-tabs {
+    display: flex; gap: 5px; margin-bottom: 0;
+}
+.kpi-tabs .tab {
+    padding: 10px 20px; background: #E0E0E0; border: none;
+    border-radius: 8px 8px 0 0; cursor: pointer; font-weight: 600; color: #555;
+}
+.kpi-tabs .tab.active {
+    background-color: #F4A261; /* Orange Brand Color */
+    color: white;
+}
+
+.kpi-content-grid {
+    flex: 1;
+    display: flex;
+    gap: 20px;
+    background-color: #F4A261;
+    padding: 20px;
+    border-radius: 0 12px 12px 12px;
+    overflow-y: auto;
+}
+
+.kpi-section { flex: 1; display: flex; flex-direction: column; gap: 15px; }
+.kpi-section h3 { margin: 0; font-size: 16px; color: #333; font-weight: 700; text-transform: uppercase; }
+
+.chart-card {
+    background: white;
+    border-radius: 12px;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.chart-card h4 {
+    margin: 0 0 10px 0; font-size: 14px; display: flex; justify-content: space-between; color: #333; font-weight: 700;
+}
+.progress-bar {
+    height: 8px; background: #EEE; border-radius: 4px; overflow: hidden; margin-bottom: 10px;
+}
+.progress-bar div { height: 100%; background: #555; }
+.mini-chart-placeholder {
+    height: 50px; border-bottom: 2px solid #27AE60; opacity: 0.5;
+    background: linear-gradient(to top, #E8F5E9, transparent);
+}

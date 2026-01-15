@@ -1,151 +1,113 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import logoPng from '../assets/k2mac_logo2.png';
+import logoPng from '../assets/k2mac_logo.png'; 
 import { Icons } from './Icons'; 
 import './DesktopApp.css'; 
 
-function DesktopApp({ user, token, onLogout }) {
-  const [view, setView] = useState('shipments'); // 'shipments' or 'analytics'
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [shipments, setShipments] = useState([]);
+// Import the sub-components
+import ShipmentView from './ShipmentView';
+import KPIView from './KPIView';
 
-  // Live Clock
+function DesktopApp({ user, token, onLogout }) {
+  // --- STATE ---
+  const [view, setView] = useState('shipments'); 
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
+  // PROFILE MENU STATE
+  const [showProfile, setShowProfile] = useState(false);
+
+  // --- EFFECTS ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Data
+  // Close profile menu when clicking outside
   useEffect(() => {
-    fetchData();
-  }, [token]); // Add token dependency
+    const closeMenu = () => setShowProfile(false);
+    if (showProfile) window.addEventListener('click', closeMenu);
+    return () => window.removeEventListener('click', closeMenu);
+  }, [showProfile]);
 
-  const fetchData = async () => {
-    try {
-        const config = { headers: { Authorization: `Bearer ${token}` } };
-        // Fetch all shipments
-        const response = await axios.get('http://localhost:4000/api/shipments', {
-            ...config,
-            params: { userID: user.userID } 
-        });
-        setShipments(response.data);
-    } catch (err) {
-        console.error("Error loading data", err);
-        if (err.response?.status === 401) onLogout();
-    }
-  };
-
-  // Helper for Status Colors
-  const getStatusColor = (status) => {
-      switch(status) {
-          case 'Arrival': return '#EB5757'; // Red
-          case 'Start Unload': return '#27AE60'; // Green
-          case 'Handover Invoice': return '#F2C94C'; // Yellow
-          case 'Completed': return '#27AE60';
-          default: return '#333';
-      }
-  };
-
+  // --- RENDER ---
   return (
     <div className="desktop-layout">
-      
-      {/* --- SIDEBAR RAIL --- */}
+      {/* SIDEBAR */}
       <aside className="sidebar-rail">
-        <div className="rail-logo">
-           <img src={logoPng} alt="Logo" />
-        </div>
-
+        <div className="rail-logo"><img src={logoPng} alt="Logo" /></div>
+        
+        {/* Navigation */}
         <nav className="rail-menu">
             <button 
-                className={`rail-btn ${view === 'shipments' ? 'active' : ''}`}
-                onClick={() => setView('shipments')}
+                className={`rail-btn ${view === 'shipments' ? 'active' : ''}`} 
+                onClick={() => setView('shipments')} 
                 title="Shipments"
             >
                 <Icons.Truck />
             </button>
-            
             <button 
-                className={`rail-btn ${view === 'analytics' ? 'active' : ''}`}
-                onClick={() => setView('analytics')}
-                title="Analytics"
+                className={`rail-btn ${view === 'analytics' ? 'active' : ''}`} 
+                onClick={() => setView('analytics')} 
+                title="KPI Analytics"
             >
-                <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+                <Icons.Analytics />
             </button>
         </nav>
-
+        
+        {/* PROFILE FOOTER */}
         <div className="rail-footer">
-            <div className="rail-profile" onClick={onLogout} title="Logout">
+            <div 
+                className={`rail-profile ${showProfile ? 'active' : ''}`} 
+                onClick={(e) => {
+                    e.stopPropagation(); 
+                    setShowProfile(!showProfile);
+                }}
+            >
                 <Icons.Profile />
             </div>
+
+            {/* POPUP MENU */}
+            {showProfile && (
+                <div className="profile-popup-menu" onClick={(e) => e.stopPropagation()}>
+                    <div className="menu-header">
+                        <div className="menu-avatar"><Icons.Profile /></div>
+                        
+                        {/* ✅ UPDATED: Shows Full Name + Role Subtext */}
+                        <div className="menu-info">
+                            <span className="menu-name">
+                                {user.firstName || 'Admin'} {user.lastName || 'User'}
+                            </span>
+                            <span className="menu-role-sub">{user.role}</span>
+                        </div>
+                    </div>
+                    
+                    <div className="menu-divider"></div>
+                    <button className="menu-logout-btn" onClick={onLogout}>
+                        Log Out
+                    </button>
+                </div>
+            )}
         </div>
       </aside>
 
-      {/* --- MAIN CONTENT AREA --- */}
       <main className="main-content">
-        
-        {/* HEADER */}
         <header className="top-header">
             <div className="header-left">
-                <h1>Shipment Monitoring</h1>
+                <h1>{view === 'shipments' ? 'Shipment Monitoring' : 'KPI Analysis Dashboard'}</h1>
             </div>
-            
             <div className="header-right">
                 <div className="welcome-box">
                     <div className="welcome-text">Welcome, {user.role}</div>
-                    <div className="date-text">
-                        {currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                    </div>
+                    <div className="date-text">{currentTime.toLocaleDateString()} {currentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                 </div>
-                <button className="new-shipment-btn">
-                    + New Shipment
-                </button>
             </div>
         </header>
 
-        {/* TABLE VIEW */}
         <div className="content-body">
-            {view === 'shipments' && (
-                <div className="table-container">
-                    <table className="custom-table">
-                        <thead>
-                            <tr>
-                                <th>Shipment ID</th>
-                                <th>Status</th>
-                                <th>Destination Name</th>
-                                <th>Destination Location</th>
-                                <th>Plate No.</th>
-                                <th>Assigned Crew</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {shipments.map(s => (
-                                <tr key={s.shipmentID}>
-                                    <td>{s.shipmentID}</td>
-                                    <td>
-                                        <span className="status-dot" style={{backgroundColor: getStatusColor(s.currentStatus)}}></span>
-                                        {s.currentStatus}
-                                    </td>
-                                    <td>ABC Logistics Hub</td> 
-                                    <td>{s.destLocation}</td>
-                                    <td>N/A</td>
-                                    <td>
-                                        <div className="crew-avatars">
-                                            <div className="mini-avatar"><Icons.Profile/></div>
-                                            <div className="mini-avatar"><Icons.Profile/></div>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <button className="expand-btn">▼</button>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
+            {view === 'shipments' ? (
+                <ShipmentView user={user} token={token} onLogout={onLogout} />
+            ) : (
+                <KPIView />
             )}
-            
-            {view === 'analytics' && <div className="placeholder">Analytics Module Coming Soon</div>}
         </div>
       </main>
     </div>
