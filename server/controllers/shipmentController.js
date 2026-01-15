@@ -1,4 +1,3 @@
-// server/controllers/shipmentController.js
 const db = require('../config/db');
 
 // 1. Get Active Shipments
@@ -10,7 +9,7 @@ exports.getActiveShipments = (req, res) => {
 
     if (currentUserID) {
         // DRIVER/HELPER MODE: Show only assigned jobs
-        console.log("📡 Fetching shipments for specific User ID:", currentUserID);
+        console.log("Fetching shipments for specific User ID:", currentUserID);
         sql = `
             SELECT 
                 s.shipmentID, 
@@ -31,7 +30,7 @@ exports.getActiveShipments = (req, res) => {
         params = [currentUserID];
     } else {
         // ADMIN MODE: Show ALL shipments + Group names
-        console.log("📡 Fetching ALL shipments for Admin");
+        console.log("Fetching ALL shipments for Admin");
         sql = `
             SELECT 
                 s.shipmentID, 
@@ -55,7 +54,7 @@ exports.getActiveShipments = (req, res) => {
     
     db.query(sql, params, (err, results) => {
         if (err) {
-            console.error("❌ Database Error:", err);
+            console.error("Database Error:", err);
             return res.status(500).json({ error: "Failed to fetch shipments" });
         }
         res.json(results);
@@ -64,7 +63,7 @@ exports.getActiveShipments = (req, res) => {
 
 // 2. Update Status
 exports.updateStatus = (req, res) => {
-    const shipmentID = req.params.shipmentID; // Ensure this matches your route param (:shipmentID)
+    const shipmentID = req.params.shipmentID;
     const { status, userID } = req.body;
 
     console.log(`Request to update Shipment #${shipmentID} to '${status}'`);
@@ -94,7 +93,7 @@ exports.updateStatus = (req, res) => {
 
 // 3. Get Logs (THIS WAS MISSING)
 exports.getShipmentLogs = (req, res) => {
-    const id = req.params.id; // Matches route /:id/logs
+    const id = req.params.id; 
 
     const sql = `
         SELECT phaseName, timestamp 
@@ -140,8 +139,6 @@ exports.createShipment = (req, res) => {
     } = req.body;
 
     if (!shipmentID) return res.status(400).json({ error: "Shipment ID is required." });
-
-    // ⬇️ FIXED: Default status is now 'Pending' (Yellow/Grey), not 'Arrival' (Green)
     const sqlShipment = `
         INSERT INTO Shipments (shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID, currentStatus) 
         VALUES (?, ?, ?, ?, ?, ?, 'Pending') 
@@ -162,8 +159,6 @@ exports.createShipment = (req, res) => {
                 console.error("Crew Error:", err);
                 return res.status(500).json({ error: "Shipment created but crew failed." });
             }
-            
-            // Log the creation
             const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
             db.query(sqlLog, [shipmentID, operationsUserID], () => {
                 res.json({ message: "Success", shipmentID: shipmentID });

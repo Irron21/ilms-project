@@ -92,7 +92,7 @@
 
 .empty-state { text-align: center; padding: 40px; color: #999; font-style: italic; }
 
-/* --- TIMELINE ANIMATION (Glitch-Free) --- */
+/* --- TIMELINE ANIMATION --- */
 .expanded-row-container td { padding: 0 !important; background-color: #FAFAFA; border-bottom: 1px solid #E0E0E0; }
 
 .timeline-wrapper {
