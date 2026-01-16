@@ -5,7 +5,7 @@ import { Icons } from './components/Icons';
 import Login from './components/Login';
 import Dashboard from './components/Mobile/Dashboard';
 import ShipmentDetails from './components/Mobile/ShipmentDetails';
-import Profile from './components/Mobile/Profile';
+import Profile from './components/Mobile/ProfileModal';
 import DesktopApp from './components/Desktop/DesktopApp';
 import './App.css';
 
@@ -23,6 +23,7 @@ function App() {
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [modal, setModal] = useState({ show: false, shipmentID: null, statusName: null });
 
+  const [showProfile, setShowProfile] = useState(false);
   // --- INITIAL LOAD & POLLING ---
   useEffect(() => {
     if (user && token) { 
@@ -88,7 +89,7 @@ function App() {
 
   const handleCardClick = (shipment) => { setSelectedShipment(shipment); setView('details'); };
   const handleBackToDashboard = () => { setView('dashboard'); setSelectedShipment(null); fetchShipments(); };
-  const handleProfileClick = () => { setView('profile'); };
+  const handleProfileClick = () => { setShowProfile(true); };
   const handleStepClick = (shipmentID, statusName) => { setModal({ show: true, shipmentID, statusName }); };
 
   // --- UPDATE ACTION ---
@@ -172,16 +173,18 @@ function App() {
           shipment={selectedShipment} 
           onStepClick={handleStepClick}
           onBack={handleBackToDashboard} 
+          token={token}
         />
       )}
 
-      {view === 'profile' && (
-        <Profile 
-          user={user} 
-          onBack={handleBackToDashboard} 
-          onLogout={handleLogout} 
-        />
-      )}
+      {/* PROFILE MODAL */}
+      {showProfile && (
+      <Profile
+        user={user}
+        onClose={() => setShowProfile(false)}
+        onLogout={handleLogout}
+      />
+    )}
 
       {/* CONFIRMATION MODAL */}
       {modal.show && (
