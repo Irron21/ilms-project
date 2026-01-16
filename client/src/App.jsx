@@ -3,10 +3,10 @@ import axios from 'axios';
 import logoPng from './assets/k2mac_logo.png'; 
 import { Icons } from './components/Icons'; 
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import ShipmentDetails from './components/ShipmentDetails';
-import Profile from './components/Profile';
-import DesktopApp from './components/DesktopApp';
+import Dashboard from './components/Mobile/Dashboard';
+import ShipmentDetails from './components/Mobile/ShipmentDetails';
+import Profile from './components/Mobile/Profile';
+import DesktopApp from './components/Desktop/DesktopApp';
 import './App.css';
 
 function App() {

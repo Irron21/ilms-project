@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import logoPng from '../assets/k2mac_logo.png'; 
+import logoPng from '../../assets/k2mac_logo.png'; 
 import { Icons } from '../Icons'; 
 import './DesktopApp.css'; 
 import ShipmentView from './ShipmentView';
