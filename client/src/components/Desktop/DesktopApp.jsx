@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import logoPng from '../assets/k2mac_logo.png'; 
-import { Icons } from './Icons'; 
+import logoPng from '../../assets/k2mac_logo2.png'; 
+import { Icons } from '../Icons'; 
 import './DesktopApp.css'; 
-
-// Import the sub-components
 import ShipmentView from './ShipmentView';
 import KPIView from './KPIView';
 
@@ -21,7 +19,6 @@ function DesktopApp({ user, token, onLogout }) {
     return () => clearInterval(timer);
   }, []);
 
-  // Close profile menu when clicking outside
   useEffect(() => {
     const closeMenu = () => setShowProfile(false);
     if (showProfile) window.addEventListener('click', closeMenu);
@@ -70,8 +67,6 @@ function DesktopApp({ user, token, onLogout }) {
                 <div className="profile-popup-menu" onClick={(e) => e.stopPropagation()}>
                     <div className="menu-header">
                         <div className="menu-avatar"><Icons.Profile /></div>
-                        
-                        {/* ✅ UPDATED: Shows Full Name + Role Subtext */}
                         <div className="menu-info">
                             <span className="menu-name">
                                 {user.firstName || 'Admin'} {user.lastName || 'User'}

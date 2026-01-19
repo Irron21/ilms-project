@@ -1,0 +1,166 @@
+.details-header {
+  position: relative; 
+  display: flex;
+  align-items: center;
+  justify-content: center; 
+  padding: 20px;
+  padding-bottom: 10px; 
+  margin-bottom: 10px;
+}
+
+.details-container {
+  background-color: #F9FAFB;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 800px; 
+  margin: 0 auto;  
+  position: relative;
+}
+
+.back-btn-absolute {
+  position: absolute;
+  left: 20px; 
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px; 
+  height: 40px;
+  margin-left: -10px; 
+}
+
+.shipment-title-inline {
+  font-size: 1.4em;
+  color: black;
+  margin: 0; 
+  text-align: center;
+}
+
+.info-box {
+  background-color: #E0E0E0; margin: 0 20px 20px 20px; padding: 15px;
+  font-size: 0.9em; color: #333;
+}
+
+.info-row { margin-bottom: 5px; }
+
+.steps-container {
+  padding: 0 20px; display: flex; flex-direction: column; gap: 12px;
+  transition: filter 0.3s ease, opacity 0.3s ease;
+}
+
+/* --- OVERLAY STYLES --- */
+
+.steps-wrapper {
+  position: relative; 
+  margin: 0 20px;
+}
+
+/* Blur effect only when overlay is active */
+.steps-container.blurred-background {
+  filter: blur(2px);
+  opacity: 0.8; 
+}
+
+.completion-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 10;
+  
+  background-color: rgba(255, 255, 255, 0.4); 
+  /* Note: backdrop-filter on the overlay handles the blur for modern browsers, 
+     but keeping the class on steps-container ensures fallback and logic clarity */
+  
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer; /* Indicates it can be clicked */
+  animation: fadeIn 0.3s ease-out;
+}
+
+.lockout-badge {
+  background: white;
+  padding: 20px 30px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 2px solid #2E7D32;
+  pointer-events: none; /* Let clicks pass through to parent (overlay) */
+}
+
+.lockout-icon svg {
+  width: 40px !important;
+  height: 40px !important;
+  fill: #2E7D32;
+  display: block;
+}
+
+.lockout-badge span {
+  color: #2E7D32;
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+
+.tap-hint {
+  font-size: 11px !important;
+  color: #666 !important;
+  font-weight: 500 !important;
+  margin-top: 5px;
+  text-transform: uppercase;
+}
+
+/* --- BUTTON STYLES --- */
+
+.step-button {
+  width: 100%; border: none; padding: 15px 15px; border-radius: 4px;
+  display: flex; justify-content: space-between; 
+  align-items: center; position: relative;
+  font-size: 0.9em; text-transform: uppercase;
+  cursor: default; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  min-height: 60px;
+}
+
+.step-content { 
+    display: flex; 
+    align-items: center; 
+    gap: 15px; 
+    text-align: left;
+}
+
+.step-text-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.step-label { font-weight: 700; line-height: 1.2; }
+
+.step-timestamp {
+    font-size: 0.75em;
+    font-weight: 600;
+    opacity: 0.9;
+    margin-top: 4px;
+    text-transform: none; 
+    color: inherit;
+}
+
+.step-status-icon { display: flex; align-items: center; }
+
+.step-icon svg, .step-status-icon svg { width: 24px; height: 24px; fill: black; display: block; }
+
+.step-done { background-color: #81C784; color: #1B5E20; }
+.step-done .step-icon svg, .step-done .step-status-icon svg { fill: #1B5E20; }
+
+.step-active { background-color: #C0CA33; color: black; cursor: pointer; transform: scale(1.02); }
+.step-pending { background-color: #E2E2E2; color: #9E9E9E; }
+.step-pending .step-icon svg, .step-pending .step-status-icon svg { fill: #9E9E9E; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}

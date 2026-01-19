@@ -7,5 +7,6 @@ router.get('/:id/logs', shipmentController.getShipmentLogs);
 router.post('/:shipmentID/update', shipmentController.updateStatus);
 router.get('/resources', shipmentController.getFormResources);
 router.post('/create', shipmentController.createShipment);
+router.get('/export', shipmentController.exportShipments);
 
 module.exports = router;

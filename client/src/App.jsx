@@ -2,13 +2,11 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import logoPng from './assets/k2mac_logo.png'; 
 import { Icons } from './components/Icons'; 
-
 import Login from './components/Login';
-import Dashboard from './components/Dashboard';
-import ShipmentDetails from './components/ShipmentDetails';
-import Profile from './components/Profile';
-
-import DesktopApp from './components/DesktopApp';
+import Dashboard from './components/Mobile/Dashboard';
+import ShipmentDetails from './components/Mobile/ShipmentDetails';
+import Profile from './components/Mobile/ProfileModal';
+import DesktopApp from './components/Desktop/DesktopApp';
 import './App.css';
 
 function App() {
@@ -25,6 +23,7 @@ function App() {
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [modal, setModal] = useState({ show: false, shipmentID: null, statusName: null });
 
+  const [showProfile, setShowProfile] = useState(false);
   // --- INITIAL LOAD & POLLING ---
   useEffect(() => {
     if (user && token) { 
@@ -90,7 +89,7 @@ function App() {
 
   const handleCardClick = (shipment) => { setSelectedShipment(shipment); setView('details'); };
   const handleBackToDashboard = () => { setView('dashboard'); setSelectedShipment(null); fetchShipments(); };
-  const handleProfileClick = () => { setView('profile'); };
+  const handleProfileClick = () => { setShowProfile(true); };
   const handleStepClick = (shipmentID, statusName) => { setModal({ show: true, shipmentID, statusName }); };
 
   // --- UPDATE ACTION ---
@@ -106,8 +105,7 @@ function App() {
         status: modal.statusName,
         userID: user.userID 
       }, config);
-      
-      // Handle the double-update for Departure
+
       if (modal.statusName === 'Departure') {
         await axios.post(`http://localhost:4000/api/shipments/${modal.shipmentID}/update`, {
           status: 'Completed',
@@ -119,7 +117,6 @@ function App() {
       setModal({ show: false, shipmentID: null, statusName: null });
     } catch (error) {
       alert("Error updating status");
-      // If the error is because we were kicked out, logout
       if (error.response && error.response.status === 401) {
          handleLogout();
       }
@@ -128,15 +125,13 @@ function App() {
   };
 
   const getStepStatus = (stepName, currentStatus) => {
-    // 🆕 HANDLE PENDING: Nothing is done yet
+    // HANDLE PENDING
     if (currentStatus === 'Pending') return 'inactive'; 
 
     const phases = ['Arrival', 'Start Unload', 'Finish Unload', 'Handover Invoice', 'Invoice Receive', 'Departure', 'Completed'];
-    
-    // If status matches exactly, it's "Active" (In Progress)
+
     if (currentStatus === stepName) return 'active';
-    
-    // If current status is AFTER this step, this step is "Completed"
+
     if (phases.indexOf(currentStatus) > phases.indexOf(stepName)) return 'completed';
     
     return 'inactive';
@@ -148,7 +143,6 @@ function App() {
   if (!user) return <Login onLoginSuccess={handleLoginSuccess} />;
 
   // 2. Admin or Operations? -> DESKTOP APP
-  // (We pass 'token' so DesktopApp can make its own API calls)
   if (user.role === 'Admin' || user.role === 'Operations') {
       return <DesktopApp user={user} token={token} onLogout={handleLogout} />;
   }
@@ -179,16 +173,18 @@ function App() {
           shipment={selectedShipment} 
           onStepClick={handleStepClick}
           onBack={handleBackToDashboard} 
+          token={token}
         />
       )}
 
-      {view === 'profile' && (
-        <Profile 
-          user={user} 
-          onBack={handleBackToDashboard} 
-          onLogout={handleLogout} 
-        />
-      )}
+      {/* PROFILE MODAL */}
+      {showProfile && (
+      <Profile
+        user={user}
+        onClose={() => setShowProfile(false)}
+        onLogout={handleLogout}
+      />
+    )}
 
       {/* CONFIRMATION MODAL */}
       {modal.show && (

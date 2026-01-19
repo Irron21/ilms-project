@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { Icons } from './Icons'; 
+import { Icons } from '../Icons'; 
 import './ShipmentView.css';
 
 const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure'];
@@ -16,6 +16,14 @@ function ShipmentView({ user, token, onLogout }) {
     const [flashingIds, setFlashingIds] = useState([]); 
     const prevShipmentsRef = useRef([]); 
     const [showModal, setShowModal] = useState(false);
+    
+    // ✨ NEW: State for Export Feature
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [dateRange, setDateRange] = useState({
+        start: new Date().toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
+    });
+
     const [resources, setResources] = useState({ drivers: [], helpers: [], vehicles: [] });
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     const [formData, setFormData] = useState({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
@@ -23,7 +31,9 @@ function ShipmentView({ user, token, onLogout }) {
     const expandedIdRef = useRef(null);
     useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
 
-    // --- FETCHING LOGIC ---
+    // ... (Keep your existing useEffects and fetching logic as is) ...
+    // ... (fetchData, refreshLogs, triggerNotification) ...
+
     useEffect(() => {
         fetchData(true); 
         const interval = setInterval(() => {
@@ -97,6 +107,35 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (err) { alert(err.response?.data?.error || "Failed."); }
     };
 
+    // ✨ NEW: Export Handler
+    const handleExport = async () => {
+        try {
+            const config = {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { startDate: dateRange.start, endDate: dateRange.end },
+                responseType: 'blob' // Important for file download
+            };
+
+            const response = await axios.get('http://localhost:4000/api/shipments/export', config);
+
+            // Create download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Shipment_Report_${dateRange.start}_to_${dateRange.end}.xlsx`);
+            document.body.appendChild(link);
+            link.click();
+            
+            // Cleanup
+            link.parentNode.removeChild(link);
+            setShowExportModal(false);
+
+        } catch (error) {
+            console.error("Export failed:", error);
+            alert("Failed to export data. Please check if there are records in the selected range.");
+        }
+    };
+
     const handleCrewClick = (e, crewString) => {
         e.stopPropagation();
         if (!crewString) return;
@@ -124,7 +163,7 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // --- HELPERS ---
+    // ... (Keep helper functions: getDisplayStatus, getDisplayColor, getPhaseTime, getTimelineNodeState) ...
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
         if (dbStatus === 'Completed') return 'Completed';
@@ -193,15 +232,26 @@ function ShipmentView({ user, token, onLogout }) {
                         </div>
                     </div>
 
-                    {/* Right: Badge + Button */}
-                    <div className="controls-right" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>                       
+                    {/* Right: Buttons */}
+                    <div className="controls-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {/* ✨ NEW: Extract Button */}
+                        <button className="extract-btn" onClick={() => setShowExportModal(true)}>
+                            {/* Simple inline SVG for download icon */}
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Extract to .xlsx
+                        </button>
+
                         <button className="new-shipment-btn" onClick={handleOpenModal}>+ New Shipment</button>
                     </div>
                 </div>
 
             </div>
 
-            {/* SCROLLABLE TABLE */}
+            {/* SCROLLABLE TABLE (No Changes here) */}
             <div className="shipment-scrollable-table">
                 <table className="custom-table">
                     <thead>
@@ -253,7 +303,7 @@ function ShipmentView({ user, token, onLogout }) {
                                                     <div key={phase} className={`timeline-step ${state}`}>
                                                         {index !== PHASE_ORDER.length - 1 && <div className="step-line"></div>}
                                                         <div className="step-dot"></div>
-                                                        <div className="step-content">
+                                                        <div className="step-content-desc">
                                                             <div className="step-title">{phase}</div>
                                                             {realTime ? <div className="step-time">{realTime}</div> : <div className="step-status-text">{state === 'active' ? 'In Progress' : '-'}</div>}
                                                         </div>
@@ -303,6 +353,49 @@ function ShipmentView({ user, token, onLogout }) {
                     </div>
                 </div>
             )}
+
+            {/* ✨ NEW: Export Date Selection Modal */}
+            {showExportModal && (
+                <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
+                    <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Extract Shipment Data</h2>
+                            <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
+                        </div>
+                        
+                        <div className="export-modal-body">
+                            <p style={{marginBottom:'20px', color:'#666'}}>Select the timeframe for the report:</p>
+                            
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Start Date</label>
+                                    <input 
+                                        type="date" 
+                                        value={dateRange.start} 
+                                        onChange={e => setDateRange({...dateRange, start: e.target.value})}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>End Date</label>
+                                    <input 
+                                        type="date" 
+                                        value={dateRange.end} 
+                                        onChange={e => setDateRange({...dateRange, end: e.target.value})}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="modal-actions" style={{marginTop:'25px', display:'flex', gap:'10px'}}>
+                                <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
+                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>
+                                    Download .xlsx
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
         </div>
     );
 }
