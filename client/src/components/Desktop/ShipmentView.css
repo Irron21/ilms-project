@@ -122,6 +122,12 @@
 .step-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 4px; }
 .step-status-text { font-size: 11px; color: #999; font-style: italic; }
 .step-time { font-size: 12px; color: #27AE60; font-weight: 600; margin-top: 2px; }
+.step-content-desc {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0px;
+}
 
 .timeline-step.completed .step-dot { background-color: #27AE60; }
 .timeline-step.completed .step-line { background-color: #27AE60; }
@@ -163,3 +169,45 @@
 .form-group { flex: 1; display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 13px; font-weight: 600; color: #555; }
 .form-group input, .form-group select { padding: 10px; border: 1px solid #E0E0E0; border-radius: 6px; font-size: 14px; background-color: #FAFAFA; }
+
+.extract-btn {
+    background-color: white; 
+    color: #333; 
+    border: 1px solid #CCC;
+    padding: 9px 16px; 
+    border-radius: 25px;
+    font-weight: 600; 
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+}
+
+.extract-btn:hover {
+    background-color: #F5F5F5;
+    border-color: #999;
+}
+
+.extract-btn svg {
+    stroke: #555;
+}
+
+/* Modal Variant: Small */
+.small-modal {
+    width: 400px !important; /* Overrides default modal width */
+}
+
+/* Secondary Cancel Button */
+.cancel-btn-secondary {
+    background: white;
+    border: 1px solid #DDD;
+    color: #666;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.cancel-btn-secondary:hover {
+    background: #F5F5F5;
+}
