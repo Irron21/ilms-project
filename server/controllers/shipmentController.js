@@ -226,8 +226,6 @@ exports.exportShipments = (req, res) => {
 
         try {
             const workSheet = XLSX.utils.json_to_sheet(rows);
-            
-            // Adjust column widths
             const wscols = Object.keys(rows[0]).map(key => ({ wch: 20 }));
             workSheet['!cols'] = wscols;
 

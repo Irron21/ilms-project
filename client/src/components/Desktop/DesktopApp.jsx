@@ -2,15 +2,17 @@ import React, { useState, useEffect } from 'react';
 import logoPng from '../../assets/k2mac_logo2.png'; 
 import { Icons } from '../Icons'; 
 import './DesktopApp.css'; 
+
+// Import Views
 import ShipmentView from './ShipmentView';
 import KPIView from './KPIView';
+import PayrollView from './PayrollView';  
+import UserManagement from './UserManagement'; 
 
 function DesktopApp({ user, token, onLogout }) {
   // --- STATE ---
   const [view, setView] = useState('shipments'); 
   const [currentTime, setCurrentTime] = useState(new Date());
-  
-  // PROFILE MENU STATE
   const [showProfile, setShowProfile] = useState(false);
 
   // --- EFFECTS ---
@@ -24,6 +26,16 @@ function DesktopApp({ user, token, onLogout }) {
     if (showProfile) window.addEventListener('click', closeMenu);
     return () => window.removeEventListener('click', closeMenu);
   }, [showProfile]);
+
+  const getHeaderTitle = () => {
+      switch(view) {
+          case 'shipments': return 'Shipment Monitoring';
+          case 'analytics': return 'KPI Analysis Dashboard';
+          case 'payroll': return 'Dynamic Payroll Suggestion';
+          case 'users': return 'User Management';
+          default: return 'Dashboard';
+      }
+  };
 
   // --- RENDER ---
   return (
@@ -48,6 +60,26 @@ function DesktopApp({ user, token, onLogout }) {
             >
                 <Icons.Analytics />
             </button>
+            {user.role === 'Admin' && (
+                <>
+                    
+                    {/* Payroll */}
+                    <button 
+                        className={`rail-btn ${view === 'payroll' ? 'active' : ''}`} 
+                        onClick={() => setView('payroll')} 
+                        title="Payroll Suggestion"
+                    >
+                        <Icons.Wallet />
+                    </button>
+                    <button 
+                        className={`rail-btn ${view === 'users' ? 'active' : ''}`} 
+                        onClick={() => setView('users')} 
+                        title="User Management"
+                    >
+                        <Icons.Group />
+                    </button>
+                </>
+            )}
         </nav>
         
         {/* PROFILE FOOTER */}
@@ -87,7 +119,7 @@ function DesktopApp({ user, token, onLogout }) {
       <main className="main-content">
         <header className="top-header">
             <div className="header-left">
-                <h1>{view === 'shipments' ? 'Shipment Monitoring' : 'KPI Analysis Dashboard'}</h1>
+                <h1>{getHeaderTitle()}</h1>
             </div>
             <div className="header-right">
                 <div className="welcome-box">
@@ -98,11 +130,12 @@ function DesktopApp({ user, token, onLogout }) {
         </header>
 
         <div className="content-body">
-            {view === 'shipments' ? (
-                <ShipmentView user={user} token={token} onLogout={onLogout} />
-            ) : (
-                <KPIView />
-            )}
+            {view === 'shipments' && <ShipmentView user={user} token={token} onLogout={onLogout} />}
+            {view === 'analytics' && <KPIView />}
+            
+            {/* ADMIN ONLY VIEWS */}
+            {view === 'payroll' && user.role === 'Admin' && <PayrollView />}
+            {view === 'users' && user.role === 'Admin' && <UserManagement />}
         </div>
       </main>
     </div>

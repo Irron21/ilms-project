@@ -6,6 +6,7 @@ import './ShipmentView.css';
 const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure'];
 
 function ShipmentView({ user, token, onLogout }) {
+    
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [statusFilter, setStatusFilter] = useState('All'); 
@@ -16,8 +17,6 @@ function ShipmentView({ user, token, onLogout }) {
     const [flashingIds, setFlashingIds] = useState([]); 
     const prevShipmentsRef = useRef([]); 
     const [showModal, setShowModal] = useState(false);
-    
-    // ✨ NEW: State for Export Feature
     const [showExportModal, setShowExportModal] = useState(false);
     const [dateRange, setDateRange] = useState({
         start: new Date().toISOString().split('T')[0],
@@ -30,10 +29,8 @@ function ShipmentView({ user, token, onLogout }) {
 
     const expandedIdRef = useRef(null);
     useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
-
-    // ... (Keep your existing useEffects and fetching logic as is) ...
-    // ... (fetchData, refreshLogs, triggerNotification) ...
-
+    
+    // --- EFFECTS ---
     useEffect(() => {
         fetchData(true); 
         const interval = setInterval(() => {
@@ -107,7 +104,7 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (err) { alert(err.response?.data?.error || "Failed."); }
     };
 
-    // ✨ NEW: Export Handler
+    // Export Handler
     const handleExport = async () => {
         try {
             const config = {
@@ -115,7 +112,6 @@ function ShipmentView({ user, token, onLogout }) {
                 params: { startDate: dateRange.start, endDate: dateRange.end },
                 responseType: 'blob' // Important for file download
             };
-
             const response = await axios.get('http://localhost:4000/api/shipments/export', config);
 
             // Create download link
@@ -163,7 +159,6 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // ... (Keep helper functions: getDisplayStatus, getDisplayColor, getPhaseTime, getTimelineNodeState) ...
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
         if (dbStatus === 'Completed') return 'Completed';
@@ -234,9 +229,7 @@ function ShipmentView({ user, token, onLogout }) {
 
                     {/* Right: Buttons */}
                     <div className="controls-right" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {/* ✨ NEW: Extract Button */}
                         <button className="extract-btn" onClick={() => setShowExportModal(true)}>
-                            {/* Simple inline SVG for download icon */}
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                 <polyline points="7 10 12 15 17 10"></polyline>
@@ -251,7 +244,7 @@ function ShipmentView({ user, token, onLogout }) {
 
             </div>
 
-            {/* SCROLLABLE TABLE (No Changes here) */}
+            {/* SCROLLABLE TABLE*/}
             <div className="shipment-scrollable-table">
                 <table className="custom-table">
                     <thead>
@@ -354,7 +347,7 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
 
-            {/* ✨ NEW: Export Date Selection Modal */}
+            {/* Export Date Selection Modal */}
             {showExportModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
                     <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()}>

@@ -193,12 +193,10 @@
     stroke: #555;
 }
 
-/* Modal Variant: Small */
 .small-modal {
-    width: 400px !important; /* Overrides default modal width */
+    width: 400px !important; 
 }
 
-/* Secondary Cancel Button */
 .cancel-btn-secondary {
     background: white;
     border: 1px solid #DDD;
