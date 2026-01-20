@@ -37,7 +37,7 @@
 
 .filters-left { display: flex; gap: 20px; }
 .filter-group { display: flex; align-items: center; gap: 10px; }
-.filter-group label { font-size: 13px; color: #555; }
+.filter-group label { font-size: 13px; color: #555; font-weight: 600;}
 
 .status-select, .date-input {
     padding: 7px 12px;
