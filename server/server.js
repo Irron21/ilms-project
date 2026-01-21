@@ -29,6 +29,8 @@ app.get('/', (req, res) => { res.send('K2Mac ILMS Backend is Running'); });
 // 1. PUBLIC ROUTES (No Login Required)
 app.post('/api/login', authController.login); 
 
+app.use('/api/users', require('./routes/userRoutes'));
+
 // 2. PROTECTED ROUTES (Login Required)
 // It runs BEFORE shipmentRoutes. If verifyToken fails, shipmentRoutes never runs.
 app.use('/api/shipments', verifyToken, shipmentRoutes);
