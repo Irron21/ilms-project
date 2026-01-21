@@ -23,7 +23,7 @@
     background-color: #43B2DA; 
     color: black; border: none;
     padding: 10px 16px; border-radius: 25px;
-    font-weight: 600; cursor: pointer;
+    cursor: pointer;
     border: 2px solid #38A1C6;
 }
 
@@ -44,6 +44,7 @@
     border: 1px solid #DDD; border-radius: 6px;
     background-color: white; font-size: 13px; color: #333;
     cursor: pointer; outline: none;
+    font-family: 'Segoe UI', sans-serif;
 }
 
 .count-badge {
@@ -176,7 +177,6 @@
     border: 1px solid #CCC;
     padding: 9px 16px; 
     border-radius: 25px;
-    font-weight: 600; 
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -203,9 +203,44 @@
     color: #666;
     padding: 10px 20px;
     border-radius: 25px;
-    font-weight: 600;
     cursor: pointer;
 }
 .cancel-btn-secondary:hover {
     background: #F5F5F5;
+}
+
+.pagination-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #F0F0F0;
+    flex-shrink: 0;
+}
+
+.pagination-footer button {
+    padding: 5px 12px;
+    border: 1px solid #DDD;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.pagination-footer button:hover:not(:disabled) {
+    background: var(--primary-orange);
+}
+
+.pagination-footer button.active {
+    background-color: var(--primary-orange);
+    color: black;
+    font-weight: 600;
+}
+
+.pagination-footer button:disabled {
+    color: #CCC;
+    cursor: not-allowed;
 }
