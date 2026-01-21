@@ -299,7 +299,6 @@ function UserManagement() {
                     <select name="role" value={formData.role} onChange={handleInputChange}>
                         <option value="Admin">Admin</option>
                         <option value="Operations">Operations</option>
-                        <option value="Crew">Crew</option>
                         <option value="Driver">Driver</option>
                         <option value="Helper">Helper</option>
                     </select>
