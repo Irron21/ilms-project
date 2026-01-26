@@ -4,16 +4,8 @@ const bcrypt = require('bcryptjs');
 // GET ALL USERS
 exports.getAllUsers = (req, res) => {
     const sql = `
-        SELECT 
-            u.userID, 
-            ul.employeeID, 
-            u.firstName, 
-            u.lastName, 
-            u.email, 
-            u.phone, 
-            u.role, 
-            u.dob,
-            u.dateCreated 
+        SELECT u.userID, ul.employeeID, u.firstName, u.lastName, 
+               u.email, u.phone, u.role, u.dob, u.dateCreated 
         FROM Users u
         LEFT JOIN UserLogins ul ON u.userID = ul.userID
         ORDER BY u.dateCreated DESC
@@ -27,69 +19,33 @@ exports.getAllUsers = (req, res) => {
 // CREATE USER
 exports.createUser = async (req, res) => {
     const { firstName, lastName, email, phone, role, dob, password, employeeID } = req.body;
-
-    // 1. Hash Password
     let hashedPassword;
-    try {
-        hashedPassword = await bcrypt.hash(password, 10);
-    } catch (err) {
-        return res.status(500).json({ error: "Encryption error" });
-    }
+    try { hashedPassword = await bcrypt.hash(password, 10); } 
+    catch (err) { return res.status(500).json({ error: "Encryption error" }); }
 
-    // 2. Handle Empty Date
     const finalDob = (dob === '' || dob === undefined) ? null : dob;
 
-    // 3. GET A CONNECTION FROM THE POOL (Required for Transactions)
     db.getConnection((err, connection) => {
-        if (err) {
-            console.error("Connection Error:", err);
-            return res.status(500).json({ error: "Database connection failed" });
-        }
+        if (err) return res.status(500).json({ error: "DB Connection failed" });
 
-        // 4. Start Transaction on that specific connection
         connection.beginTransaction(err => {
-            if (err) {
-                connection.release(); 
-                return res.status(500).json({ error: "Transaction start failed" });
-            }
+            if (err) { connection.release(); return res.status(500).json({ error: "Transaction failed" }); }
 
             const userSql = "INSERT INTO Users (firstName, lastName, email, phone, role, dob) VALUES (?, ?, ?, ?, ?, ?)";
-            const userValues = [firstName, lastName, email, phone, role, finalDob];
-
-            // 5. Query 1: Insert User
-            connection.query(userSql, userValues, (err, result) => {
+            connection.query(userSql, [firstName, lastName, email, phone, role, finalDob], (err, result) => {
                 if (err) {
-                    return connection.rollback(() => {
-                        connection.release();
-                        console.error("SQL Error (Users):", err.message);
-                        res.status(500).json({ error: "Failed to create user: " + err.message });
-                    });
+                    return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
                 }
-
                 const newUserID = result.insertId;
                 const finalEmployeeID = employeeID || `EMP${Date.now().toString().slice(-6)}`;
+                
                 const loginSql = "INSERT INTO UserLogins (userID, employeeID, hashedPassword) VALUES (?, ?, ?)";
-
-                // 6. Query 2: Insert Login
-                connection.query(loginSql, [newUserID, finalEmployeeID, hashedPassword], (err, result) => {
+                connection.query(loginSql, [newUserID, finalEmployeeID, hashedPassword], (err) => {
                     if (err) {
-                        return connection.rollback(() => {
-                            connection.release(); 
-                            console.error("SQL Error (UserLogins):", err.message);
-                            res.status(500).json({ error: "Failed to create login credentials" });
-                        });
+                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
                     }
-
-                    // 7. Commit the Transaction
                     connection.commit(err => {
-                        if (err) {
-                            return connection.rollback(() => {
-                                connection.release();
-                                res.status(500).json({ error: "Commit failed" });
-                            });
-                        }
-                        
-                        console.log("User Created Successfully:", firstName);
+                        if (err) { return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); }); }
                         connection.release();
                         res.json({ message: "User created successfully" });
                     });
@@ -103,22 +59,83 @@ exports.createUser = async (req, res) => {
 exports.updateUser = (req, res) => {
     const { id } = req.params;
     const { firstName, lastName, email, phone, role, dob } = req.body;
-
     const sql = "UPDATE Users SET firstName=?, lastName=?, email=?, phone=?, role=?, dob=? WHERE userID=?";
-    
-    db.query(sql, [firstName, lastName, email, phone, role, dob, id], (err, result) => {
+    db.query(sql, [firstName, lastName, email, phone, role, dob, id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ message: "User updated successfully" });
     });
 };
 
-// DELETE USER
+// DELETE USER (FIXED FOR YOUR SCHEMA)
 exports.deleteUser = (req, res) => {
     const { id } = req.params;
-    const sql = "DELETE FROM Users WHERE userID = ?";
-    
-    db.query(sql, [id], (err, result) => {
+
+    // 1. CHECK FOR ACTIVE SHIPMENTS
+    // We must join Shipments and ShipmentCrew because 'driverID' doesn't exist in Shipments
+    const checkSql = `
+        SELECT s.shipmentID 
+        FROM Shipments s
+        JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
+        WHERE sc.userID = ? 
+        AND s.currentStatus NOT IN ('Completed', 'Cancelled')
+    `;
+
+    db.query(checkSql, [id], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "User deleted successfully" });
+
+        // If active shipments exist, BLOCK delete and return 409
+        if (results.length > 0) {
+            return res.status(409).json({ 
+                error: "Dependency Conflict", 
+                activeShipments: results.map(r => r.shipmentID) 
+            });
+        }
+
+        // 2. CLEAN UP & DELETE
+        // We use a Transaction to ensure all or nothing deletes
+        db.getConnection((err, connection) => {
+            if (err) return res.status(500).json({ error: "DB Connection failed" });
+
+            connection.beginTransaction(err => {
+                if (err) { connection.release(); return res.status(500).json({ error: "Transaction failed" }); }
+
+                // A. Remove from History (ShipmentCrew) so we don't get Foreign Key errors
+                // (Only deleting completed/cancelled history, since active was checked above)
+                connection.query("DELETE FROM ShipmentCrew WHERE userID = ?", [id], (err) => {
+                    if (err) {
+                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to clear crew history" }); });
+                    }
+
+                    // B. Remove Login Credentials
+                    connection.query("DELETE FROM UserLogins WHERE userID = ?", [id], (err) => {
+                        if (err) {
+                            return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to delete login" }); });
+                        }
+
+                        // C. Finally, Delete the User
+                        connection.query("DELETE FROM Users WHERE userID = ?", [id], (err) => {
+                            if (err) {
+                                // If this fails, it might be referenced in other tables like 'Shipments' (as operationsUserID) or logs
+                                return connection.rollback(() => { 
+                                    connection.release(); 
+                                    // Check for FK error
+                                    if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+                                        res.status(409).json({ error: "Cannot delete: User has created shipments or logs." });
+                                    } else {
+                                        res.status(500).json({ error: err.message }); 
+                                    }
+                                });
+                            }
+
+                            connection.commit(err => {
+                                if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
+                                connection.release();
+                                res.json({ message: "User deleted successfully" });
+                            });
+                        });
+                    });
+                });
+            });
+        });
     });
 };

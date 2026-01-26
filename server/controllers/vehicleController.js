@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// 1. Get All Vehicles
+// Get All Vehicles
 exports.getAllVehicles = (req, res) => {
     const sql = "SELECT * FROM Vehicles ORDER BY dateCreated DESC";
     db.query(sql, (err, results) => {
@@ -9,7 +9,7 @@ exports.getAllVehicles = (req, res) => {
     });
 };
 
-// 2. Create Vehicle
+// Create Vehicle
 exports.createVehicle = (req, res) => {
     const { plateNo, type, status } = req.body; 
 
@@ -23,7 +23,7 @@ exports.createVehicle = (req, res) => {
     });
 };
 
-// 3. Update Vehicle (General Info)
+// Update Vehicle
 exports.updateVehicle = (req, res) => {
     const { id } = req.params;
     const { plateNo, type, status } = req.body;
@@ -34,23 +34,78 @@ exports.updateVehicle = (req, res) => {
     });
 };
 
-// 4. Update Vehicle Status (Toggle)
+// Update Vehicle Status
 exports.updateVehicleStatus = (req, res) => {
     const { id } = req.params;
     const { status } = req.body; 
-    const sql = "UPDATE Vehicles SET status=? WHERE vehicleID=?";
-    db.query(sql, [status, id], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Status updated successfully" });
-    });
+
+    if (status === 'Maintenance') {
+        const checkSql = `
+            SELECT shipmentID FROM Shipments 
+            WHERE vehicleID = ? 
+            AND currentStatus NOT IN ('Completed', 'Cancelled')
+        `;
+
+        db.query(checkSql, [id], (err, results) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // CONFLICT FOUND: Truck is busy
+            if (results.length > 0) {
+                return res.status(409).json({ 
+                    error: "Vehicle is currently in an active shipment", 
+                    activeShipments: results.map(r => r.shipmentID) 
+                });
+            }
+
+            performUpdate();
+        });
+    } else {
+        performUpdate();
+    }
+
+    function performUpdate() {
+        const sql = "UPDATE Vehicles SET status=? WHERE vehicleID=?";
+        db.query(sql, [status, id], (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Status updated successfully" });
+        });
+    }
 };
 
-// 5. Delete Vehicle - WAS MISSING
+// DELETE VEHICLE
 exports.deleteVehicle = (req, res) => {
     const { id } = req.params;
-    const sql = "DELETE FROM Vehicles WHERE vehicleID=?";
-    db.query(sql, [id], (err, result) => {
+
+    // 1. Check for Active Shipments
+    const checkSql = `
+        SELECT shipmentID FROM Shipments 
+        WHERE vehicleID = ? 
+        AND currentStatus NOT IN ('Completed', 'Cancelled')
+    `;
+
+    db.query(checkSql, [id], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Vehicle deleted successfully" });
+
+        if (results.length > 0) {
+            return res.status(409).json({ 
+                error: "Dependency Conflict", 
+                activeShipments: results.map(r => r.shipmentID) 
+            });
+        }
+
+        // 2. Try to Delete
+        // Note: This will fail if the truck has PAST completed shipments.
+        // For a simple app, we can just let that error happen or delete history like we did for users.
+        // Let's try simple delete first.
+        const deleteSql = "DELETE FROM Vehicles WHERE vehicleID = ?";
+        db.query(deleteSql, [id], (err) => {
+            if (err) {
+                if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+                    return res.status(409).json({ error: "Cannot delete: Vehicle has historical shipment records." });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            res.json({ message: "Vehicle deleted successfully" });
+        });
     });
 };

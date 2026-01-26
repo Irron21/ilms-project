@@ -305,7 +305,7 @@
 }
 
 .pagination-footer button:hover:not(:disabled) {
-    background: var(--primary-orange); /* Matches primary orange */
+    background: var(--primary-orange); 
 }
 
 .pagination-footer button.active {
@@ -318,4 +318,113 @@
 .pagination-footer button:disabled {
     color: #CCC;
     cursor: not-allowed;
+}
+
+/* --- Delete Modal Specifics --- */
+.btn-delete-confirm {
+    background: #E74C3C;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-delete-confirm:hover {
+    background: #C0392B;
+}
+
+.assignment-warning {
+    background-color: #FEF2F2;
+    border-left: 4px solid #E74C3C;
+    padding: 12px;
+    margin-bottom: 15px;
+    color: #991B1B;
+    font-size: 13px;
+    line-height: 1.5;
+    border-radius: 4px;
+}
+
+.shipment-conflict-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.conflict-tag {
+    background-color: #F3F4F6;
+    border: 1px solid #D1D5DB;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.instruction-text {
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+}
+
+/* --- Success Modal Styles --- */
+.modal-card.success {
+    text-align: center;
+    align-items: center;
+    width: 350px;
+}
+
+.success-icon-container {
+    width: 60px;
+    height: 60px;
+    background-color: #E8F5E9; 
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.success-icon-container svg {
+    width: 30px;
+    height: 30px;
+    stroke: #2E7D32; 
+    stroke-width: 3;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.success-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #2D3436;
+    margin-bottom: 8px;
+}
+
+.success-message {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 25px;
+}
+
+.btn-success-close {
+    background-color: #2E7D32;
+    color: white;
+    border: none;
+    padding: 10px 30px;
+    border-radius: 25px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+}
+
+.btn-success-close:hover {
+    background-color: #1B5E20;
 }
