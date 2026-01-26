@@ -21,7 +21,15 @@ function Login({ onLoginSuccess }) {
       onLoginSuccess(response.data);
     } catch (err) {
       console.error(err);
-      setError('Invalid Employee ID or Password');
+      
+      // ✨ UPDATED ERROR HANDLING
+      // If the backend sends a specific error message (like "Unauthorized..."), use it.
+      if (err.response && err.response.data && err.response.data.error) {
+        setError(err.response.data.error);
+      } else {
+        // Fallback for network errors or server crashes
+        setError('Invalid Employee ID or Password');
+      }
     }
   };
 

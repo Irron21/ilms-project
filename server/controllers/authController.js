@@ -7,11 +7,12 @@ const SECRET_KEY = process.env.JWT_SECRET;
 exports.login = (req, res) => {
     const { employeeID, password } = req.body;
 
-    // --- 1. PREPARE SQL QUERY ---
+    // 1. SELECT USER & STATUS (Added ul.isActive)
     const sql = `
         SELECT 
             ul.userID, 
             ul.hashedPassword, 
+            ul.isActive, 
             u.role, 
             u.firstName, 
             u.lastName
@@ -19,43 +20,46 @@ exports.login = (req, res) => {
         JOIN Users u ON ul.userID = u.userID
         WHERE ul.employeeID = ?
     `;
-        // --- 2. FETCH USER RECORD ---
+
     db.query(sql, [employeeID], async (err, results) => {
         if (err) {
             console.error("Database Error:", err);
             return res.status(500).json({ error: "Database error" });
         }
         
+        // 2. USER NOT FOUND
         if (results.length === 0) {
-            return res.status(401).json({ error: "User not found" });
+            return res.status(401).json({ error: "Invalid Employee ID or Password" });
         }
 
         const user = results[0];
 
-        // --- 3. CHECK PASSWORD ---
+        // 3. CHECK STATUS (⛔ BLOCK ARCHIVED USERS HERE)
+        // We check this BEFORE verifying the password.
+        if (user.isActive === 0) {
+            return res.status(403).json({ 
+                error: "Unauthorized: This account has been deactivated." 
+            });
+        }
+
+        // 4. CHECK PASSWORD
         const isMatch = await bcrypt.compare(password, user.hashedPassword);
 
         if (!isMatch) {
-            return res.status(401).json({ error: "Invalid password" });
+            return res.status(401).json({ error: "Invalid Employee ID or Password" });
         }
 
-        // --- 4. GENERATE TOKEN ---
+        // 5. GENERATE TOKEN
         const token = jwt.sign({ id: user.userID, role: user.role }, SECRET_KEY, { expiresIn: '12h' });
 
-        // --- 5. SAVE ACTIVE TOKEN (Single Device Security) ---
+        // 6. SAVE SESSION & LOG
         const updateTokenSql = "UPDATE UserLogins SET activeToken = ? WHERE userID = ?";
-        
         db.query(updateTokenSql, [token, user.userID], (updateErr) => {
-            if (updateErr) {
-                console.error("Token Save Error:", updateErr);
-                return res.status(500).json({ error: "Error saving session" });
-            }
+            if (updateErr) console.error("Token Save Error:", updateErr);
 
-            // --- 6. LOG ACTIVITY (Audit Trail) ---
             const logSql = "INSERT INTO UserActivityLog (userID, actionType, details) VALUES (?, ?, ?)";
             db.query(logSql, [user.userID, 'LOGIN', `User ${employeeID} logged in`]);
 
-            // --- 7. SEND SUCCESS RESPONSE ---
             res.json({
                 message: "Login success",
                 token,
