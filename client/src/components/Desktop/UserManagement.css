@@ -12,7 +12,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 15px; 
+    padding: 15px; 
+    flex-shrink: 0;
+    border-bottom: 1px solid #F0F0F0;
+    background-color: white; 
 }
 
 .filter-group-inline {
@@ -69,7 +72,7 @@
     background: white;
     flex: 1;             
     overflow-y: auto;   
-    position: relative;
+    scrollbar-gutter: stable; /* Keeps table width stable when scrollbar appears */
 }
 
 .user-table {
@@ -78,25 +81,35 @@
     border-spacing: 0;
 }
 
+.user-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    table-layout: fixed; /* Ensures column widths remain constant */
+}
+
 .user-table th {
     text-align: left;
-    padding: 15px;
+    padding: 16px 15px;
     color: #888;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
     position: sticky;
     top: 0;
     background-color: white; 
     z-index: 10;           
-    box-shadow: inset 0 -2px 0 #EEE, inset 0 1px 0 #EEE; 
+    box-shadow: inset 0 -2px 0 #EEE; 
 }
 
 .user-table td {
-    padding: 15px;
+    padding: 12.9px 15px; /* Mask vertical padding to fill table height */
     border-bottom: 1px solid #F5F7FA;
     vertical-align: middle;
     font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .empty-state {
@@ -261,4 +274,48 @@
     color: #C0392B;
     font-size: 13px;
     font-weight: 600;
+}
+
+/* --- Ghost Row Styles --- */
+.ghost-row td {
+    border-bottom: 1px solid #F5F7FA;
+    cursor: default;
+}
+
+/* --- Pagination Styles --- */
+.pagination-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #F0F0F0;
+    flex-shrink: 0;
+}
+
+.pagination-footer button {
+    padding: 5px 12px;
+    border: 1px solid #DDD;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.pagination-footer button:hover:not(:disabled) {
+    background: var(--primary-orange); /* Matches primary orange */
+}
+
+.pagination-footer button.active {
+    background-color: var(--primary-orange);
+    color: black;
+    font-weight: 600;
+    border-color: var(--primary-orange);
+}
+
+.pagination-footer button:disabled {
+    color: #CCC;
+    cursor: not-allowed;
 }

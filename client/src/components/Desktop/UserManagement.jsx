@@ -4,6 +4,10 @@ import './UserManagement.css';
 
 function UserManagement({ activeTab = "users" }) { 
   
+  // --- SHARED PAGINATION STATE ---
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
+
   // --- USER STATE ---
   const [users, setUsers] = useState([]);
   const [roleFilter, setRoleFilter] = useState('All');
@@ -19,11 +23,16 @@ function UserManagement({ activeTab = "users" }) {
   const [vehicles, setVehicles] = useState([]);
   const [truckFilter, setTruckFilter] = useState('All');
   const [showTruckModal, setShowTruckModal] = useState(false);
-  const [showEditTruckModal, setShowEditTruckModal] = useState(false); // ✨ New state
-  const [currentVehicle, setCurrentVehicle] = useState(null); // ✨ New state
+  const [showEditTruckModal, setShowEditTruckModal] = useState(false);
+  const [currentVehicle, setCurrentVehicle] = useState(null);
   const [truckForm, setTruckForm] = useState({ plateNo: '', type: '6-Wheeler', status: 'Working' });
 
   const token = localStorage.getItem('token'); 
+
+  // Reset page when switching tabs or filters to avoid empty views
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, roleFilter, truckFilter]);
 
   // --- FETCH DATA ---
   useEffect(() => {
@@ -45,8 +54,39 @@ function UserManagement({ activeTab = "users" }) {
     } catch (err) { console.error(err); }
   };
 
+  // --- PAGINATION RENDERER ---
+  const renderPagination = (totalItems) => {
+    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+    
+    return (
+        <div className="pagination-footer">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
+            {[...Array(totalPages)].map((_, i) => (
+                <button 
+                    key={i} 
+                    className={currentPage === i + 1 ? 'active' : ''}
+                    onClick={() => setCurrentPage(i + 1)}
+                >
+                    {i + 1}
+                </button>
+            ))}
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next</button>
+        </div>
+    );
+};
+
+  // --- GHOST ROW RENDERER ---
+  const renderGhostRows = (currentCount, colSpan) => {
+      const ghostsNeeded = rowsPerPage - currentCount;
+      if (ghostsNeeded <= 0) return null;
+      return Array.from({ length: ghostsNeeded }).map((_, idx) => (
+          <tr key={`ghost-${idx}`} className="ghost-row">
+              <td colSpan={colSpan}>&nbsp;</td>
+          </tr>
+      ));
+  };
+
   // --- USER HANDLERS ---
-  // Input Validation
   const validateEmail = (email) => {
       if (!email) return ""; 
       const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -82,7 +122,6 @@ function UserManagement({ activeTab = "users" }) {
     }
   };
 
-  // Create User
   const handleCreateSubmit = async () => {
     const emailError = validateEmail(userForm.email);
     const passError = validatePassword(userForm.password);
@@ -104,7 +143,6 @@ function UserManagement({ activeTab = "users" }) {
     } catch (err) { alert("Failed to create user."); }
   };
 
-  // Edit User
   const handleEditClick = (user) => {
     setCurrentUser(user);
     const formattedDob = user.dob ? new Date(user.dob).toISOString().split('T')[0] : '';
@@ -133,7 +171,6 @@ function UserManagement({ activeTab = "users" }) {
     } catch (err) { alert("Failed update"); }
   };
 
-  // Delete User
   const handleDelete = async (id) => {
       if(!window.confirm("Delete this user?")) return;
       try {
@@ -156,14 +193,9 @@ function UserManagement({ activeTab = "users" }) {
       } catch (e) { alert("Error adding vehicle"); }
   };
 
-  // Edit Truck 
   const handleEditTruckClick = (vehicle) => {
       setCurrentVehicle(vehicle);
-      setTruckForm({
-          plateNo: vehicle.plateNo,
-          type: vehicle.type,
-          status: vehicle.status
-      });
+      setTruckForm({ plateNo: vehicle.plateNo, type: vehicle.type, status: vehicle.status });
       setShowEditTruckModal(true);
   };
 
@@ -178,13 +210,10 @@ function UserManagement({ activeTab = "users" }) {
       } catch (e) { alert("Error updating vehicle"); }
   };
 
-  // Delete Truck 
   const handleDeleteTruck = async (id) => {
       if(!window.confirm("Are you sure you want to delete this vehicle?")) return;
       try {
-          await axios.delete(`http://localhost:4000/api/vehicles/${id}`, {
-              headers: { Authorization: `Bearer ${token}` }
-          });
+          await axios.delete(`http://localhost:4000/api/vehicles/${id}`, { headers: { Authorization: `Bearer ${token}` } });
           fetchVehicles();
       } catch (e) { alert("Error deleting vehicle"); }
   };
@@ -205,6 +234,7 @@ function UserManagement({ activeTab = "users" }) {
   // =========================================
   if (activeTab === 'trucks') {
       const filteredVehicles = vehicles.filter(v => truckFilter === 'All' || v.status === truckFilter);
+      const paginatedTrucks = filteredVehicles.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
       
       return (
         <div className="user-mgmt-container">
@@ -228,15 +258,11 @@ function UserManagement({ activeTab = "users" }) {
             <table className="user-table">
               <thead>
                 <tr>
-                  <th>Plate Number</th>
-                  <th>Type</th>
-                  <th>Status</th>
-                  <th>Date Added</th>
-                  <th style={{textAlign:'center'}}>Actions</th>
+                  <th>Plate Number</th><th>Type</th><th>Status</th><th>Date Added</th><th style={{textAlign:'center'}}>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredVehicles.map(v => (
+                {paginatedTrucks.map(v => (
                   <tr key={v.vehicleID}>
                     <td style={{fontWeight:'700'}}>{v.plateNo || '-'}</td>
                     <td>{v.type}</td>
@@ -256,20 +282,21 @@ function UserManagement({ activeTab = "users" }) {
                     </td>
                     <td>{new Date(v.dateCreated).toLocaleDateString()}</td>
                     <td className="action-cells">
-                        {/* Edit Button */}
                         <button className="icon-btn" onClick={() => handleEditTruckClick(v)}>
                             <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         </button>
-                        {/* Delete Button */}
                         <button className="icon-btn" onClick={() => handleDeleteTruck(v.vehicleID)}>
                             <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
                         </button>
                     </td>
                   </tr>
                 ))}
+                {renderGhostRows(paginatedTrucks.length, 5)}
               </tbody>
             </table>
           </div>
+
+          {renderPagination(filteredVehicles.length)}
 
           {/* ADD TRUCK MODAL */}
           {showTruckModal && (
@@ -325,17 +352,14 @@ function UserManagement({ activeTab = "users" }) {
   // RENDER USER VIEW
   // =========================================
   const filteredUsers = users.filter(user => roleFilter === 'All' || user.role.toLowerCase() === roleFilter.toLowerCase());
+  const paginatedUsers = filteredUsers.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
   return (
     <div className="user-mgmt-container">
       <div className="header-actions">
           <div className="filter-group-inline">
               <label>Filter by Role:</label>
-              <select 
-                  value={roleFilter} 
-                  onChange={(e) => setRoleFilter(e.target.value)}
-                  className="role-filter-dropdown"
-              >
+              <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="role-filter-dropdown">
                   <option value="All">All Roles</option>
                   <option value="Admin">Admin</option>
                   <option value="Operations">Operations</option>
@@ -349,9 +373,7 @@ function UserManagement({ activeTab = "users" }) {
               setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Crew', password: '', confirmPassword: '' });
               setErrors({ password: '', confirm: '', phone: '', email: '' });
               setShowCreateModal(true);
-          }}>
-              + Create User
-          </button>
+          }}> + Create User </button>
       </div>
 
       <div className="table-wrapper">
@@ -363,31 +385,38 @@ function UserManagement({ activeTab = "users" }) {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length > 0 ? filteredUsers.map(u => (
-              <tr key={u.userID}>
-                <td>{u.employeeID || 'N/A'}</td>
-                <td>{u.firstName} {u.lastName}</td>
-                <td>{u.phone || '-'}</td>
-                <td>{u.email || '-'}</td>
-                <td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td>
-                <td>{new Date(u.dateCreated).toLocaleDateString()}</td>
-                <td className="action-cells">
-                   <button className="icon-btn" onClick={() => handleEditClick(u)}>
-                        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                   </button>
-                   <button className="icon-btn" onClick={() => handleDelete(u.userID)}>
-                        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                   </button>
-                </td>
-              </tr>
-            )) : (
-              <tr><td colSpan="7" className="empty-state">No users found with the role "{roleFilter}"</td></tr>
+            {paginatedUsers.length > 0 ? (
+              <>
+                {paginatedUsers.map(u => (
+                  <tr key={u.userID}>
+                    <td>{u.employeeID || 'N/A'}</td>
+                    <td>{u.firstName} {u.lastName}</td>
+                    <td>{u.phone || '-'}</td>
+                    <td>{u.email || '-'}</td>
+                    <td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td>
+                    <td>{new Date(u.dateCreated).toLocaleDateString()}</td>
+                    <td className="action-cells">
+                       <button className="icon-btn" onClick={() => handleEditClick(u)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                       </button>
+                       <button className="icon-btn" onClick={() => handleDelete(u.userID)}>
+                            <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                       </button>
+                    </td>
+                  </tr>
+                ))}
+                {renderGhostRows(paginatedUsers.length, 7)}
+              </>
+            ) : (
+              <tr><td colSpan="7" className="empty-state">No users found</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {/* CREATE USER MODAL */}
+      {renderPagination(filteredUsers.length)}
+
+      {/* CREATE/EDIT USER MODALS (Remained the same) */}
       {showCreateModal && (
         <div className="modal-backdrop">
           <div className="modal-card">
@@ -397,34 +426,21 @@ function UserManagement({ activeTab = "users" }) {
                 <div className="col"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} placeholder="Doe" /></div>
             </div>
             <label>Email</label>
-            <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} className={errors.email ? 'input-error' : ''} />
+            <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} placeholder="john.doe@example.com" className={errors.email ? 'input-error' : ''} />
             {errors.email && <span className="error-text">{errors.email}</span>}
-
             <label>Phone Number (PH)</label>
             <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} placeholder="09xxxxxxxxx" className={errors.phone ? 'input-error' : ''} />
             {errors.phone && <span className="error-text">{errors.phone}</span>}
-
             <div className="row-inputs">
                 <div className="col"><label>Date of Birth</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} /></div>
-                <div className="col">
-                    <label>Role</label>
-                    <select name="role" value={userForm.role} onChange={handleUserInputChange}>
-                        <option value="Admin">Admin</option>
-                        <option value="Operations">Operations</option>
-                        <option value="Crew">Crew</option>
-                        <option value="Driver">Driver</option>
-                        <option value="Helper">Helper</option>
-                    </select>
-                </div>
+                <div className="col"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Crew">Crew</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div>
             </div>
             <label>Password</label>
             <input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} className={errors.password ? 'input-error' : ''} />
             {errors.password && <span className="error-text">{errors.password}</span>}
-
             <label>Confirm Password</label>
             <input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} className={errors.confirm ? 'input-error' : ''} />
             {errors.confirm && <span className="error-text">{errors.confirm}</span>}
-
             <div className="modal-footer">
                 <button className="btn-cancel" onClick={() => setShowCreateModal(false)}>Cancel</button>
                 <button className="btn-save" onClick={handleCreateSubmit} disabled={!!errors.password || !!errors.confirm || !!errors.phone || !!errors.email}>Save User</button>
@@ -433,7 +449,6 @@ function UserManagement({ activeTab = "users" }) {
         </div>
       )}
 
-      {/* EDIT USER MODAL */}
       {showEditModal && (
         <div className="modal-backdrop">
           <div className="modal-card">
@@ -445,16 +460,13 @@ function UserManagement({ activeTab = "users" }) {
             <label>Email</label>
             <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} className={errors.email ? 'input-error' : ''} />
             {errors.email && <span className="error-text">{errors.email}</span>}
-            
             <label>Phone Number</label>
             <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} className={errors.phone ? 'input-error' : ''} />
             {errors.phone && <span className="error-text">{errors.phone}</span>}
-
             <div className="row-inputs">
                 <div className="col"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} /></div>
                 <div className="col"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div>
             </div>
-
             <div className="modal-footer">
                 <button className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button>
                 <button className="btn-save" onClick={handleUpdateSubmit} disabled={!!errors.phone || !!errors.email}>Save User</button>

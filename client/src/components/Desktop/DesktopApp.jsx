@@ -79,7 +79,7 @@ function DesktopApp({ user, token, onLogout }) {
                         onClick={() => setView('users')} 
                         title="Resource Management"
                     >
-                        <Icons.Group />
+                        <Icons.List />
                     </button>
                 </>
             )}
