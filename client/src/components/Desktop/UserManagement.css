@@ -231,3 +231,34 @@
     display: block;
     font-weight: 600;
 }
+
+.modal-card h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 18px;
+}
+
+.btn-delete-confirm {
+    background: #E74C3C;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-delete-confirm:hover {
+    background: #C0392B;
+}
+
+.assignment-warning {
+    background-color: #FDF2F2;
+    border-left: 4px solid #E74C3C;
+    padding: 10px;
+    margin: 10px 0;
+    color: #C0392B;
+    font-size: 13px;
+    font-weight: 600;
+}
