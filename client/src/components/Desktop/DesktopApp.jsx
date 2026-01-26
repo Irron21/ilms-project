@@ -15,6 +15,9 @@ function DesktopApp({ user, token, onLogout }) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showProfile, setShowProfile] = useState(false);
 
+  // STATE FOR RESOURCE TAB (Users vs Trucks)
+  const [resourceTab, setResourceTab] = useState('users'); 
+
   // --- EFFECTS ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -32,7 +35,7 @@ function DesktopApp({ user, token, onLogout }) {
           case 'shipments': return 'Shipment Monitoring';
           case 'analytics': return 'KPI Analysis Dashboard';
           case 'payroll': return 'Dynamic Payroll Suggestion';
-          case 'users': return 'User Management';
+          case 'users': return 'Resource Management'; 
           default: return 'Dashboard';
       }
   };
@@ -62,7 +65,6 @@ function DesktopApp({ user, token, onLogout }) {
             </button>
             {user.role === 'Admin' && (
                 <>
-                    
                     {/* Payroll */}
                     <button 
                         className={`rail-btn ${view === 'payroll' ? 'active' : ''}`} 
@@ -71,10 +73,11 @@ function DesktopApp({ user, token, onLogout }) {
                     >
                         <Icons.Wallet />
                     </button>
+                    {/* Resource Management (Users/Trucks) */}
                     <button 
                         className={`rail-btn ${view === 'users' ? 'active' : ''}`} 
                         onClick={() => setView('users')} 
-                        title="User Management"
+                        title="Resource Management"
                     >
                         <Icons.Group />
                     </button>
@@ -119,7 +122,30 @@ function DesktopApp({ user, token, onLogout }) {
       <main className="main-content">
         <header className="top-header">
             <div className="header-left">
-                <h1>{getHeaderTitle()}</h1>
+                <div style={{display: 'flex', alignItems: 'center', gap: '25px'}}>
+                    <h1>{getHeaderTitle()}</h1>
+
+                    {/* ANIMATED SWITCH */}
+                    {view === 'users' && (
+                        <div className="resource-switch">
+                            {/* The sliding white background */}
+                            <div className={`switch-bg ${resourceTab}`}></div>
+                            
+                            <button 
+                                className={`switch-option ${resourceTab === 'users' ? 'active' : ''}`}
+                                onClick={() => setResourceTab('users')}
+                            >
+                                Users
+                            </button>
+                            <button 
+                                className={`switch-option ${resourceTab === 'trucks' ? 'active' : ''}`}
+                                onClick={() => setResourceTab('trucks')}
+                            >
+                                Trucks
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
             <div className="header-right">
                 <div className="welcome-box">
@@ -135,7 +161,11 @@ function DesktopApp({ user, token, onLogout }) {
             
             {/* ADMIN ONLY VIEWS */}
             {view === 'payroll' && user.role === 'Admin' && <PayrollView />}
-            {view === 'users' && user.role === 'Admin' && <UserManagement />}
+            
+            {/* activeTab prop so it switches between Users and Trucks */}
+            {view === 'users' && user.role === 'Admin' && (
+                <UserManagement activeTab={resourceTab} />
+            )}
         </div>
       </main>
     </div>
