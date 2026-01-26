@@ -15,10 +15,10 @@ function UserManagement({ activeTab = "users" }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [userForm, setUserForm] = useState({
-    firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Crew', password: '', confirmPassword: ''
+    firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: ''
   });
   const [errors, setErrors] = useState({ password: '', confirm: '', phone: '', email: '' });
-
+  
   // --- TRUCK STATE ---
   const [vehicles, setVehicles] = useState([]);
   const [truckFilter, setTruckFilter] = useState('All');
@@ -35,12 +35,22 @@ function UserManagement({ activeTab = "users" }) {
       name: null,
       action: 'delete' // 'delete' or 'status_change'
   });
-  const [conflictData, setConflictData] = useState([]);
 
-  // --- NEW: SUCCESS MODAL STATE ---
+  const [conflictData, setConflictData] = useState([]);
+  const [showArchived, setShowArchived] = useState(false);
+
+  // --- SUCCESS MODAL STATE ---
   const [successModal, setSuccessModal] = useState({
       show: false,
       message: ''
+  });
+
+  // --- RESTORE MODAL STATE ---
+  const [restoreModal, setRestoreModal] = useState({
+      show: false,
+      type: null, // 'user' or 'truck'
+      id: null,
+      name: null
   });
 
   const token = localStorage.getItem('token'); 
@@ -52,18 +62,22 @@ function UserManagement({ activeTab = "users" }) {
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
     else fetchVehicles();
-  }, [activeTab]);
+  }, [activeTab, showArchived]);
 
   const fetchUsers = async () => {
     try {
-        const res = await axios.get('http://localhost:4000/api/users', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get(`http://localhost:4000/api/users?archived=${showArchived}`, { 
+            headers: { Authorization: `Bearer ${token}` } 
+        });
         setUsers(res.data);
     } catch (err) { console.error(err); }
   };
   
   const fetchVehicles = async () => {
     try {
-        const res = await axios.get('http://localhost:4000/api/vehicles', { headers: { Authorization: `Bearer ${token}` } });
+        const res = await axios.get(`http://localhost:4000/api/vehicles?archived=${showArchived}`, { 
+            headers: { Authorization: `Bearer ${token}` } 
+        });
         setVehicles(res.data);
     } catch (err) { console.error(err); }
   };
@@ -126,6 +140,47 @@ function UserManagement({ activeTab = "users" }) {
       }
   };
 
+  // RESTORE HANDLER
+  const handleRestore = async (type, id) => {
+      if(!window.confirm(`Restore this ${type}? They will become active immediately.`)) return;
+      try {
+          const endpoint = type === 'user' 
+             ? `http://localhost:4000/api/users/${id}/restore`
+             : `http://localhost:4000/api/vehicles/${id}/restore`;
+          
+          await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
+          alert(`${type === 'user' ? 'User' : 'Vehicle'} restored!`);
+          
+          if (type === 'user') fetchUsers();
+          else fetchVehicles();
+      } catch (e) { alert("Failed to restore."); }
+  };
+
+  // OPEN RESTORE MODAL
+  const initiateRestore = (type, id, name) => {
+      setRestoreModal({ show: true, type, id, name });
+  };
+
+  const confirmRestore = async () => {
+      try {
+          const endpoint = restoreModal.type === 'user' 
+             ? `http://localhost:4000/api/users/${restoreModal.id}/restore`
+             : `http://localhost:4000/api/vehicles/${restoreModal.id}/restore`;
+          
+          await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
+          
+          // Close Modal & Show Success
+          setRestoreModal({ show: false, type: null, id: null, name: null });
+          setSuccessModal({ show: true, message: `${restoreModal.type === 'user' ? 'User' : 'Vehicle'} restored successfully!` });
+          
+          // Refresh Data
+          if (restoreModal.type === 'user') fetchUsers();
+          else fetchVehicles();
+      } catch (e) { 
+          alert("Failed to restore."); 
+      }
+  };
+  
   const toggleTruckStatus = async (vehicle) => {
       const newStatus = vehicle.status === 'Working' ? 'Maintenance' : 'Working';
       try {
@@ -221,9 +276,28 @@ function UserManagement({ activeTab = "users" }) {
                     <option value="Working">Working</option>
                     <option value="Maintenance">Maintenance</option>
                   </select>
-                  <div className="count-badge">{filteredVehicles.length} Vehicles</div>
+                  <button 
+                  onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
+                  style={{
+                      padding: '8px 15px',
+                      borderRadius: '20px',
+                      border: '1px solid #CCC',
+                      background: showArchived ? '#666' : 'white',
+                      color: showArchived ? 'white' : '#666',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600'
+                  }}
+                >
+                  {showArchived ? '← Back to Active' : 'View Archived'}
+                </button>
+                  <div className="count-badge">{filteredVehicles.length} Vehicles</div>                 
               </div>
-              <button className="create-user-btn" onClick={() => { setTruckForm({ plateNo: '', type: '6-Wheeler', status: 'Working' }); setShowTruckModal(true); }}>+ Add Vehicle</button>
+              {!showArchived && (
+                      <button className="create-user-btn" onClick={() => { setTruckForm({ plateNo: '', type: '6-Wheeler', status: 'Working' }); setShowTruckModal(true); }}>
+                          + Add Vehicle
+                      </button>
+                  )}
           </div>
           <div className="table-wrapper">
             <table className="user-table">
@@ -236,8 +310,20 @@ function UserManagement({ activeTab = "users" }) {
                     <td><span className="role-tag" style={{backgroundColor: v.status === 'Working' ? '#E8F5E9' : '#FFEBEE', color: v.status === 'Working' ? '#2E7D32' : '#C62828', cursor: 'pointer', border: '1px solid', borderColor: v.status === 'Working' ? '#A5D6A7' : '#EF9A9A'}} onClick={() => toggleTruckStatus(v)}>{v.status}</span></td>
                     <td>{new Date(v.dateCreated).toLocaleDateString()}</td>
                     <td className="action-cells">
+                      {showArchived ? (
+                       /* --- RESTORE BUTTON (Green Undo Icon) --- */
+                       <button className="icon-btn" onClick={() => initiateRestore(activeTab === 'users' ? 'user' : 'truck', v.vehicleID)} title="Restore">
+                           <svg viewBox="0 0 24 24" width="18" height="18" fill="#27AE60">
+                               <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+                           </svg>
+                       </button>
+                   ) : (
+                       /* --- EDIT & DELETE BUTTONS (Normal) --- */
+                       <>
                         <button className="icon-btn" onClick={() => handleEditTruckClick(v)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
                         <button className="icon-btn" onClick={() => initiateDelete('truck', v.vehicleID, v.plateNo)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -265,9 +351,26 @@ function UserManagement({ activeTab = "users" }) {
                     <option value="Driver">Driver</option>
                     <option value="Helper">Helper</option>
                 </select>
+                <button 
+                  onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
+                  style={{
+                      padding: '8px 15px',
+                      borderRadius: '20px',
+                      border: '1px solid #CCC',
+                      background: showArchived ? '#666' : 'white',
+                      color: showArchived ? 'white' : '#666',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600'
+                  }}
+                >
+                  {showArchived ? '← Back to Active' : 'View Archived'}
+                </button>
                 <div className="count-badge">{filteredUsers.length} User{filteredUsers.length !== 1 ? 's' : ''}</div>
             </div>
-            <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Crew', password: '', confirmPassword: '' }); setErrors({ password: '', confirm: '', phone: '', email: '' }); setShowCreateModal(true); }}> + Create User </button>
+            {!showArchived && (
+                      <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' }); setErrors({ password: '', confirm: '', phone: '', email: '' }); setShowCreateModal(true); }}> + Create User </button>
+                  )}          
         </div>
         <div className="table-wrapper">
           <table className="user-table">
@@ -279,8 +382,20 @@ function UserManagement({ activeTab = "users" }) {
                     <tr key={u.userID}>
                       <td>{u.employeeID || 'N/A'}</td><td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                       <td className="action-cells">
+                      {showArchived ? (
+                       /* --- RESTORE BUTTON (Green Undo Icon) --- */
+                       <button className="icon-btn" onClick={() => initiateRestore(activeTab === 'users' ? 'user' : 'truck', u.userID)} title="Restore">
+                           <svg viewBox="0 0 24 24" width="18" height="18" fill="#27AE60">
+                               <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
+                           </svg>
+                       </button>
+                   ) : (
+                       /* --- EDIT & DELETE BUTTONS (Normal) --- */
+                       <>
                          <button className="icon-btn" onClick={() => handleEditClick(u)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
                          <button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+                        </>
+                      )}
                       </td>
                     </tr>
                   ))}
@@ -306,7 +421,6 @@ function UserManagement({ activeTab = "users" }) {
         <div className="modal-backdrop">
           <div className="modal-card">
             <h3>Create New User</h3>
-            {/* ... (Inputs removed for brevity, they match previous code) ... */}
             <div className="row-inputs"><div className="col"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} /></div><div className="col"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} /></div></div>
             <label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} />
             <label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} />
@@ -338,7 +452,7 @@ function UserManagement({ activeTab = "users" }) {
           <div className="modal-card">
             <h3>Add Vehicle</h3>
             <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} />
-            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="L300">L300</option></select>
+            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheels">6-Wheels</option><option value="Wing-Van">Wing-Van</option><option value="L300">L300</option><option value="Travis">Travis</option><option value="Forward">Forward</option></select>
             <div className="modal-footer"><button className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button className="btn-save" onClick={handleTruckSubmit}>Save</button></div>
           </div>
         </div>
@@ -394,6 +508,25 @@ function UserManagement({ activeTab = "users" }) {
             <div className="success-title">Success!</div>
             <div className="success-message">{successModal.message}</div>
             <button className="btn-success-close" onClick={() => setSuccessModal({ show: false, message: '' })}>Continue</button>
+          </div>
+        </div>
+      )}
+
+      {/* RESTORE CONFIRMATION MODAL */}
+      {restoreModal.show && (
+        <div className="modal-backdrop">
+          <div className="modal-card">
+            <h3>Confirm Restore</h3>
+            <p>
+                Are you sure you want to restore <strong>{restoreModal.name}</strong>?
+            </p>
+            <p style={{fontSize: '13px', color: '#666', marginTop: '-10px', marginBottom: '20px'}}>
+                This will move the record back to the Active list and re-enable their access immediately.
+            </p>
+            <div className="modal-footer">
+                <button className="btn-cancel" onClick={() => setRestoreModal({...restoreModal, show: false})}>Cancel</button>
+                <button className="btn-restore-confirm" onClick={confirmRestore}>Restore</button>
+            </div>
           </div>
         </div>
       )}

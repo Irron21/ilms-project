@@ -7,5 +7,6 @@ router.post('/create', vehicleController.createVehicle);
 router.put('/:id', vehicleController.updateVehicle); 
 router.put('/:id/status', vehicleController.updateVehicleStatus); 
 router.delete('/:id', vehicleController.deleteVehicle);
+router.put('/:id/restore', vehicleController.restoreVehicle);
 
 module.exports = router;

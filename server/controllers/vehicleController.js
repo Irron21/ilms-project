@@ -1,11 +1,24 @@
 const db = require('../config/db');
 
-// Get All Vehicles
+// GET VEHICLES (Supports ?archived=true)
 exports.getAllVehicles = (req, res) => {
-    const sql = "SELECT * FROM Vehicles ORDER BY dateCreated DESC";
-    db.query(sql, (err, results) => {
+    const showArchived = req.query.archived === 'true';
+    const archiveValue = showArchived ? 1 : 0;
+
+    const sql = "SELECT * FROM Vehicles WHERE isArchived = ? ORDER BY dateCreated DESC";
+    db.query(sql, [archiveValue], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
+    });
+};
+
+// RESTORE VEHICLE
+exports.restoreVehicle = (req, res) => {
+    const { id } = req.params;
+    const sql = "UPDATE Vehicles SET isArchived = 0 WHERE vehicleID = ?";
+    db.query(sql, [id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ message: "Vehicle restored successfully" });
     });
 };
 
@@ -72,7 +85,7 @@ exports.updateVehicleStatus = (req, res) => {
     }
 };
 
-// DELETE VEHICLE
+/// ARCHIVE (SOFT DELETE) VEHICLE
 exports.deleteVehicle = (req, res) => {
     const { id } = req.params;
 
@@ -93,19 +106,11 @@ exports.deleteVehicle = (req, res) => {
             });
         }
 
-        // 2. Try to Delete
-        // Note: This will fail if the truck has PAST completed shipments.
-        // For a simple app, we can just let that error happen or delete history like we did for users.
-        // Let's try simple delete first.
-        const deleteSql = "DELETE FROM Vehicles WHERE vehicleID = ?";
-        db.query(deleteSql, [id], (err) => {
-            if (err) {
-                if (err.code === 'ER_ROW_IS_REFERENCED_2') {
-                    return res.status(409).json({ error: "Cannot delete: Vehicle has historical shipment records." });
-                }
-                return res.status(500).json({ error: err.message });
-            }
-            res.json({ message: "Vehicle deleted successfully" });
+        // 2. SOFT DELETE
+        const archiveSql = "UPDATE Vehicles SET isArchived = 1 WHERE vehicleID = ?";
+        db.query(archiveSql, [id], (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ message: "Vehicle archived successfully" });
         });
     });
 };

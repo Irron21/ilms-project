@@ -1,18 +1,58 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 
-// GET ALL USERS
+// GET USERS (Supports ?archived=true)
 exports.getAllUsers = (req, res) => {
+    const showArchived = req.query.archived === 'true';
+    const archiveValue = showArchived ? 1 : 0;
+
     const sql = `
         SELECT u.userID, ul.employeeID, u.firstName, u.lastName, 
                u.email, u.phone, u.role, u.dob, u.dateCreated 
         FROM Users u
         LEFT JOIN UserLogins ul ON u.userID = ul.userID
+        WHERE u.isArchived = ? 
         ORDER BY u.dateCreated DESC
     `;
-    db.query(sql, (err, results) => {
+    
+    db.query(sql, [archiveValue], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
+    });
+};
+
+// RESTORE USER (Unarchive)
+exports.restoreUser = (req, res) => {
+    const { id } = req.params;
+
+    db.getConnection((err, connection) => {
+        if (err) return res.status(500).json({ error: "DB Connection failed" });
+
+        connection.beginTransaction(err => {
+            if (err) { connection.release(); return res.status(500).json({ error: "Transaction failed" }); }
+
+            // 1. Set isArchived = 0
+            const restoreUserSql = "UPDATE Users SET isArchived = 0 WHERE userID = ?";
+            connection.query(restoreUserSql, [id], (err) => {
+                if (err) {
+                    return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to restore user" }); });
+                }
+
+                // 2. Re-enable Login (isActive = 1)
+                const enableLoginSql = "UPDATE UserLogins SET isActive = 1 WHERE userID = ?";
+                connection.query(enableLoginSql, [id], (err) => {
+                    if (err) {
+                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to enable login" }); });
+                    }
+
+                    connection.commit(err => {
+                        if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
+                        connection.release();
+                        res.json({ message: "User restored successfully" });
+                    });
+                });
+            });
+        });
     });
 };
 
@@ -66,12 +106,12 @@ exports.updateUser = (req, res) => {
     });
 };
 
-// DELETE USER (FIXED FOR YOUR SCHEMA)
+// ARCHIVE (SOFT DELETE) USER
 exports.deleteUser = (req, res) => {
     const { id } = req.params;
 
-    // 1. CHECK FOR ACTIVE SHIPMENTS
-    // We must join Shipments and ShipmentCrew because 'driverID' doesn't exist in Shipments
+    // 1. CHECK FOR ACTIVE SHIPMENTS (Strict Block)
+    // We strictly block archiving if they are currently working on a job.
     const checkSql = `
         SELECT s.shipmentID 
         FROM Shipments s
@@ -83,7 +123,7 @@ exports.deleteUser = (req, res) => {
     db.query(checkSql, [id], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        // If active shipments exist, BLOCK delete and return 409
+        // If they are on an active job, BLOCK THEM.
         if (results.length > 0) {
             return res.status(409).json({ 
                 error: "Dependency Conflict", 
@@ -91,47 +131,32 @@ exports.deleteUser = (req, res) => {
             });
         }
 
-        // 2. CLEAN UP & DELETE
-        // We use a Transaction to ensure all or nothing deletes
+        // 2. SOFT DELETE (ARCHIVE)
+        // If they are free (no active jobs), we hide them.
         db.getConnection((err, connection) => {
             if (err) return res.status(500).json({ error: "DB Connection failed" });
 
             connection.beginTransaction(err => {
                 if (err) { connection.release(); return res.status(500).json({ error: "Transaction failed" }); }
 
-                // A. Remove from History (ShipmentCrew) so we don't get Foreign Key errors
-                // (Only deleting completed/cancelled history, since active was checked above)
-                connection.query("DELETE FROM ShipmentCrew WHERE userID = ?", [id], (err) => {
+                // A. Mark User as Archived
+                const archiveUserSql = "UPDATE Users SET isArchived = 1 WHERE userID = ?";
+                connection.query(archiveUserSql, [id], (err) => {
                     if (err) {
-                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to clear crew history" }); });
+                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to archive user" }); });
                     }
 
-                    // B. Remove Login Credentials
-                    connection.query("DELETE FROM UserLogins WHERE userID = ?", [id], (err) => {
+                    // B. Disable Login Access (So they can't log in anymore)
+                    const disableLoginSql = "UPDATE UserLogins SET isActive = 0 WHERE userID = ?";
+                    connection.query(disableLoginSql, [id], (err) => {
                         if (err) {
-                            return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to delete login" }); });
+                            return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to disable login" }); });
                         }
 
-                        // C. Finally, Delete the User
-                        connection.query("DELETE FROM Users WHERE userID = ?", [id], (err) => {
-                            if (err) {
-                                // If this fails, it might be referenced in other tables like 'Shipments' (as operationsUserID) or logs
-                                return connection.rollback(() => { 
-                                    connection.release(); 
-                                    // Check for FK error
-                                    if (err.code === 'ER_ROW_IS_REFERENCED_2') {
-                                        res.status(409).json({ error: "Cannot delete: User has created shipments or logs." });
-                                    } else {
-                                        res.status(500).json({ error: err.message }); 
-                                    }
-                                });
-                            }
-
-                            connection.commit(err => {
-                                if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
-                                connection.release();
-                                res.json({ message: "User deleted successfully" });
-                            });
+                        connection.commit(err => {
+                            if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
+                            connection.release();
+                            res.json({ message: "User archived successfully" });
                         });
                     });
                 });

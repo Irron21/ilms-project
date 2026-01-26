@@ -16,6 +16,7 @@
     flex-shrink: 0;
     border-bottom: 1px solid #F0F0F0;
     background-color: white; 
+    min-height: 70px;
 }
 
 .filter-group-inline {
@@ -427,4 +428,19 @@
 
 .btn-success-close:hover {
     background-color: #1B5E20;
+}
+
+.btn-restore-confirm {
+    background: #27AE60; 
+    color: white;
+    border: none;
+    padding: 10px 25px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-restore-confirm:hover {
+    background: #219150; 
 }
