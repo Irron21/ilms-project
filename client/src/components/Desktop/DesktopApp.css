@@ -116,9 +116,10 @@ body {
     background: white;
     border-radius: 12px;
     box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-    overflow: hidden !important;
-    display: flex;
-    flex-direction: column;
+    display: flex; /* Crucial: make this a flex container */
+    flex-direction: column; 
+    overflow: hidden; 
+    margin-bottom: 0; /* Remove any bottom margins */
 }
 
 /* --- PROFILE POPUP MENU --- */

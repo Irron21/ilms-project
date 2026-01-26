@@ -2,7 +2,7 @@
 .shipment-view-layout {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: 100%; 
     overflow: hidden;
 }
 
@@ -14,8 +14,12 @@
 }
 
 .shipment-scrollable-table {
-    flex: 1;
+    flex: 1; 
     overflow-y: auto;
+    scrollbar-gutter: stable;
+    background-color: white;
+    display: flex;
+    flex-direction: column;
 }
 
 /* --- CONTROLS & FILTERS --- */
@@ -23,7 +27,7 @@
     background-color: #43B2DA; 
     color: black; border: none;
     padding: 10px 16px; border-radius: 25px;
-    font-weight: 600; cursor: pointer;
+    cursor: pointer;
     border: 2px solid #38A1C6;
 }
 
@@ -44,6 +48,7 @@
     border: 1px solid #DDD; border-radius: 6px;
     background-color: white; font-size: 13px; color: #333;
     cursor: pointer; outline: none;
+    font-family: 'Segoe UI', sans-serif;
 }
 
 .count-badge {
@@ -53,18 +58,41 @@
 
 /* --- TABLE STYLES --- */
 .custom-table {
-    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 14px;
+    table-layout: fixed;
+    min-height: 0; 
 }
+
 .custom-table th {
     text-align: left; padding: 15px; color: #888;
     font-weight: 700; font-size: 13px; text-transform: uppercase;
     border-bottom: 2px solid #EEE; background-color: #FFF;
     position: sticky; top: 0; z-index: 5;
 }
+
+.custom-table th:nth-child(1) { width: 15%; } /* Shipment ID */
+.custom-table th:nth-child(2) { width: 15%; } /* Status */
+.custom-table th:nth-child(3) { width: 20%; } /* Destination Name */
+.custom-table th:nth-child(4) { width: 20%; } /* Destination Location */
+.custom-table th:nth-child(5) { width: 12%; } /* Plate No. */
+.custom-table th:nth-child(6) { width: 12%; } /* Crew */
+.custom-table th:nth-child(7) { width: 6%; }  /* Expand Button */
+
 .custom-table td {
-    padding: 12px 15px; border-bottom: 1px solid #F0F0F0; vertical-align: middle;
+    padding: 15.9px 15px; /* 15.9px vertical padding to fill ghost rows on a native resolution */
+    border-bottom: 1px solid #F0F0F0; 
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
+.custom-table tbody {
+    background-color: white;
+}
 /* Status Dot & Pulse */
 .status-dot {
     display: inline-block; width: 10px; height: 10px;
@@ -176,7 +204,6 @@
     border: 1px solid #CCC;
     padding: 9px 16px; 
     border-radius: 25px;
-    font-weight: 600; 
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -203,9 +230,44 @@
     color: #666;
     padding: 10px 20px;
     border-radius: 25px;
-    font-weight: 600;
     cursor: pointer;
 }
 .cancel-btn-secondary:hover {
     background: #F5F5F5;
+}
+
+.pagination-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    background: white;
+    border-top: 1px solid #F0F0F0;
+    flex-shrink: 0;
+}
+
+.pagination-footer button {
+    padding: 5px 12px;
+    border: 1px solid #DDD;
+    background: white;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.pagination-footer button:hover:not(:disabled) {
+    background: var(--primary-orange);
+}
+
+.pagination-footer button.active {
+    background-color: var(--primary-orange);
+    color: black;
+    font-weight: 600;
+}
+
+.pagination-footer button:disabled {
+    color: #CCC;
+    cursor: not-allowed;
 }

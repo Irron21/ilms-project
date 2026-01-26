@@ -10,7 +10,15 @@ function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [statusFilter, setStatusFilter] = useState('All'); 
+    
+    // Timeframe & Date Filters
+    const [timeframe, setTimeframe] = useState('All');
     const [dateFilter, setDateFilter] = useState(''); 
+    
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 10; 
+
     const [expandedShipmentID, setExpandedShipmentID] = useState(null);
     const [closingId, setClosingId] = useState(null);
     const [activeLogs, setActiveLogs] = useState([]);
@@ -83,6 +91,40 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     // --- HANDLERS ---
+    
+    // Date Validation Handler
+    const handleDateFilterChange = (e) => {
+        const selectedDate = e.target.value;
+        
+        // 1. Allow clearing the filter
+        if (!selectedDate) {
+            setDateFilter('');
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+
+        // 2. Prevent Future Dates
+        if (selectedDate > today) {
+            alert("Future dates are not allowed.");
+            return; 
+        }
+
+        // 3. Prevent Dates Without Shipments
+        const hasData = shipments.some(s => {
+            const shipDate = new Date(s.creationTimestamp).toISOString().split('T')[0];
+            return shipDate === selectedDate;
+        });
+
+        if (!hasData) {
+            alert(`No shipments found on ${selectedDate}.`);
+            return; 
+        }
+
+        setDateFilter(selectedDate);
+        setCurrentPage(1); 
+    };
+
     const handleOpenModal = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -104,31 +146,25 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (err) { alert(err.response?.data?.error || "Failed."); }
     };
 
-    // Export Handler
     const handleExport = async () => {
         try {
             const config = {
                 headers: { Authorization: `Bearer ${token}` },
                 params: { startDate: dateRange.start, endDate: dateRange.end },
-                responseType: 'blob' // Important for file download
+                responseType: 'blob' 
             };
             const response = await axios.get('http://localhost:4000/api/shipments/export', config);
 
-            // Create download link
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
             link.setAttribute('download', `Shipment_Report_${dateRange.start}_to_${dateRange.end}.xlsx`);
             document.body.appendChild(link);
             link.click();
-            
-            // Cleanup
             link.parentNode.removeChild(link);
             setShowExportModal(false);
-
         } catch (error) {
-            console.error("Export failed:", error);
-            alert("Failed to export data. Please check if there are records in the selected range.");
+            alert("Failed to export data.");
         }
     };
 
@@ -159,6 +195,30 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
+    // --- FILTER LOGIC (Timeframe + Date + Status) ---
+    const filterByTimeframe = (items) => {
+        if (timeframe === 'All') return items;
+        
+        const now = new Date();
+        return items.filter(s => {
+            const shipDate = new Date(s.creationTimestamp);
+            const diffDays = (now - shipDate) / (1000 * 60 * 60 * 24);
+
+            switch(timeframe) {
+                case 'Daily': return diffDays <= 1;
+                case 'Weekly': return diffDays <= 7;
+                case 'Bi-Weekly': return diffDays <= 14;
+                case 'Monthly': return shipDate.getMonth() === now.getMonth() && shipDate.getFullYear() === now.getFullYear();
+                case 'Quarterly': return Math.floor(shipDate.getMonth() / 3) === Math.floor(now.getMonth() / 3) && shipDate.getFullYear() === now.getFullYear();
+                case 'Yearly': return shipDate.getFullYear() === now.getFullYear();
+                default: return true;
+            }
+        });
+    };
+
+    const timeframeFiltered = filterByTimeframe(shipments);
+
+    // Helpers
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
         if (dbStatus === 'Completed') return 'Completed';
@@ -167,6 +227,17 @@ function ShipmentView({ user, token, onLogout }) {
         if (idx === PHASE_ORDER.length - 1) return 'Completed';
         return dbStatus; 
     };
+
+    const finalFiltered = timeframeFiltered.filter(s => {
+        const visibleStatus = getDisplayStatus(s.currentStatus);
+        const matchesStatus = statusFilter === 'All' || visibleStatus === statusFilter;
+        let matchesDate = true;
+        if (dateFilter) {
+            const d = new Date(s.creationTimestamp);
+            matchesDate = d.toISOString().split('T')[0] === dateFilter;
+        }
+        return matchesStatus && matchesDate;
+    });
 
     const getDisplayColor = (dbStatus) => {
         if (dbStatus === 'Pending') return '#EB5757'; 
@@ -191,39 +262,56 @@ function ShipmentView({ user, token, onLogout }) {
         return 'pending'; 
     };
 
-    const filteredShipments = shipments.filter(s => {
-        const visibleStatus = getDisplayStatus(s.currentStatus);
-        const matchesStatus = statusFilter === 'All' || visibleStatus === statusFilter;
-        let matchesDate = true;
-        if (dateFilter) {
-            const d = new Date(s.creationTimestamp);
-            matchesDate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` === dateFilter;
-        }
-        return matchesStatus && matchesDate;
-    });
+    // --- PAGINATION ---
+    const totalPages = Math.ceil(finalFiltered.length / rowsPerPage);
+    const paginatedShipments = finalFiltered.slice(
+        (currentPage - 1) * rowsPerPage,
+        currentPage * rowsPerPage
+    );
 
     return (
         <div className="shipment-view-layout">
             
-            {/* Merged Button & Filters */}
             <div className="shipment-fixed-header">
-                
                 <div className="table-controls">
                     {/* Left: Filters */}
                     <div className="filters-left">
+                        {/* Status Filter */}
                         <div className="filter-group">
                             <label>Status:</label>
-                            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="status-select">
+                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="status-select">
                                 <option value="All">All Statuses</option>
                                 <option value="Arrival">Arrival (Pending)</option>
                                 {PHASE_ORDER.slice(1).map(p => <option key={p} value={p}>{p}</option>)}
                                 <option value="Completed">Completed</option>
                             </select>
                         </div>
+
+                        {/* Timeframe Filter */}
+                        <div className="filter-group">
+                            <label>Timeframe:</label>
+                            <select className="status-select" value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setCurrentPage(1); }}>
+                                <option value="All">All Time</option>
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Bi-Weekly">Bi-Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Quarterly">Quarterly</option>
+                                <option value="Yearly">Yearly</option>
+                            </select>
+                        </div>
+
+                        {/* Date Filter */}
                         <div className="filter-group">
                             <label>Date:</label>
-                            <input type="date" className="date-input" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-                            <div className="count-badge">{filteredShipments.length} Result{filteredShipments.length !== 1 ? 's' : ''}</div>
+                            <input 
+                                type="date" 
+                                className="date-input" 
+                                value={dateFilter} 
+                                max={new Date().toISOString().split('T')[0]} // 🔒 Disable future in picker
+                                onChange={handleDateFilterChange} 
+                            />
+                            <div className="count-badge">{finalFiltered.length} Results</div>
                         </div>
                     </div>
 
@@ -237,14 +325,12 @@ function ShipmentView({ user, token, onLogout }) {
                             </svg>
                             Extract to .xlsx
                         </button>
-
                         <button className="new-shipment-btn" onClick={handleOpenModal}>+ New Shipment</button>
                     </div>
                 </div>
-
             </div>
 
-            {/* SCROLLABLE TABLE*/}
+            {/* SCROLLABLE TABLE with Pagination */}
             <div className="shipment-scrollable-table">
                 <table className="custom-table">
                     <thead>
@@ -259,7 +345,7 @@ function ShipmentView({ user, token, onLogout }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {filteredShipments.length > 0 ? filteredShipments.map(s => {
+                        {paginatedShipments.length > 0 ? paginatedShipments.map(s => {
                             const isOpen = expandedShipmentID === s.shipmentID;
                             const isClosing = closingId === s.shipmentID;
                             const displayStatus = getDisplayStatus(s.currentStatus);
@@ -313,7 +399,24 @@ function ShipmentView({ user, token, onLogout }) {
                 </table>
             </div>
 
-            {/* Modals & Popups */}
+            {/* PAGINATION FOOTER */}
+            {totalPages > 1 && (
+                <div className="pagination-footer">
+                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
+                    {[...Array(totalPages)].map((_, i) => (
+                        <button 
+                            key={i} 
+                            className={currentPage === i + 1 ? 'active' : ''}
+                            onClick={() => setCurrentPage(i + 1)}
+                        >
+                            {i + 1}
+                        </button>
+                    ))}
+                    <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next</button>
+                </div>
+            )}
+
+            {/* Modals (Resources, Export, Crew) */}
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
                     <h4>Assigned Crew</h4>
@@ -347,7 +450,7 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
 
-            {/* Export Date Selection Modal */}
+            {/* Export Modal */}
             {showExportModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
                     <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()}>
@@ -355,40 +458,26 @@ function ShipmentView({ user, token, onLogout }) {
                             <h2>Extract Shipment Data</h2>
                             <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
                         </div>
-                        
                         <div className="export-modal-body">
                             <p style={{marginBottom:'20px', color:'#666'}}>Select the timeframe for the report:</p>
-                            
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Start Date</label>
-                                    <input 
-                                        type="date" 
-                                        value={dateRange.start} 
-                                        onChange={e => setDateRange({...dateRange, start: e.target.value})}
-                                    />
+                                    <input type="date" className="date-input" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} />
                                 </div>
                                 <div className="form-group">
                                     <label>End Date</label>
-                                    <input 
-                                        type="date" 
-                                        value={dateRange.end} 
-                                        onChange={e => setDateRange({...dateRange, end: e.target.value})}
-                                    />
+                                    <input type="date" className="date-input" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} />
                                 </div>
                             </div>
-
                             <div className="modal-actions" style={{marginTop:'25px', display:'flex', gap:'10px'}}>
                                 <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>
-                                    Download .xlsx
-                                </button>
+                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download .xlsx</button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-
         </div>
     );
 }
