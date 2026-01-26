@@ -30,7 +30,7 @@ function ShipmentView({ user, token, onLogout }) {
         start: new Date().toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
-
+    const [showNoDataModal, setShowNoDataModal] = useState(false);
     const [resources, setResources] = useState({ drivers: [], helpers: [], vehicles: [] });
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     const [formData, setFormData] = useState({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
@@ -91,39 +91,6 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     // --- HANDLERS ---
-    
-    // Date Validation Handler
-    const handleDateFilterChange = (e) => {
-        const selectedDate = e.target.value;
-        
-        // 1. Allow clearing the filter
-        if (!selectedDate) {
-            setDateFilter('');
-            return;
-        }
-
-        const today = new Date().toISOString().split('T')[0];
-
-        // 2. Prevent Future Dates
-        if (selectedDate > today) {
-            alert("Future dates are not allowed.");
-            return; 
-        }
-
-        // 3. Prevent Dates Without Shipments
-        const hasData = shipments.some(s => {
-            const shipDate = new Date(s.creationTimestamp).toISOString().split('T')[0];
-            return shipDate === selectedDate;
-        });
-
-        if (!hasData) {
-            alert(`No shipments found on ${selectedDate}.`);
-            return; 
-        }
-
-        setDateFilter(selectedDate);
-        setCurrentPage(1); 
-    };
 
     const handleOpenModal = async () => {
         try {
@@ -146,7 +113,32 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (err) { alert(err.response?.data?.error || "Failed."); }
     };
 
+    const getTodayString = () => {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    };
+
     const handleExport = async () => {
+        // 1. Client-Side Check: Does data exist in this range?
+        const hasData = shipments.some(s => {
+            const d = new Date(s.creationTimestamp);
+            if (isNaN(d)) return false;
+            
+            // Normalize to YYYY-MM-DD string for comparison
+            const shipDate = d.toISOString().split('T')[0];
+            return shipDate >= dateRange.start && shipDate <= dateRange.end;
+        });
+
+        // 2. If no data, Stop and Show Modal
+        if (!hasData) {
+            setShowNoDataModal(true); 
+            return; 
+        }
+
+        // 3. Proceed with Export if data exists
         try {
             const config = {
                 headers: { Authorization: `Bearer ${token}` },
@@ -162,7 +154,8 @@ function ShipmentView({ user, token, onLogout }) {
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
-            setShowExportModal(false);
+            
+            setShowExportModal(false); // Close the export modal on success
         } catch (error) {
             alert("Failed to export data.");
         }
@@ -219,6 +212,16 @@ function ShipmentView({ user, token, onLogout }) {
     const timeframeFiltered = filterByTimeframe(shipments);
 
     // Helpers
+
+    const getAvailableDates = () => {
+        const dates = shipments.map(s => {
+            const d = new Date(s.creationTimestamp);
+            return !isNaN(d) ? d.toISOString().split('T')[0] : null;
+        }).filter(Boolean); 
+
+        return [...new Set(dates)].sort().reverse();
+    };
+
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
         if (dbStatus === 'Completed') return 'Completed';
@@ -304,13 +307,23 @@ function ShipmentView({ user, token, onLogout }) {
                         {/* Date Filter */}
                         <div className="filter-group">
                             <label>Date:</label>
-                            <input 
-                                type="date" 
-                                className="date-input" 
+                            <select 
+                                className="status-select" 
                                 value={dateFilter} 
-                                max={new Date().toISOString().split('T')[0]} // 🔒 Disable future in picker
-                                onChange={handleDateFilterChange} 
-                            />
+                                onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
+                                style={{ minWidth: '160px' }} // Optional: ensure it fits dates nicely
+                            >
+                                <option value="">All Dates</option>
+                                {getAvailableDates().map(date => {
+                                    // Count items for this date to show user (e.g., "Jan 25 (3)")
+                                    const count = shipments.filter(s => s.creationTimestamp.startsWith(date)).length;
+                                    return (
+                                        <option key={date} value={date}>
+                                            {new Date(date).toLocaleDateString()} ({count})
+                                        </option>
+                                    );
+                                })}
+                            </select>
                             <div className="count-badge">{finalFiltered.length} Results</div>
                         </div>
                     </div>
@@ -463,11 +476,23 @@ function ShipmentView({ user, token, onLogout }) {
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Start Date</label>
-                                    <input type="date" className="date-input" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} />
+                                    <input 
+                                        type="date" 
+                                        className="date-input" 
+                                        value={dateRange.start} 
+                                        max={getTodayString()} /* 🔒 Block Future Dates */
+                                        onChange={e => setDateRange({...dateRange, start: e.target.value})} 
+                                    />
                                 </div>
                                 <div className="form-group">
                                     <label>End Date</label>
-                                    <input type="date" className="date-input" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} />
+                                    <input 
+                                        type="date" 
+                                        className="date-input" 
+                                        value={dateRange.end} 
+                                        max={getTodayString()} /* 🔒 Block Future Dates */
+                                        onChange={e => setDateRange({...dateRange, end: e.target.value})} 
+                                    />
                                 </div>
                             </div>
                             <div className="modal-actions" style={{marginTop:'25px', display:'flex', gap:'10px'}}>
@@ -475,6 +500,32 @@ function ShipmentView({ user, token, onLogout }) {
                                 <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download .xlsx</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* No Data Modal */}
+            {showNoDataModal && (
+                <div className="modal-overlay-desktop" onClick={() => setShowNoDataModal(false)}>
+                    <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 30px'}}>
+                        <div style={{
+                            width: '60px', height: '60px', background: '#F5F5F5', borderRadius: '50%', 
+                            margin: '0 auto 20px auto', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}>
+                             <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#666" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="8" x2="12" y2="12"></line>
+                                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                        </div>
+                        <h3 style={{margin: '0 0 10px 0', fontSize: '18px'}}>No Shipments Found</h3>
+                        <p style={{color: '#666', fontSize: '14px', lineHeight: '1.5', marginBottom: '25px'}}>
+                            There are no records available for the selected date range.<br/>
+                            Please try selecting a different timeframe.
+                        </p>
+                        <button className="btn-alert" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>
+                            Okay, Close
+                        </button>
                     </div>
                 </div>
             )}
