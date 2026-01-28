@@ -113,9 +113,9 @@ exports.getShipmentLogs = (req, res) => {
 };
 
 exports.getFormResources = (req, res) => {
-    const sqlDrivers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Driver'";
-    const sqlHelpers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Helper'";
-    const sqlVehicles = "SELECT vehicleID, plateNo, type FROM Vehicles";
+    const sqlDrivers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Driver' AND isArchived = 0";
+    const sqlHelpers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Helper' AND isArchived = 0";
+    const sqlVehicles = "SELECT vehicleID, plateNo, type FROM Vehicles WHERE isArchived = 0";
 
     // Run queries in parallel
     db.query(sqlDrivers, (err, drivers) => {
@@ -133,36 +133,86 @@ exports.getFormResources = (req, res) => {
     });
 };
 
+
 exports.createShipment = (req, res) => {
-    const { 
-        shipmentID, clientID = 1, vehicleID, destName, destLocation, 
-        driverID, helperID, operationsUserID 
-    } = req.body;
+    // 1. Extract and Parse Data (Ensure IDs are Numbers)
+    const shipmentID = req.body.shipmentID;
+    const clientID = 1; 
+    const vehicleID = req.body.vehicleID;
+    const destName = req.body.destName;
+    const destLocation = req.body.destLocation;
+    const driverID = parseInt(req.body.driverID); 
+    const helperID = parseInt(req.body.helperID); 
+    const operationsUserID = req.body.operationsUserID;
 
+    // 2. Basic Validation
     if (!shipmentID) return res.status(400).json({ error: "Shipment ID is required." });
-    const sqlShipment = `
-        INSERT INTO Shipments (shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID, currentStatus) 
-        VALUES (?, ?, ?, ?, ?, ?, 'Pending') 
-    `;
+    if (!driverID || !helperID) return res.status(400).json({ error: "Driver and Helper are required." });
+    if (driverID === helperID) return res.status(400).json({ error: "Driver and Helper cannot be the same person." });
 
-    db.query(sqlShipment, [shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID], (err, result) => {
+
+    db.getConnection((err, connection) => {
         if (err) {
-            console.error("Create Error:", err);
-            if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Shipment ID already exists." });
-            return res.status(500).json({ error: err.message });
+            console.error("❌ Connection Error:", err);
+            return res.status(500).json({ error: "Database connection failed." });
         }
 
-        const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID) VALUES ?";
-        const crewValues = [[shipmentID, driverID], [shipmentID, helperID]];
-
-        db.query(sqlCrew, [crewValues], (err, crewResult) => {
+        connection.beginTransaction((err) => {
             if (err) {
-                console.error("Crew Error:", err);
-                return res.status(500).json({ error: "Shipment created but crew failed." });
+                connection.release();
+                return res.status(500).json({ error: "Transaction failed." });
             }
-            const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
-            db.query(sqlLog, [shipmentID, operationsUserID], () => {
-                res.json({ message: "Success", shipmentID: shipmentID });
+
+            const sqlShipment = `
+                INSERT INTO Shipments (shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID, currentStatus) 
+                VALUES (?, ?, ?, ?, ?, ?, 'Pending') 
+            `;
+
+            // Step 3: Insert Shipment
+            connection.query(sqlShipment, [shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID], (err, result) => {
+                if (err) {
+                    return connection.rollback(() => {
+                        connection.release();
+                        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Shipment ID already exists." });
+                        res.status(500).json({ error: "Failed to create shipment record: " + err.message });
+                    });
+                }
+
+                const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID) VALUES ?";
+                const crewValues = [[shipmentID, driverID], [shipmentID, helperID]];
+
+                // Step 4: Insert Crew
+                connection.query(sqlCrew, [crewValues], (err, crewResult) => {
+                    if (err) {
+                        return connection.rollback(() => {
+                            connection.release();
+                            res.status(500).json({ error: "Crew Assignment Failed: " + err.message });
+                        });
+                    }
+
+                    const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
+                    
+                    // Step 5: Insert Log
+                    connection.query(sqlLog, [shipmentID, operationsUserID], (err) => {
+                        if (err) {
+                            return connection.rollback(() => {
+                                connection.release();
+                                res.status(500).json({ error: "Logging failed: " + err.message });
+                            });
+                        }
+
+                        connection.commit((err) => {
+                            if (err) {
+                                return connection.rollback(() => {
+                                    connection.release();
+                                    res.status(500).json({ error: "Commit failed." });
+                                });
+                            }
+                            connection.release();
+                            res.json({ message: "Success", shipmentID: shipmentID });
+                        });
+                    });
+                });
             });
         });
     });
