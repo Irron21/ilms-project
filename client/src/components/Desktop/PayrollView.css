@@ -1,0 +1,70 @@
+.payroll-container {
+    font-family: 'Segoe UI', sans-serif;
+    color: #333;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+
+/* Reuse header-actions pattern */
+
+.payroll-filter-dropdown {
+    padding: 8px 12px;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    background-color: #FAFAFA;
+    font-size: 13px;
+    color: #2c2c2c;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+}
+
+.payroll-filter-dropdown:focus {
+    border-color: #43B2DA;
+    background-color: #FFF;
+}
+
+
+/* Table */
+
+.payroll-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.payroll-table th {
+    text-align: left;
+    padding: 15px 20px;
+    color: #888;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    position: sticky;
+    top: 0;
+    background-color: white;
+    z-index: 10;
+    box-shadow: inset 0 -2px 0 #EEE, inset 0 2px 0 #EEE;
+    border: none;
+}
+
+.payroll-table td {
+    padding: 14px 20px;
+    border-bottom: 1px solid #F5F7FA;
+    vertical-align: middle;
+    font-size: 14px;
+}
+
+
+/* Empty state reused */
+
+.empty-state {
+    text-align: center;
+    padding: 60px;
+    color: #505050;
+    font-style: italic;
+}
