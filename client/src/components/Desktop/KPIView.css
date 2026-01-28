@@ -207,7 +207,6 @@ path, rect, g {
     background: #DDD;
     border-radius: 2px;
     outline: none;
-    -webkit-appearance: none; /* Override default look */
 }
 
 /* Slider Thumb Styling */
@@ -296,32 +295,41 @@ path, rect, g {
     border-color: #BBB;
 }
 
-/* Manage List Styles */
 .manage-list {
     list-style: none;
     padding: 0;
     margin: 0;
+    max-height: 400px; 
+    overflow-y: auto;
+    border: 1px solid #F0F0F0; 
+    border-radius: 8px;
 }
 
 .manage-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px;
+    padding: 12px 15px;
     border-bottom: 1px solid #F0F0F0;
+    transition: background 0.2s;
 }
 
 .manage-item:last-child {
     border-bottom: none;
 }
 
+.manage-item:hover {
+    background-color: #FAFAFA; 
+}
+
 .manage-info {
     display: flex;
     flex-direction: column;
+    gap: 2px;
 }
 
 .manage-date {
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
     font-size: 14px;
 }
@@ -329,25 +337,27 @@ path, rect, g {
 .manage-id {
     font-size: 11px;
     color: #999;
+    font-family: monospace;
 }
 
 .delete-btn {
-    background: #FFF0F0;
+    background: white;
     color: #EB5757;
     border: 1px solid #EB5757;
-    padding: 5px 10px;
-    border-radius: 4px;
+    padding: 6px 14px;
+    border-radius: 20px; 
     font-size: 12px;
     cursor: pointer;
     font-weight: 600;
+    transition: all 0.2s;
 }
 
 .delete-btn:hover {
     background: #EB5757;
     color: white;
+    box-shadow: 0 2px 5px rgba(235, 87, 87, 0.3);
 }
 
-/* MULTI-SELECT DROPDOWN */
 .multi-select-container {
     position: relative;
     display: inline-block;
@@ -374,7 +384,7 @@ path, rect, g {
 
 .multi-select-dropdown {
     position: absolute;
-    top: 35px; /* Push it down below the button */
+    top: 35px;
     right: 0;
     background: white;
     border: 1px solid #CCC;
@@ -417,42 +427,39 @@ path, rect, g {
     margin: 0;
 }
 
-/* Invisible overlay to close dropdown when clicking outside */
 .dropdown-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    z-index: -1; /* Behind the dropdown, but in front of everything else */
+    z-index: -1; 
     cursor: default;
 }
 
 .color-dot {
     width: 10px;
     height: 10px;
-    border-radius: 50%; /* Makes it a circle */
-    flex-shrink: 0;     /* Prevents it from getting squished */
-    margin-right: -2px; /* Slight adjustment for spacing if needed */
+    border-radius: 50%; 
+    flex-shrink: 0;     
+    margin-right: -2px; 
 }
 
 .metric-name {
-    color: #333; /* Clean dark text */
+    color: #333; 
     font-weight: 500;
     font-size: 13px;
 }
 
-/* Ensure checkbox row aligns everything nicely */
 .checkbox-row {
     display: flex;
     align-items: center;
-    gap: 10px; /* Space between Checkbox -> Dot -> Text */
+    gap: 10px;
     padding: 8px 12px;
     cursor: pointer;
     transition: background 0.1s;
 }
 
-/* SUCCESS & ERROR MODALS */
 .success-card {
     text-align: center;
     max-width: 350px;
@@ -463,7 +470,6 @@ path, rect, g {
     text-align: center;
     max-width: 350px;
     padding: 30px;
-    border-top: 5px solid #EB5757; /* Red Top Border */
 }
 
 .modal-icon {

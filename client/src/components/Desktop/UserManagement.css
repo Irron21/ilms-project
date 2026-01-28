@@ -73,20 +73,14 @@
     background: white;
     flex: 1;             
     overflow-y: auto;   
-    scrollbar-gutter: stable; /* Keeps table width stable when scrollbar appears */
+    scrollbar-gutter: stable;
 }
 
 .user-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-}
-
-.user-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    table-layout: fixed; /* Ensures column widths remain constant */
+    table-layout: fixed;
 }
 
 .user-table th {
@@ -104,7 +98,7 @@
 }
 
 .user-table td {
-    padding: 12.9px 15px; /* Mask vertical padding to fill table height */
+    padding: 12.9px 15px;
     border-bottom: 1px solid #F5F7FA;
     vertical-align: middle;
     font-size: 14px;
@@ -151,8 +145,12 @@
 }
 
 .icon-btn svg {
-    fill: black;
-    opacity: 0.7;
+    fill: none;           
+    stroke: currentColor; 
+    stroke-width: 2px;   
+    width: 18px;         
+    height: 18px;
+    opacity: 0.8;
 }
 
 .icon-btn:hover {
@@ -163,6 +161,7 @@
     opacity: 1;
 }
 
+/* --- MODAL STYLES --- */
 .modal-backdrop {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     background: rgba(0,0,0,0.6);
@@ -180,13 +179,21 @@
     display: flex; flex-direction: column; gap: 15px;
 }
 
-.modal-card h3 { margin: 0 0 10px 0; font-size: 20px; font-weight: 700; }
+.modal-card h3 { 
+    margin: 0 0 15px 0; 
+    font-size: 20px; 
+    font-weight: 700; 
+    text-align: center; 
+}
 
 .modal-card label {
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 500;
     color: #555;
-    margin-bottom: -10px;
+    text-align: left;
+    display: block;
+    width: 100%;
+    margin-bottom: 0; 
 }
 
 .modal-card input, .modal-card select {
@@ -195,12 +202,19 @@
     border-radius: 8px;
     font-size: 14px;
     background-color: #FAFAFA;
+    text-align: left;
 }
 
 .row-inputs {
     display: flex; gap: 15px;
 }
-.col { display: flex; flex-direction: column; gap: 15px; flex: 1; }
+
+.col { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 5px; 
+    flex: 1; 
+}
 
 .modal-footer {
     display: flex; justify-content: flex-end; gap: 12px;
@@ -246,12 +260,7 @@
     font-weight: 600;
 }
 
-.modal-card h3 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    font-size: 18px;
-}
-
+/* --- Deletion / Warning Styles --- */
 .btn-delete-confirm {
     background: #E74C3C;
     color: white;
@@ -268,19 +277,41 @@
 }
 
 .assignment-warning {
-    background-color: #FDF2F2;
+    background-color: #FEF2F2;
     border-left: 4px solid #E74C3C;
-    padding: 10px;
-    margin: 10px 0;
-    color: #C0392B;
+    padding: 12px;
+    margin-bottom: 15px;
+    color: #991B1B;
     font-size: 13px;
-    font-weight: 600;
+    line-height: 1.5;
+    border-radius: 4px;
+    text-align: left; 
 }
 
-/* --- Ghost Row Styles --- */
-.ghost-row td {
-    border-bottom: 1px solid #F5F7FA;
-    cursor: default;
+.shipment-conflict-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 15px;
+    justify-content: flex-start; 
+}
+
+.conflict-tag {
+    background-color: #F3F4F6;
+    border: 1px solid #D1D5DB;
+    color: #374151;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.instruction-text {
+    font-size: 13px;
+    color: #666;
+    font-style: italic;
+    text-align: center;
 }
 
 /* --- Pagination Styles --- */
@@ -306,14 +337,14 @@
 }
 
 .pagination-footer button:hover:not(:disabled) {
-    background: var(--primary-orange); 
+    background: var(--primary-orange, #F2C94C); 
 }
 
 .pagination-footer button.active {
-    background-color: var(--primary-orange);
+    background-color: var(--primary-orange, #F2C94C);
     color: black;
     font-weight: 600;
-    border-color: var(--primary-orange);
+    border-color: var(--primary-orange, #F2C94C);
 }
 
 .pagination-footer button:disabled {
@@ -321,126 +352,27 @@
     cursor: not-allowed;
 }
 
-/* --- Delete Modal Specifics --- */
-.btn-delete-confirm {
-    background: #E74C3C;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 25px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
+.ghost-row td {
+    border-bottom: 1px solid #F5F7FA;
+    cursor: default;
 }
 
-.btn-delete-confirm:hover {
-    background: #C0392B;
-}
-
-.assignment-warning {
-    background-color: #FEF2F2;
-    border-left: 4px solid #E74C3C;
-    padding: 12px;
-    margin-bottom: 15px;
-    color: #991B1B;
-    font-size: 13px;
-    line-height: 1.5;
-    border-radius: 4px;
-}
-
-.shipment-conflict-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 15px;
-}
-
-.conflict-tag {
-    background-color: #F3F4F6;
-    border: 1px solid #D1D5DB;
-    color: #374151;
-    font-size: 12px;
-    font-weight: 700;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-family: monospace;
-}
-
-.instruction-text {
-    font-size: 13px;
-    color: #666;
-    font-style: italic;
-}
-
-/* --- Success Modal Styles --- */
-.modal-card.success {
-    text-align: center;
-    align-items: center;
-    width: 350px;
-}
-
-.success-icon-container {
-    width: 60px;
-    height: 60px;
-    background-color: #E8F5E9; 
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 15px;
-    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.success-icon-container svg {
-    width: 30px;
-    height: 30px;
-    stroke: #2E7D32; 
-    stroke-width: 3;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.success-title {
-    font-size: 20px;
-    font-weight: 700;
-    color: #2D3436;
-    margin-bottom: 8px;
-}
-
-.success-message {
-    color: #666;
-    font-size: 14px;
-    margin-bottom: 25px;
-}
-
-.btn-success-close {
-    background-color: #2E7D32;
-    color: white;
-    border: none;
-    padding: 10px 30px;
-    border-radius: 25px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px; 
     width: 100%;
 }
 
-.btn-success-close:hover {
-    background-color: #1B5E20;
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left; 
 }
 
-.btn-restore-confirm {
-    background: #27AE60; 
-    color: white;
-    border: none;
-    padding: 10px 25px;
-    border-radius: 20px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.btn-restore-confirm:hover {
-    background: #219150; 
+.form-group input, 
+.form-group select {
+    width: 100%; 
+    box-sizing: border-box; 
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Icons } from '../Icons'; 
 import './ShipmentView.css';
+import FeedbackModal from '../FeedbackModal'; 
 
 const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure'];
 
@@ -24,13 +25,18 @@ function ShipmentView({ user, token, onLogout }) {
     const [activeLogs, setActiveLogs] = useState([]);
     const [flashingIds, setFlashingIds] = useState([]); 
     const prevShipmentsRef = useRef([]); 
+    
+    // Modals
     const [showModal, setShowModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
+    const [showNoDataModal, setShowNoDataModal] = useState(false);
+    const [feedbackModal, setFeedbackModal] = useState(null); // ✨ 2. New Feedback State
+
     const [dateRange, setDateRange] = useState({
         start: new Date().toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     });
-    const [showNoDataModal, setShowNoDataModal] = useState(false);
+    
     const [resources, setResources] = useState({ drivers: [], helpers: [], vehicles: [] });
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     const [formData, setFormData] = useState({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
@@ -106,11 +112,26 @@ function ShipmentView({ user, token, onLogout }) {
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
             await axios.post('http://localhost:4000/api/shipments/create', { ...formData, operationsUserID: user.userID }, config);
-            alert("Shipment Created!");
+
             setShowModal(false);
             setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
             fetchData(true); 
-        } catch (err) { alert(err.response?.data?.error || "Failed."); }
+
+            setFeedbackModal({
+                type: 'success',
+                title: 'Shipment Created!',
+                message: 'The new shipment has been successfully scheduled.',
+                onClose: () => setFeedbackModal(null)
+            });
+
+        } catch (err) { 
+            setFeedbackModal({
+                type: 'error',
+                title: 'Creation Failed',
+                message: err.response?.data?.error || "Failed to create shipment.",
+                onClose: () => setFeedbackModal(null)
+            });
+        }
     };
 
     const getTodayString = () => {
@@ -122,23 +143,18 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     const handleExport = async () => {
-        // 1. Client-Side Check: Does data exist in this range?
         const hasData = shipments.some(s => {
             const d = new Date(s.creationTimestamp);
             if (isNaN(d)) return false;
-            
-            // Normalize to YYYY-MM-DD string for comparison
             const shipDate = d.toISOString().split('T')[0];
             return shipDate >= dateRange.start && shipDate <= dateRange.end;
         });
 
-        // 2. If no data, Stop and Show Modal
         if (!hasData) {
             setShowNoDataModal(true); 
             return; 
         }
 
-        // 3. Proceed with Export if data exists
         try {
             const config = {
                 headers: { Authorization: `Bearer ${token}` },
@@ -155,9 +171,14 @@ function ShipmentView({ user, token, onLogout }) {
             link.click();
             link.parentNode.removeChild(link);
             
-            setShowExportModal(false); // Close the export modal on success
+            setShowExportModal(false); 
         } catch (error) {
-            alert("Failed to export data.");
+            setFeedbackModal({
+                type: 'error',
+                title: 'Export Failed',
+                message: "Could not download the Excel file.",
+                onClose: () => setFeedbackModal(null)
+            });
         }
     };
 
@@ -188,7 +209,7 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // --- FILTER LOGIC (Timeframe + Date + Status) ---
+    // --- FILTER LOGIC ---
     const filterByTimeframe = (items) => {
         if (timeframe === 'All') return items;
         
@@ -210,8 +231,6 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     const timeframeFiltered = filterByTimeframe(shipments);
-
-    // Helpers
 
     const getAvailableDates = () => {
         const dates = shipments.map(s => {
@@ -279,7 +298,6 @@ function ShipmentView({ user, token, onLogout }) {
                 <div className="table-controls">
                     {/* Left: Filters */}
                     <div className="filters-left">
-                        {/* Status Filter */}
                         <div className="filter-group">
                             <label>Status:</label>
                             <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="status-select">
@@ -289,8 +307,6 @@ function ShipmentView({ user, token, onLogout }) {
                                 <option value="Completed">Completed</option>
                             </select>
                         </div>
-
-                        {/* Timeframe Filter */}
                         <div className="filter-group">
                             <label>Timeframe:</label>
                             <select className="status-select" value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setCurrentPage(1); }}>
@@ -303,19 +319,16 @@ function ShipmentView({ user, token, onLogout }) {
                                 <option value="Yearly">Yearly</option>
                             </select>
                         </div>
-
-                        {/* Date Filter */}
                         <div className="filter-group">
                             <label>Date:</label>
                             <select 
                                 className="status-select" 
                                 value={dateFilter} 
                                 onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
-                                style={{ minWidth: '160px' }} // Optional: ensure it fits dates nicely
+                                style={{ minWidth: '160px' }} 
                             >
                                 <option value="">All Dates</option>
                                 {getAvailableDates().map(date => {
-                                    // Count items for this date to show user (e.g., "Jan 25 (3)")
                                     const count = shipments.filter(s => s.creationTimestamp.startsWith(date)).length;
                                     return (
                                         <option key={date} value={date}>
@@ -339,7 +352,7 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             </div>
 
-            {/* SCROLLABLE TABLE with Pagination */}
+            {/* SCROLLABLE TABLE */}
             <div className="shipment-scrollable-table">
                 <table className="custom-table">
                     <thead>
@@ -425,6 +438,10 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
 
+            {feedbackModal && (
+                <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />
+            )}
+
             {/* Modals (Resources, Export, Crew) */}
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
@@ -451,7 +468,7 @@ function ShipmentView({ user, token, onLogout }) {
                             <div className="form-group"><label>Assign Vehicle</label><select required value={formData.vehicleID} onChange={e => setFormData({...formData, vehicleID: e.target.value})}><option value="">-- Select Truck --</option>{resources.vehicles.map(v => <option key={v.vehicleID} value={v.vehicleID}>{v.plateNo} ({v.type})</option>)}</select></div>
                             <div className="form-row">
                                 <div className="form-group"><label>Driver</label><select required value={formData.driverID} onChange={e => setFormData({...formData, driverID: e.target.value})}><option value="">-- Select Driver --</option>{resources.drivers.map(d => <option key={d.userID} value={d.userID}>{d.firstName} {d.lastName}</option>)}</select></div>
-                                <div className="form-group"><label>Helper</label><select required value={formData.helperID} onChange={e => setFormData({...formData, helperID: e.target.value})}><option value="">-- Select Helper --</option>{resources.helpers.map(h => <option key={h.userID} value={h.userID}>{h.firstName} {h.lastName}</option>)}</select></div>
+                                <div className="form-group"><label>Helper</label><select required value={formData.helperID} onChange={e => setFormData({...formData, helperID: e.target.value})}><option value="">-- Select Helper --</option>{resources.helpers.map(h => <option key={h.userID} value={h.userID} >{h.firstName} {h.lastName}</option>)}</select></div>
                             </div>
                             <button type="submit" className="submit-btn">Confirm Shipment</button>
                         </form>
@@ -476,7 +493,7 @@ function ShipmentView({ user, token, onLogout }) {
                                         type="date" 
                                         className="date-input" 
                                         value={dateRange.start} 
-                                        max={getTodayString()} /* 🔒 Block Future Dates */
+                                        max={getTodayString()} 
                                         onChange={e => setDateRange({...dateRange, start: e.target.value})} 
                                     />
                                 </div>
@@ -486,7 +503,7 @@ function ShipmentView({ user, token, onLogout }) {
                                         type="date" 
                                         className="date-input" 
                                         value={dateRange.end} 
-                                        max={getTodayString()} /* 🔒 Block Future Dates */
+                                        max={getTodayString()} 
                                         onChange={e => setDateRange({...dateRange, end: e.target.value})} 
                                     />
                                 </div>

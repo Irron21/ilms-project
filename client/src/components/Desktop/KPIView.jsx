@@ -5,9 +5,10 @@ import {
 } from 'recharts';
 import './KPIView.css';
 import { Icons } from '../Icons'; 
+import FeedbackModal from '../FeedbackModal';
 
 function KPIView() {
-    // ... (Keep existing states) ...
+
     const [kpiScores, setKpiScores] = useState([]); 
     const [trendData, setTrendData] = useState([]); 
     const [loading, setLoading] = useState(true);
@@ -23,10 +24,7 @@ function KPIView() {
     const hoverTimeout = useRef(null);
     const [yAxisMin, setYAxisMin] = useState(80);
     const [chartType, setChartType] = useState('bar'); 
-    const [uploadStatus, setUploadStatus] = useState(null); 
-    const [uploadErrorMsg, setUploadErrorMsg] = useState('');
 
-    // METRICS CONFIG
     const metricConfig = [
         { key: 'Booking', color: '#2F80ED', label: 'Booking' },
         { key: 'Truck', color: '#9B51E0', label: 'Truck' },
@@ -37,7 +35,8 @@ function KPIView() {
     ];
 
     const [selectedMetrics, setSelectedMetrics] = useState(metricConfig.map(m => m.key));
-    const [isFilterOpen, setIsFilterOpen] = useState(false); // Controls dropdown visibility
+    const [isFilterOpen, setIsFilterOpen] = useState(false); 
+    const [feedbackModal, setFeedbackModal] = useState(null);
 
     useEffect(() => { 
         fetchMonths();
@@ -73,11 +72,52 @@ function KPIView() {
         fetchDashboardData(newMonth);
     };
 
+    const handleDeleteReport = (id) => {
+        setShowManageModal(false); 
+
+        setFeedbackModal({
+            type: 'warning',
+            title: 'Delete Report?',
+            message: 'Are you sure you want to permanently delete this report?',
+            subMessage: "This action cannot be undone.",
+            confirmLabel: 'Delete',
+            onConfirm: async () => {
+                try {
+                    await axios.post('http://localhost:4000/api/kpi/delete', { id });
+                    fetchMonths();
+                    fetchDashboardData();
+
+                    setFeedbackModal({
+                        type: 'success',
+                        title: 'Deleted!',
+                        message: 'The report has been removed successfully.',
+                        onClose: () => {
+                            setFeedbackModal(null);
+                            setShowManageModal(true); 
+                        }
+                    });
+                } catch (err) {
+                    setFeedbackModal({
+                        type: 'error',
+                        title: 'Error',
+                        message: 'Failed to delete report.',
+                        onClose: () => {
+                            setFeedbackModal(null);
+                            setShowManageModal(true); 
+                        }
+                    });
+                }
+            },
+            onClose: () => {
+                setFeedbackModal(null);
+                setShowManageModal(true); 
+            }
+        });
+    };
+
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
-        // Reset file input so you can select the same file again if it failed
         e.target.value = ''; 
 
         const formData = new FormData();
@@ -86,35 +126,29 @@ function KPIView() {
         try {
             setLoading(true);
             await axios.post('http://localhost:4000/api/kpi/upload', formData);
-            
-            // ✅ Success Logic
             setLoading(false);
-            setUploadStatus('success');
+
+            setFeedbackModal({
+                type: 'success',
+                title: 'Upload Successful!',
+                message: 'Your KPI report has been processed.',
+                onClose: () => setFeedbackModal(null)
+            });
+            
             fetchMonths();
             fetchDashboardData(); 
         } catch (err) { 
             setLoading(false);
-            
-            // ❌ Error Logic
-            const serverMsg = err.response?.data?.message || "Something went wrong.";
-            const errorType = err.response?.data?.error || "Unknown";
+            const serverMsg = err.response?.data?.error || "Something went wrong.";
 
-            if (errorType === 'INVALID_TEMPLATE' || errorType === 'INVALID_DATE') {
-                setUploadErrorMsg(serverMsg);
-            } else {
-                setUploadErrorMsg("Failed to upload. Please try again.");
-            }
-            setUploadStatus('error');
+            setFeedbackModal({
+                type: 'error',
+                title: 'Upload Failed',
+                message: serverMsg,
+                subMessage: 'Please ensure you are uploading a valid K2MAC Excel Report.',
+                onClose: () => setFeedbackModal(null)
+            });
         }
-    };
-
-    const handleDeleteReport = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this report?")) return;
-        try {
-            await axios.post('http://localhost:4000/api/kpi/delete', { id });
-            fetchMonths();
-            fetchDashboardData();
-        } catch (err) { alert("Failed to delete report"); }
     };
 
     const onPointClick = (data, category) => { 
@@ -146,22 +180,19 @@ function KPIView() {
         return hoveredSelection.index === index && hoveredSelection.key === key ? 1 : 0.3;
     };
 
-    // ✨ NEW: Toggle Logic for Checkboxes
     const toggleMetric = (key) => {
         if (selectedMetrics.includes(key)) {
-            // Remove it (but prevent removing the last one if you want)
             setSelectedMetrics(selectedMetrics.filter(k => k !== key));
         } else {
-            // Add it
             setSelectedMetrics([...selectedMetrics, key]);
         }
     };
 
     const toggleAllMetrics = () => {
         if (selectedMetrics.length === metricConfig.length) {
-            setSelectedMetrics([]); // Deselect All
+            setSelectedMetrics([]);
         } else {
-            setSelectedMetrics(metricConfig.map(m => m.key)); // Select All
+            setSelectedMetrics(metricConfig.map(m => m.key));
         }
     };
 
@@ -218,7 +249,6 @@ function KPIView() {
             <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '20px' }}>
                 {payload.map((entry, index) => (
                     <div key={`item-${index}`} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {/* Reuse the same classes for perfect consistency */}
                         <span className="color-dot" style={{ backgroundColor: entry.color }}></span>
                         <span className="metric-name" style={{ fontSize: '12px', color: '#666' }}>
                             {entry.value}
@@ -231,7 +261,7 @@ function KPIView() {
 
     return (
         <div className="kpi-container">
-            {/* Header Section (Unchanged) */}
+            {/* Header Section*/}
              <div className="kpi-actions-bar">
                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
                     <h3 className="header-title">Overview for {monthLabel || '...'}</h3>
@@ -255,7 +285,7 @@ function KPIView() {
                 </div>
             </div>
 
-            {/* Scorecards (Unchanged) */}
+            {/* Scorecards */}
             <div className="scorecard-grid">
                 {loading && kpiScores.length === 0 ? (
                     <div style={{gridColumn:'1 / -1', height:'90px', display:'flex', alignItems:'center', justifyContent:'center', color:'#CCC'}}>Loading Metrics...</div>
@@ -286,7 +316,7 @@ function KPIView() {
                     
                     <div className="chart-controls-group">
                         
-                        {/* ✨ NEW: Multi-Select Dropdown Component */}
+                        {/* Multi-Select Dropdown Component */}
                         <div className="multi-select-container">
                             <button 
                                 className="multi-select-btn" 
@@ -314,8 +344,7 @@ function KPIView() {
                                                 checked={selectedMetrics.includes(m.key)} 
                                                 readOnly 
                                             />
-                                            
-                                            {/* ✨ CHANGE: Color Dot + Normal Text */}
+
                                             <span className="color-dot" style={{backgroundColor: m.color}}></span>
                                             <span className="metric-name">{m.label}</span>
                                             
@@ -348,8 +377,7 @@ function KPIView() {
                                     <YAxis domain={[yAxisMin, 100]} tick={{fontSize: 12}} />
                                     <Tooltip content={<CustomTooltip />} cursor={{fill: '#F5F5F5'}} />
                                     <Legend content={renderLegend} />
-                                    
-                                    {/* ✨ LOGIC: Loop only shows metrics present in selectedMetrics array */}
+
                                     {metricConfig.map(m => {
                                         if (!selectedMetrics.includes(m.key)) return null;
                                         return renderBar(m.key, m.color, m.label);
@@ -367,8 +395,7 @@ function KPIView() {
                                     <YAxis domain={[yAxisMin, 100]} tick={{fontSize: 12}} />
                                     <Tooltip content={<CustomTooltip />} />
                                     <Legend content={renderLegend} />
-                                    
-                                    {/* ✨ LOGIC: Same for Lines */}
+
                                     {metricConfig.map(m => {
                                         if (!selectedMetrics.includes(m.key)) return null;
                                         return renderLine(m.key, m.color, m.label);
@@ -383,31 +410,15 @@ function KPIView() {
                 </div>
             </div>
             
-            {/* 1. SUCCESS MODAL */}
-            {uploadStatus === 'success' && (
-                <div className="modal-backdrop" onClick={() => setUploadStatus(null)}>
-                    <div className="modal-card success-card" onClick={e => e.stopPropagation()}>
-                        <div className="modal-icon success-icon">✔</div>
-                        <h3>Upload Successful!</h3>
-                        <p>Your KPI report has been processed and the dashboard updated.</p>
-                        <button className="btn-primary" onClick={() => setUploadStatus(null)}>Great!</button>
-                    </div>
-                </div>
+            {feedbackModal && (
+                <FeedbackModal 
+                    {...feedbackModal} 
+                    onClose={() => {
+                        if (feedbackModal.onClose) feedbackModal.onClose();
+                        else setFeedbackModal(null);
+                    }} 
+                />
             )}
-
-            {/* 2. ERROR MODAL */}
-            {uploadStatus === 'error' && (
-                <div className="modal-backdrop" onClick={() => setUploadStatus(null)}>
-                    <div className="modal-card error-card" onClick={e => e.stopPropagation()}>
-                        <div className="modal-icon error-icon">✖</div>
-                        <h3>Upload Failed</h3>
-                        <p className="error-text">{uploadErrorMsg}</p>
-                        <p className="sub-text">Please ensure you are uploading a valid K2MAC Excel Report.</p>
-                        <button className="btn-danger" onClick={() => setUploadStatus(null)}>Try Again</button>
-                    </div>
-                </div>
-            )}
-
 
              {showModal && (
                 <div className="modal-backdrop" onClick={() => setShowModal(false)}>

@@ -6,24 +6,37 @@ const fs = require('fs');
 exports.uploadKPIReport = (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
+    // Helper: Safely delete file without crashing
+    const cleanup = () => {
+        try {
+            if (req.file && fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
+        } catch (err) {
+            console.error("Warning: Failed to delete temp file:", err.message);
+        }
+    };
+
     try {
         const workbook = xlsx.readFile(req.file.path);
-
-        let summarySheet = workbook.Sheets['K2MAC'];
         
+        // 1. Sheet Detection
+        let summarySheet = workbook.Sheets['K2MAC'];
         if (!summarySheet) {
-            console.log("Sheet 'K2MAC' not found. Switching to first available sheet.");
             const firstSheetName = workbook.SheetNames[0];
             summarySheet = workbook.Sheets[firstSheetName];
         }
 
-        if (!summarySheet) return res.status(400).json({ error: "No valid sheet found in file." });
-        
+        if (!summarySheet) {
+            cleanup(); // Delete before returning error
+            return res.status(400).json({ error: "No valid sheet found in file." });
+        }
+
         const data = xlsx.utils.sheet_to_json(summarySheet, { header: 1 });
         const fileName = req.file.originalname.toUpperCase();
         console.log(`Processing: ${fileName}`);
 
-        // A. DATE DETECTION
+        // 2. Logic (Date & Score Extraction)
         let detectedMonth = null;
         let detectedYear = 2025;
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
@@ -39,30 +52,21 @@ exports.uploadKPIReport = (req, res) => {
                 }
             });
         }
-        
-        // B. SCORE EXTRACTION
+
+        // Score Parsing
         let targetRowIndex = -1;
         data.forEach((row, index) => {
-            if (row[0] && months.includes(row[0].toString().toUpperCase())) {
-                targetRowIndex = index;
-            }
+            if (row[0] && months.includes(row[0].toString().toUpperCase())) targetRowIndex = index;
         });
-
-        if (targetRowIndex !== -1) {
-            if (isNaN(parseFloat(data[targetRowIndex][3]))) targetRowIndex++;
-        } else {
-            targetRowIndex = 4; 
-        }
+        if (targetRowIndex !== -1 && isNaN(parseFloat(data[targetRowIndex][3]))) targetRowIndex++;
+        if (targetRowIndex === -1) targetRowIndex = 4;
 
         const scoreRow = data[targetRowIndex] || [];
-
         const parseScore = (val) => {
             if (!val) return 0.00;
             let num = parseFloat(val);
             if (isNaN(num)) return 0.00;
-
             let final = num <= 1 ? num * 100 : num;
-
             return parseFloat((Math.round(final * 100) / 100).toFixed(2));
         };
 
@@ -75,7 +79,7 @@ exports.uploadKPIReport = (req, res) => {
             pod:      parseScore(scoreRow[18])
         };
 
-        // C. FAILURE REASONS
+        // Failure Reasons Extraction
         let reasonStartRowIndex = -1;
         data.forEach((row, index) => {
             const rowStr = row.join(" ").toUpperCase();
@@ -114,10 +118,10 @@ exports.uploadKPIReport = (req, res) => {
             }
         }
 
-        // D. SAVE TO DB
+        // 3. Database Operation (ASYNC START)
         const reportDate = new Date(`${detectedMonth || 'NOVEMBER'} 1, ${detectedYear}`);
         const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
-        
+
         db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], () => {
             const insertSql = `
                 INSERT INTO KPI_Monthly_Reports 
@@ -130,15 +134,21 @@ exports.uploadKPIReport = (req, res) => {
             ];
 
             db.query(insertSql, values, (err, result) => {
-                if (err) return res.status(500).json({ error: err.message });
+                cleanup();
+                
+                if (err) {
+                    console.error("DB Error:", err);
+                    return res.status(500).json({ error: "Database error: " + err.message });
+                }
+                
                 console.log(`Saved ${detectedMonth} ${detectedYear}`);
                 res.json({ message: "Success", scores: metrics });
             });
         });
 
-        fs.unlinkSync(req.file.path);
-
     } catch (e) {
+        cleanup(); 
+        console.error("Upload Error:", e);
         res.status(500).json({ error: e.message });
     }
 };

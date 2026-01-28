@@ -1,64 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './UserManagement.css';
+import FeedbackModal from '../FeedbackModal';
+import { Icons } from '../Icons';
 
 function UserManagement({ activeTab = "users" }) { 
   
-  // --- SHARED PAGINATION STATE ---
+  const token = localStorage.getItem('token'); 
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
-  // --- USER STATE ---
+  // Data & Filters
   const [users, setUsers] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [roleFilter, setRoleFilter] = useState('All');
+  const [truckFilter, setTruckFilter] = useState('All');
+  const [showArchived, setShowArchived] = useState(false);
+
+  // Modal Visibility
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showTruckModal, setShowTruckModal] = useState(false);
+  const [showEditTruckModal, setShowEditTruckModal] = useState(false);
+  
+  // Feedback
+  const [feedbackModal, setFeedbackModal] = useState(null); 
+
+  // Forms
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentVehicle, setCurrentVehicle] = useState(null);
   const [userForm, setUserForm] = useState({
     firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: ''
   });
-  const [errors, setErrors] = useState({ password: '', confirm: '', phone: '', email: '' });
-  
-  // --- TRUCK STATE ---
-  const [vehicles, setVehicles] = useState([]);
-  const [truckFilter, setTruckFilter] = useState('All');
-  const [showTruckModal, setShowTruckModal] = useState(false);
-  const [showEditTruckModal, setShowEditTruckModal] = useState(false);
-  const [currentVehicle, setCurrentVehicle] = useState(null);
-  const [truckForm, setTruckForm] = useState({ plateNo: '', type: '6-Wheeler', status: 'Working' });
-
-  // --- DELETE / CONFLICT MODAL STATE ---
-  const [deleteModal, setDeleteModal] = useState({ 
-      show: false, 
-      type: null, 
-      id: null, 
-      name: null,
-      action: 'delete' // 'delete' or 'status_change'
+  const [truckForm, setTruckForm] = useState({ 
+    plateNo: '', type: '6-Wheeler', status: 'Working' 
   });
 
-  const [conflictData, setConflictData] = useState([]);
-  const [showArchived, setShowArchived] = useState(false);
-
-  // --- SUCCESS MODAL STATE ---
-  const [successModal, setSuccessModal] = useState({
-      show: false,
-      message: ''
-  });
-
-  // --- RESTORE MODAL STATE ---
-  const [restoreModal, setRestoreModal] = useState({
-      show: false,
-      type: null, // 'user' or 'truck'
-      id: null,
-      name: null
-  });
-
-  const token = localStorage.getItem('token'); 
-
-  // Reset page when switching tabs
   useEffect(() => { setCurrentPage(1); }, [activeTab, roleFilter, truckFilter]);
 
-  // --- FETCH DATA ---
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
     else fetchVehicles();
@@ -82,103 +61,160 @@ function UserManagement({ activeTab = "users" }) {
     } catch (err) { console.error(err); }
   };
 
-  // --- RENDER HELPERS ---
-  const renderPagination = (totalItems) => {
-    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
-    return (
-        <div className="pagination-footer">
-            <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
-            {[...Array(totalPages)].map((_, i) => (
-                <button key={i} className={currentPage === i + 1 ? 'active' : ''} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
-            ))}
-            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next</button>
-        </div>
-    );
+  const handleUserInputChange = (e) => {
+    const { name, value } = e.target;
+    e.target.setCustomValidity(''); 
+    if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return;
+    setUserForm(prev => ({ ...prev, [name]: value }));
   };
 
-  const renderGhostRows = (currentCount, colSpan) => {
-      const ghostsNeeded = rowsPerPage - currentCount;
-      if (ghostsNeeded <= 0) return null;
-      return Array.from({ length: ghostsNeeded }).map((_, idx) => (
-          <tr key={`ghost-${idx}`} className="ghost-row"><td colSpan={colSpan}>&nbsp;</td></tr>
-      ));
+  const handleCreateSubmit = async (e) => {
+    e.preventDefault(); 
+
+    if (userForm.password !== userForm.confirmPassword) {
+        const confirmInput = e.target.elements.confirmPassword;
+        confirmInput.setCustomValidity("Passwords do not match");
+        confirmInput.reportValidity(); 
+        return;
+    }
+
+    try {
+        await axios.post('http://localhost:4000/api/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } });
+        setShowCreateModal(false);
+        fetchUsers();
+        
+        setFeedbackModal({
+            type: 'success',
+            title: 'User Created!',
+            message: `${userForm.firstName} ${userForm.lastName} has been added successfully.`,
+            onClose: () => setFeedbackModal(null)
+        });
+    } catch (err) { 
+        setFeedbackModal({
+            type: 'error',
+            title: 'Error',
+            message: err.response?.data?.error || "Failed to create user.",
+            onClose: () => setFeedbackModal(null)
+        });
+    }
   };
 
-  // --- DELETE / STATUS HANDLERS ---
-  const initiateDelete = (type, id, name) => {
-      setDeleteModal({ show: true, type, id, name, action: 'delete' });
-      setConflictData([]);
-  };
+  const handleUpdateSubmit = async (e) => {
+      e.preventDefault();
+      if (userForm.password && userForm.password !== userForm.confirmPassword) {
+        const confirmInput = e.target.elements.confirmPassword;
+        confirmInput.setCustomValidity("Passwords do not match");
+        confirmInput.reportValidity();
+        return;
+      }
 
-  const confirmDelete = async () => {
       try {
-          const endpoint = deleteModal.type === 'user' 
-              ? `http://localhost:4000/api/users/${deleteModal.id}`
-              : `http://localhost:4000/api/vehicles/${deleteModal.id}`;
+        await axios.put(`http://localhost:4000/api/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } });
+        setShowEditModal(false);
+        fetchUsers();
+        
+        setFeedbackModal({
+            type: 'success',
+            title: 'Updated!',
+            message: 'User details updated successfully.',
+            onClose: () => setFeedbackModal(null)
+        });
+    } catch (err) { alert("Failed update"); }
+  };
 
+  const handleTruckSubmit = async (e) => {
+      e.preventDefault();
+      try {
+          await axios.post('http://localhost:4000/api/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } });
+          setShowTruckModal(false);
+          fetchVehicles();
+          
+          setFeedbackModal({
+            type: 'success',
+            title: 'Vehicle Added!',
+            message: `Plate ${truckForm.plateNo} added successfully.`,
+            onClose: () => setFeedbackModal(null)
+        });
+      } catch (e) { alert("Error adding vehicle"); }
+  };
+
+  const handleUpdateTruck = async (e) => {
+      e.preventDefault();
+      try {
+          await axios.put(`http://localhost:4000/api/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } });
+          setShowEditTruckModal(false);
+          fetchVehicles();
+          
+          setFeedbackModal({
+            type: 'success',
+            title: 'Vehicle Updated!',
+            message: `Plate ${truckForm.plateNo} updated successfully.`,
+            onClose: () => setFeedbackModal(null)
+        });
+      } catch (e) { alert("Error updating vehicle"); }
+  };
+
+  // --- DELETE / RESTORE / STATUS ACTIONS  ---
+  const initiateDelete = (type, id, name) => {
+      setFeedbackModal({
+          type: 'warning',
+          title: `Delete ${type === 'user' ? 'User' : 'Vehicle'}?`,
+          message: `Are you sure you want to delete ${name}?`,
+          subMessage: "This action cannot be undone.",
+          confirmLabel: "Confirm Delete",
+          onConfirm: () => performDelete(type, id)
+      });
+  };
+
+  const performDelete = async (type, id) => {
+      try {
+          const endpoint = type === 'user' ? `http://localhost:4000/api/users/${id}` : `http://localhost:4000/api/vehicles/${id}`;
           await axios.delete(endpoint, { headers: { Authorization: `Bearer ${token}` } });
-          
-          // 1. Close Delete Modal
-          setDeleteModal({ show: false, type: null, id: null, name: null, action: 'delete' });
-          
-          // 2. Open Success Modal
-          setSuccessModal({
-              show: true,
-              message: `${deleteModal.type === 'user' ? 'User' : 'Vehicle'} has been deleted successfully.`
-          });
-          
-          // 3. Refresh Data
-          if (deleteModal.type === 'user') fetchUsers();
-          else fetchVehicles();
+          if (type === 'user') fetchUsers(); else fetchVehicles();
 
+          setFeedbackModal({ type: 'success', title: 'Deleted!', message: 'Record removed successfully.', onClose: () => setFeedbackModal(null) });
       } catch (err) {
-          if (err.response && err.response.status === 409) {
-              setConflictData(err.response.data.activeShipments);
+          if (err.response?.status === 409) {
+             const conflictList = err.response.data.activeShipments || [];
+             setFeedbackModal({
+                 type: 'error',
+                 title: 'Cannot Delete',
+                 message: `This ${type} is assigned to active shipments (ID: ${conflictList.join(', ')}).`,
+                 subMessage: "Please cancel or complete the shipments first.",
+                 onClose: () => setFeedbackModal(null)
+             });
           } else {
-              alert("An error occurred.");
+             setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed to delete record.', onClose: () => setFeedbackModal(null) });
           }
       }
   };
 
-  // RESTORE HANDLER
-  const handleRestore = async (type, id) => {
-      if(!window.confirm(`Restore this ${type}? They will become active immediately.`)) return;
-      try {
-          const endpoint = type === 'user' 
-             ? `http://localhost:4000/api/users/${id}/restore`
-             : `http://localhost:4000/api/vehicles/${id}/restore`;
-          
-          await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
-          alert(`${type === 'user' ? 'User' : 'Vehicle'} restored!`);
-          
-          if (type === 'user') fetchUsers();
-          else fetchVehicles();
-      } catch (e) { alert("Failed to restore."); }
-  };
-
-  // OPEN RESTORE MODAL
   const initiateRestore = (type, id, name) => {
-      setRestoreModal({ show: true, type, id, name });
-  };
+      setFeedbackModal({
+          type: 'restore', // New Green Type
+          title: 'Confirm Restore',
+          message: `Are you sure you want to restore ${name}?`,
+          subMessage: "They will become active immediately.",
+          confirmLabel: "Restore",
+          onConfirm: async () => {
+              try {
+                  const endpoint = type === 'user' 
+                    ? `http://localhost:4000/api/users/${id}/restore` 
+                    : `http://localhost:4000/api/vehicles/${id}/restore`;
+                  
+                  await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
+                  
+                  if (type === 'user') fetchUsers(); else fetchVehicles();
 
-  const confirmRestore = async () => {
-      try {
-          const endpoint = restoreModal.type === 'user' 
-             ? `http://localhost:4000/api/users/${restoreModal.id}/restore`
-             : `http://localhost:4000/api/vehicles/${restoreModal.id}/restore`;
-          
-          await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
-          
-          // Close Modal & Show Success
-          setRestoreModal({ show: false, type: null, id: null, name: null });
-          setSuccessModal({ show: true, message: `${restoreModal.type === 'user' ? 'User' : 'Vehicle'} restored successfully!` });
-          
-          // Refresh Data
-          if (restoreModal.type === 'user') fetchUsers();
-          else fetchVehicles();
-      } catch (e) { 
-          alert("Failed to restore."); 
-      }
+                  setFeedbackModal({ 
+                      type: 'success', 
+                      title: 'Restored!', 
+                      message: 'Record is active again.', 
+                      onClose: () => setFeedbackModal(null) 
+                  });
+              } catch (err) { alert("Failed to restore"); }
+          }
+      });
   };
   
   const toggleTruckStatus = async (vehicle) => {
@@ -190,79 +226,35 @@ function UserManagement({ activeTab = "users" }) {
           fetchVehicles();
       } catch (err) { 
           if (err.response && err.response.status === 409) {
-              setConflictData(err.response.data.activeShipments);
-              setDeleteModal({
-                  show: true, type: 'truck', id: vehicle.vehicleID, name: vehicle.plateNo,
-                  action: 'status_change'
+              const conflicts = err.response.data.activeShipments || [];
+              setFeedbackModal({
+                  type: 'error',
+                  title: 'Cannot Change Status',
+                  message: `Vehicle is assigned to active shipments.`,
+                  subMessage: "Complete shipments before setting to Maintenance.",
+                  onClose: () => setFeedbackModal(null)
               });
           }
       }
   };
 
-  // --- USER FORM HANDLERS ---
-  const handleUserInputChange = (e) => {
-    const { name, value } = e.target;
-    if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return;
-    setUserForm(prev => ({ ...prev, [name]: value }));
+  const renderPagination = (totalItems) => {
+    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+    return (
+        <div className="pagination-footer">
+            <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
+            {[...Array(totalPages)].map((_, i) => ( <button key={i} className={currentPage === i + 1 ? 'active' : ''} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button> ))}
+            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next</button>
+        </div>
+    );
   };
 
-  const handleCreateSubmit = async () => {
-    try {
-        await axios.post('http://localhost:4000/api/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } });
-        setShowCreateModal(false);
-        setSuccessModal({ show: true, message: "User created successfully!" }); // Added Success Modal here too!
-        fetchUsers();
-    } catch (err) { alert("Failed to create user."); }
+  const renderGhostRows = (currentCount, colSpan) => {
+      const ghostsNeeded = rowsPerPage - currentCount;
+      if (ghostsNeeded <= 0) return null;
+      return Array.from({ length: ghostsNeeded }).map((_, idx) => ( <tr key={`ghost-${idx}`} className="ghost-row"><td colSpan={colSpan}>&nbsp;</td></tr> ));
   };
 
-  const handleUpdateSubmit = async () => {
-      try {
-        await axios.put(`http://localhost:4000/api/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } });
-        setShowEditModal(false);
-        setSuccessModal({ show: true, message: "User details updated successfully!" });
-        fetchUsers();
-    } catch (err) { alert("Failed update"); }
-  };
-  
-  const handleEditClick = (user) => {
-    setCurrentUser(user);
-    const formattedDob = user.dob ? new Date(user.dob).toISOString().split('T')[0] : '';
-    setUserForm({
-        firstName: user.firstName, lastName: user.lastName, email: user.email || '', phone: user.phone || '',
-        dob: formattedDob, role: user.role, password: '', confirmPassword: ''
-    });
-    setShowEditModal(true);
-  };
-
-  // --- TRUCK FORM HANDLERS ---
-  const handleTruckSubmit = async () => {
-      if(!truckForm.plateNo) return alert("Plate Number is required");
-      try {
-          await axios.post('http://localhost:4000/api/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } });
-          setShowTruckModal(false);
-          setSuccessModal({ show: true, message: "New vehicle added successfully!" });
-          fetchVehicles();
-      } catch (e) { alert("Error adding vehicle"); }
-  };
-
-  const handleUpdateTruck = async () => {
-      try {
-          await axios.put(`http://localhost:4000/api/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } });
-          setShowEditTruckModal(false);
-          setSuccessModal({ show: true, message: "Vehicle updated successfully!" });
-          fetchVehicles();
-      } catch (e) { alert("Error updating vehicle"); }
-  };
-
-  const handleEditTruckClick = (vehicle) => {
-      setCurrentVehicle(vehicle);
-      setTruckForm({ plateNo: vehicle.plateNo, type: vehicle.type, status: vehicle.status });
-      setShowEditTruckModal(true);
-  };
-
-  // =========================================
-  // RENDER
-  // =========================================
   const renderTruckView = () => {
       const filteredVehicles = vehicles.filter(v => truckFilter === 'All' || v.status === truckFilter);
       const paginatedTrucks = filteredVehicles.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
@@ -272,32 +264,17 @@ function UserManagement({ activeTab = "users" }) {
               <div className="filter-group-inline">
                   <label>Filter Status:</label>
                   <select value={truckFilter} onChange={e => setTruckFilter(e.target.value)} className="role-filter-dropdown">
-                    <option value="All">All Statuses</option>
-                    <option value="Working">Working</option>
-                    <option value="Maintenance">Maintenance</option>
+                    <option value="All">All Statuses</option><option value="Working">Working</option><option value="Maintenance">Maintenance</option>
                   </select>
-                  <button 
-                  onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
-                  style={{
-                      padding: '8px 15px',
-                      borderRadius: '20px',
-                      border: '1px solid #CCC',
-                      background: showArchived ? '#666' : 'white',
-                      color: showArchived ? 'white' : '#666',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '600'
-                  }}
-                >
-                  {showArchived ? '← Back to Active' : 'View Archived'}
-                </button>
+                  <button onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
+                    style={{ padding: '8px 15px', borderRadius: '20px', border: '1px solid #CCC', background: showArchived ? '#666' : 'white', color: showArchived ? 'white' : '#666', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                    {showArchived ? '← Back to Active' : 'View Archived'}
+                  </button>
                   <div className="count-badge">{filteredVehicles.length} Vehicles</div>                 
               </div>
               {!showArchived && (
-                      <button className="create-user-btn" onClick={() => { setTruckForm({ plateNo: '', type: '6-Wheeler', status: 'Working' }); setShowTruckModal(true); }}>
-                          + Add Vehicle
-                      </button>
-                  )}
+                 <button className="create-user-btn" onClick={() => { setTruckForm({ plateNo: '', type: '6-Wheeler', status: 'Working' }); setShowTruckModal(true); }}> + Add Vehicle </button>
+              )}
           </div>
           <div className="table-wrapper">
             <table className="user-table">
@@ -311,17 +288,11 @@ function UserManagement({ activeTab = "users" }) {
                     <td>{new Date(v.dateCreated).toLocaleDateString()}</td>
                     <td className="action-cells">
                       {showArchived ? (
-                       /* --- RESTORE BUTTON (Green Undo Icon) --- */
-                       <button className="icon-btn" onClick={() => initiateRestore(activeTab === 'users' ? 'user' : 'truck', v.vehicleID)} title="Restore">
-                           <svg viewBox="0 0 24 24" width="18" height="18" fill="#27AE60">
-                               <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
-                           </svg>
-                       </button>
+                       <button className="icon-btn" onClick={() => initiateRestore('truck', v.vehicleID)} title="Restore"><Icons.Restore/></button>
                    ) : (
-                       /* --- EDIT & DELETE BUTTONS (Normal) --- */
                        <>
-                        <button className="icon-btn" onClick={() => handleEditTruckClick(v)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
-                        <button className="icon-btn" onClick={() => initiateDelete('truck', v.vehicleID, v.plateNo)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+                        <button className="icon-btn" onClick={() => { setCurrentVehicle(v); setTruckForm(v); setShowEditTruckModal(true); }}><Icons.Edit/></button>
+                        <button className="icon-btn" onClick={() => initiateDelete('truck', v.vehicleID, v.plateNo)}><Icons.Trash/></button>
                         </>
                       )}
                     </td>
@@ -345,36 +316,21 @@ function UserManagement({ activeTab = "users" }) {
             <div className="filter-group-inline">
                 <label>Filter by Role:</label>
                 <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="role-filter-dropdown">
-                    <option value="All">All Roles</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Operations">Operations</option>
-                    <option value="Driver">Driver</option>
-                    <option value="Helper">Helper</option>
+                    <option value="All">All Roles</option><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option>
                 </select>
-                <button 
-                  onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
-                  style={{
-                      padding: '8px 15px',
-                      borderRadius: '20px',
-                      border: '1px solid #CCC',
-                      background: showArchived ? '#666' : 'white',
-                      color: showArchived ? 'white' : '#666',
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      fontWeight: '600'
-                  }}
-                >
-                  {showArchived ? '← Back to Active' : 'View Archived'}
+                <button onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
+                    style={{ padding: '8px 15px', borderRadius: '20px', border: '1px solid #CCC', background: showArchived ? '#666' : 'white', color: showArchived ? 'white' : '#666', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                    {showArchived ? '← Back to Active' : 'View Archived'}
                 </button>
-                <div className="count-badge">{filteredUsers.length} User{filteredUsers.length !== 1 ? 's' : ''}</div>
+                <div className="count-badge">{filteredUsers.length} Users</div>
             </div>
             {!showArchived && (
-                      <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' }); setErrors({ password: '', confirm: '', phone: '', email: '' }); setShowCreateModal(true); }}> + Create User </button>
-                  )}          
+                 <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' }); setShowCreateModal(true); }}> + Create User </button>
+            )}          
         </div>
         <div className="table-wrapper">
           <table className="user-table">
-            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone Number</th><th>Email</th><th>Role</th><th>Date Created</th><th style={{textAlign: 'center'}}>Actions</th></tr></thead>
+            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Date</th><th style={{textAlign: 'center'}}>Actions</th></tr></thead>
             <tbody>
               {paginatedUsers.length > 0 ? (
                 <>
@@ -383,17 +339,16 @@ function UserManagement({ activeTab = "users" }) {
                       <td>{u.employeeID || 'N/A'}</td><td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                       <td className="action-cells">
                       {showArchived ? (
-                       /* --- RESTORE BUTTON (Green Undo Icon) --- */
-                       <button className="icon-btn" onClick={() => initiateRestore(activeTab === 'users' ? 'user' : 'truck', u.userID)} title="Restore">
-                           <svg viewBox="0 0 24 24" width="18" height="18" fill="#27AE60">
-                               <path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/>
-                           </svg>
-                       </button>
+                       <button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>
                    ) : (
-                       /* --- EDIT & DELETE BUTTONS (Normal) --- */
                        <>
-                         <button className="icon-btn" onClick={() => handleEditClick(u)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
-                         <button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+                         <button className="icon-btn" onClick={() => { 
+                             setCurrentUser(u); 
+                             const dob = u.dob ? new Date(u.dob).toISOString().split('T')[0] : '';
+                             setUserForm({ ...u, dob, password: '', confirmPassword: '' });
+                             setShowEditModal(true); 
+                         }}><Icons.Edit/></button>
+                         <button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button>
                         </>
                       )}
                       </td>
@@ -414,120 +369,149 @@ function UserManagement({ activeTab = "users" }) {
     <>
       {activeTab === 'trucks' ? renderTruckView() : renderUserView()}
 
-      {/* --- MODALS SECTION --- */}
-      
-      {/* Create User Modal */}
+      {feedbackModal && (
+          <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />
+      )}
+
       {showCreateModal && (
         <div className="modal-backdrop">
-          <div className="modal-card">
+          <form className="modal-card" onSubmit={handleCreateSubmit}>
             <h3>Create New User</h3>
-            <div className="row-inputs"><div className="col"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} /></div><div className="col"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} /></div></div>
-            <label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} />
-            <label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} />
-            <div className="row-inputs"><div className="col"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} /></div><div className="col"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div>
-            <label>Password</label><input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} />
-            <label>Confirm</label><input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} />
-            <div className="modal-footer"><button className="btn-cancel" onClick={() => setShowCreateModal(false)}>Cancel</button><button className="btn-save" onClick={handleCreateSubmit}>Save</button></div>
-          </div>
+            
+            <div className="form-grid">
+                {/* Row 1 */}
+                <div className="form-group">
+                    <label>First Name</label>
+                    <input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Last Name</label>
+                    <input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required />
+                </div>
+
+                {/* Row 2 */}
+                <div className="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Phone</label>
+                    <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required placeholder="09123456789" />
+                </div>
+
+                {/* Row 3 */}
+                <div className="form-group">
+                    <label>DOB</label>
+                    <input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Role</label>
+                    <select name="role" value={userForm.role} onChange={handleUserInputChange}>
+                        <option value="Admin">Admin</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Driver">Driver</option>
+                        <option value="Helper">Helper</option>
+                    </select>
+                </div>
+
+                {/* Row 4: Password */}
+                <div className="form-group">
+                    <label>Password</label>
+                    <input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Confirm</label>
+                    <input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} required />
+                </div>
+            </div>
+
+            <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                <button type="submit" className="btn-save">Save</button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Edit User Modal */}
+      {/* EDIT USER MODAL */}
       {showEditModal && (
         <div className="modal-backdrop">
-          <div className="modal-card">
+          <form className="modal-card" onSubmit={handleUpdateSubmit}>
             <h3>Edit User</h3>
-            <div className="row-inputs"><div className="col"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} /></div><div className="col"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} /></div></div>
-            <label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} />
-            <label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} />
-            <div className="row-inputs"><div className="col"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} /></div><div className="col"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div>
-            <div className="modal-footer"><button className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button className="btn-save" onClick={handleUpdateSubmit}>Update</button></div>
-          </div>
+            
+            <div className="form-grid">
+                {/* Row 1 */}
+                <div className="form-group">
+                    <label>First Name</label>
+                    <input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Last Name</label>
+                    <input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required />
+                </div>
+
+                {/* Row 2: Fixed Email/Phone Alignment */}
+                <div className="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Phone</label>
+                    <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required />
+                </div>
+
+                {/* Row 3 */}
+                <div className="form-group">
+                    <label>DOB</label>
+                    <input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required />
+                </div>
+                <div className="form-group">
+                    <label>Role</label>
+                    <select name="role" value={userForm.role} onChange={handleUserInputChange}>
+                        <option value="Admin">Admin</option>
+                        <option value="Operations">Operations</option>
+                        <option value="Driver">Driver</option>
+                        <option value="Helper">Helper</option>
+                    </select>
+                </div>
+            </div>
+
+            <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button>
+                <button type="submit" className="btn-save">Update</button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Truck Modals */}
+      {/* ADD TRUCK MODAL (WRAPPED IN FORM) */}
       {showTruckModal && (
         <div className="modal-backdrop">
-          <div className="modal-card">
+          <form className="modal-card" onSubmit={handleTruckSubmit}>
             <h3>Add Vehicle</h3>
-            <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} />
-            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheels">6-Wheels</option><option value="Wing-Van">Wing-Van</option><option value="L300">L300</option><option value="Travis">Travis</option><option value="Forward">Forward</option></select>
-            <div className="modal-footer"><button className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button className="btn-save" onClick={handleTruckSubmit}>Save</button></div>
-          </div>
+            <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required />
+            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="Wing-Van">Wing-Van</option><option value="L300">L300</option><option value="Travis">Travis</option><option value="Forward">Forward</option></select>
+            <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button>
+                <button type="submit" className="btn-save">Save</button>
+            </div>
+          </form>
         </div>
       )}
       
+      {/* EDIT TRUCK MODAL (WRAPPED IN FORM) */}
       {showEditTruckModal && (
         <div className="modal-backdrop">
-          <div className="modal-card">
+          <form className="modal-card" onSubmit={handleUpdateTruck}>
             <h3>Edit Vehicle</h3>
-            <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} />
+            <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required />
             <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="L300">L300</option></select>
             <label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select>
-            <div className="modal-footer"><button className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button className="btn-save" onClick={handleUpdateTruck}>Update</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* DELETE / STATUS BLOCK MODAL */}
-      {deleteModal.show && (
-        <div className="modal-backdrop">
-          <div className="modal-card">
-            <h3>{deleteModal.action === 'status_change' ? 'Cannot Update Status' : `Delete ${deleteModal.type === 'user' ? 'User' : 'Vehicle'}`}</h3>
-            {conflictData.length > 0 ? (
-                <div className="delete-blocked-content">
-                    <div className="assignment-warning">
-                        {deleteModal.action === 'status_change' 
-                           ? <>Cannot set <strong>{deleteModal.name}</strong> to Maintenance. It is currently assigned to these active shipments:</>
-                           : <>Cannot delete <strong>{deleteModal.name}</strong>. They are currently assigned to the following active shipments:</>
-                        }
-                    </div>
-                    <div className="shipment-conflict-list">{conflictData.map(id => (<span key={id} className="conflict-tag">ID: {id}</span>))}</div>
-                    <p className="instruction-text">Please complete or cancel these shipments first.</p>
-                    <div className="modal-footer"><button className="btn-cancel" onClick={() => setDeleteModal({...deleteModal, show: false})}>Close</button></div>
-                </div>
-            ) : (
-                <>
-                    <p>Are you sure you want to delete <strong>{deleteModal.name}</strong>?</p>
-                    <p style={{fontSize: '13px', color: '#666'}}>This action cannot be undone.</p>
-                    <div className="modal-footer"><button className="btn-cancel" onClick={() => setDeleteModal({...deleteModal, show: false})}>Cancel</button><button className="btn-delete-confirm" onClick={confirmDelete}>Confirm Delete</button></div>
-                </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* SUCCESS MODAL */}
-      {successModal.show && (
-        <div className="modal-backdrop">
-          <div className="modal-card success">
-            <div className="success-icon-container">
-              <svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"></path></svg>
-            </div>
-            <div className="success-title">Success!</div>
-            <div className="success-message">{successModal.message}</div>
-            <button className="btn-success-close" onClick={() => setSuccessModal({ show: false, message: '' })}>Continue</button>
-          </div>
-        </div>
-      )}
-
-      {/* RESTORE CONFIRMATION MODAL */}
-      {restoreModal.show && (
-        <div className="modal-backdrop">
-          <div className="modal-card">
-            <h3>Confirm Restore</h3>
-            <p>
-                Are you sure you want to restore <strong>{restoreModal.name}</strong>?
-            </p>
-            <p style={{fontSize: '13px', color: '#666', marginTop: '-10px', marginBottom: '20px'}}>
-                This will move the record back to the Active list and re-enable their access immediately.
-            </p>
             <div className="modal-footer">
-                <button className="btn-cancel" onClick={() => setRestoreModal({...restoreModal, show: false})}>Cancel</button>
-                <button className="btn-restore-confirm" onClick={confirmRestore}>Restore</button>
+                <button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button>
+                <button type="submit" className="btn-save">Update</button>
             </div>
-          </div>
+          </form>
         </div>
       )}
     </>
