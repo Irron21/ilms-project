@@ -5,7 +5,7 @@ const db = require('./config/db');
 const shipmentRoutes = require('./routes/shipmentRoutes');
 const authController = require('./controllers/authController');
 const verifyToken = require('./middleware/authMiddleware'); 
-
+const kpiRoutes = require('./routes/kpiRoutes');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -15,9 +15,12 @@ app.use(cors({
     credentials: true
 }));
 
-app.use(express.json());
+app.use(express.json()); 
+app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
+    console.log(`Request received: ${req.method} ${req.url}`);
+    if (req.method === 'POST') console.log("Data sent:", req.body);
     next();
 });
 
@@ -34,6 +37,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 // It runs BEFORE shipmentRoutes. If verifyToken fails, shipmentRoutes never runs.
 app.use('/api/shipments', verifyToken, shipmentRoutes);
 app.use('/api/vehicles', require('./routes/vehicleRoutes'));
+app.use('/api/kpi', kpiRoutes);
 
 // Start Server
 app.listen(PORT, () => {
