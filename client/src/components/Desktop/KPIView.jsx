@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import { 
     BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell 
 } from 'recharts';
@@ -45,7 +45,7 @@ function KPIView() {
 
     const fetchMonths = async () => {
         try {
-            const res = await axios.get('http://localhost:4000/api/kpi/months');
+            const res = await api.get('/kpi/months');
             setAvailableMonths(res.data);
         } catch (err) { console.error(err); }
     };
@@ -54,9 +54,9 @@ function KPIView() {
         setLoading(true);
         try {
             const url = monthFilter 
-                ? `http://localhost:4000/api/kpi/dashboard?month=${monthFilter}`
-                : 'http://localhost:4000/api/kpi/dashboard';
-            const res = await axios.get(url);
+                ? `/kpi/dashboard?month=${monthFilter}`
+                : '/kpi/dashboard';
+            const res = await api.get(url);
             if (res.data) {
                 setKpiScores(res.data.latestScores);
                 setTrendData(res.data.trendData);
@@ -83,7 +83,7 @@ function KPIView() {
             confirmLabel: 'Delete',
             onConfirm: async () => {
                 try {
-                    await axios.post('http://localhost:4000/api/kpi/delete', { id });
+                    await api.post('/kpi/delete', { id });
                     fetchMonths();
                     fetchDashboardData();
 
@@ -125,7 +125,7 @@ function KPIView() {
         
         try {
             setLoading(true);
-            await axios.post('http://localhost:4000/api/kpi/upload', formData);
+            await api.post('/kpi/upload', formData);
             setLoading(false);
 
             setFeedbackModal({

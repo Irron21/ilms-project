@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../utils/api';
 import logoPng from '../assets/k2mac_logo2.png'; 
 import './Login.css';
 
@@ -13,21 +13,35 @@ function Login({ onLoginSuccess }) {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:4000/api/login', {
+      const response = await api.post('/login', {
         employeeID,
         password
       });
+
+      // ✅ FIX STARTS HERE: Save the token before doing anything else
+      // We check for 'activeToken' (from your DB) or 'token' (common standard)
+      const token = response.data.activeToken || response.data.token;
+      
+      if (token) {
+        localStorage.setItem('token', token);
+        console.log("✅ Token saved to Local Storage:", token.substring(0, 10) + "...");
+      } else {
+        console.warn("⚠️ Login successful but no token found in response:", response.data);
+      }
+      
+      // Save user info too, just in case
+      if (response.data.user) {
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+      }
+      // ✅ FIX ENDS HERE
 
       onLoginSuccess(response.data);
     } catch (err) {
       console.error(err);
       
-      // ✨ UPDATED ERROR HANDLING
-      // If the backend sends a specific error message (like "Unauthorized..."), use it.
       if (err.response && err.response.data && err.response.data.error) {
         setError(err.response.data.error);
       } else {
-        // Fallback for network errors or server crashes
         setError('Invalid Employee ID or Password');
       }
     }

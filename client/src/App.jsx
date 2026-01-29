@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from './utils/api';
 import logoPng from './assets/k2mac_logo.png'; 
 import { Icons } from './components/Icons'; 
 import Login from './components/Login';
@@ -54,7 +54,7 @@ function App() {
         params: { userID: user.userID }
       };
 
-      const response = await axios.get('http://localhost:4000/api/shipments', config);
+      const response = await api.get('/shipments', config);
       
       const newData = response.data;
       setShipments(newData);
@@ -101,13 +101,13 @@ function App() {
     };
 
     try {
-      await axios.post(`http://localhost:4000/api/shipments/${modal.shipmentID}/update`, {
+      await api.post(`/shipments/${modal.shipmentID}/update`, {
         status: modal.statusName,
         userID: user.userID 
       }, config);
 
       if (modal.statusName === 'Departure') {
-        await axios.post(`http://localhost:4000/api/shipments/${modal.shipmentID}/update`, {
+        await api.post(`/shipments/${modal.shipmentID}/update`, {
           status: 'Completed',
           userID: user.userID 
         }, config);
@@ -174,6 +174,8 @@ function App() {
           onStepClick={handleStepClick}
           onBack={handleBackToDashboard} 
           token={token}
+          // ✨ ADD THIS LINE:
+          user={user}
         />
       )}
 
