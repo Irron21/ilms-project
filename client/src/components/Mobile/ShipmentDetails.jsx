@@ -3,6 +3,7 @@ import api from '../../utils/api';
 import { Icons } from '../Icons';
 import './ShipmentDetails.css';
 import { queueManager } from '../../utils/queueManager';
+import FeedbackModal from '../FeedbackModal';
 
 const STEPS = [
   { label: 'Arrival Time', dbStatus: 'Arrival', icon: <Icons.Truck /> },
@@ -13,11 +14,10 @@ const STEPS = [
   { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Flag /> }
 ];
 
-function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user' prop
+function ShipmentDetails({ shipment, onBack, token, user }) { 
   const [showOverlay, setShowOverlay] = useState(true);
   const [logs, setLogs] = useState([]);
-  
-  // ✨ OPTIMISTIC STATE: We use this instead of waiting for the database
+  const [confirmStep, setConfirmStep] = useState(null);
   const [localStatus, setLocalStatus] = useState(shipment.currentStatus);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
@@ -57,25 +57,19 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
       if (shipment.shipmentID) fetchLogs();
   }, [shipment.shipmentID, token]);
 
-  // OFFLINE HANDLER
-  const handleStepClick = async (dbStatus) => {
-      // 1. Determine if this is the final step
+  const executeStepUpdate = (dbStatus) => {
       const isFinishing = dbStatus === 'Departure';
       const finalStatus = isFinishing ? 'Completed' : dbStatus;
 
-      // 2. Optimistic Update
       setLocalStatus(finalStatus);
 
-      // 3. Create Fake Log (Immediate Feedback)
       const now = new Date().toISOString(); 
       setLogs(prevLogs => [
           ...prevLogs, 
-          { phaseName: dbStatus, timestamp: now }, // Log for the specific step (e.g., Departure)
-          ...(isFinishing ? [{ phaseName: 'Completed', timestamp: now }] : []) // Optional: Log for Completed too
+          { phaseName: dbStatus, timestamp: now },
+          ...(isFinishing ? [{ phaseName: 'Completed', timestamp: now }] : [])
       ]);
 
-      // 4. Add to Queue
-      // First: The actual step (e.g., Arrival, Departure)
       queueManager.add({
           type: 'UPDATE_STATUS',
           shipmentID: shipment.shipmentID,
@@ -83,7 +77,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
           userID: user?.userID || 1
       });
 
-      // Second: If Departure, ALSO send 'Completed'
       if (isFinishing) {
           queueManager.add({
               type: 'UPDATE_STATUS',
@@ -93,8 +86,12 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
           });
       }
 
-      // 5. Sync
       queueManager.process();
+      setConfirmStep(null); 
+  };
+
+  const handleStepClick = (step) => {
+      setConfirmStep(step);
   };
 
   const getStepTimestamp = (dbStatus) => {
@@ -121,7 +118,13 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
 
   return (
     <div className="details-container">
-      {/* ✨ OFFLINE INDICATOR */}
+      <div className="notification-spacer">
+        {isOffline && (
+          <div className="offline-banner">
+             You are Offline. Changes will save automatically when online.
+          </div>
+        )}
+      </div>
       {isOffline && (
         <div style={{background: '#333', color: 'white', textAlign: 'center', padding: '5px', fontSize: '12px'}}>
            You are Offline. Changes will save automatically when online.
@@ -135,9 +138,31 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
         <h2 className="shipment-title-inline">DELIVERY #{shipment.shipmentID}</h2>
       </div>
 
-      <div className="info-box">
-        <div className="info-row"><strong>Location:</strong> {shipment.destLocation}</div>
-        <div className="info-row"><strong>Client:</strong> {shipment.clientName}</div>
+      <div className="info-card">
+        
+        {/* Row 1: Destination Name */}
+        <div className="info-item">
+          <div className="info-icon-box">
+              <Icons.Building />
+          </div>
+          <div className="info-content">
+             <span className="info-label">Destination</span>
+             {/* Changed from clientName to destName */}
+             <span className="info-value">{shipment.destName || 'N/A'}</span>
+          </div>
+        </div>
+
+        {/* Row 2: Address / Location */}
+        <div className="info-item">
+          <div className="info-icon-box">
+             <Icons.Pin />
+          </div>
+          <div className="info-content">
+             <span className="info-label">Address</span>
+             <span className="info-value">{shipment.destLocation}</span>
+          </div>
+        </div>
+
       </div>
 
       <div className="steps-wrapper">
@@ -153,7 +178,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
 
         <div className={`steps-container ${isCompleted && showOverlay ? 'blurred-background' : ''}`}>
           {STEPS.map((step, index) => {
-            const state = getStepState(localStatus, index); // Use localStatus here!
+            const state = getStepState(localStatus, index);
             const timestamp = getStepTimestamp(step.dbStatus);
 
             return (
@@ -161,8 +186,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
                 key={index}
                 className={`step-button step-${state}`}
                 disabled={state !== 'active' || isCompleted} 
-                // ✨ USE NEW HANDLER
-                onClick={() => handleStepClick(step.dbStatus)}
+                onClick={() => handleStepClick(step)} 
               >
                 <div className="step-content">
                   <span className="step-icon">{step.icon}</span>
@@ -184,6 +208,18 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
           })}
         </div>
       </div>
+      
+      {confirmStep && (
+        <FeedbackModal 
+          type="warning"
+          title="Confirm Status Update"
+          message={`Are you sure you want to mark "${confirmStep.label}" as completed?`}
+          subMessage="This will update the shipment progress."
+          confirmLabel="Confirm"
+          onClose={() => setConfirmStep(null)}
+          onConfirm={() => executeStepUpdate(confirmStep.dbStatus)}
+        />
+      )}
     </div>
   );
 }
