@@ -14,7 +14,7 @@ function ShipmentView({ user, token, onLogout }) {
     // Filters
     const [timeframe, setTimeframe] = useState('All');
     const [dateFilter, setDateFilter] = useState(''); 
-    const [showArchived, setShowArchived] = useState(false); // ✅ New Toggle State
+    const [showArchived, setShowArchived] = useState(false); 
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -53,7 +53,7 @@ function ShipmentView({ user, token, onLogout }) {
             if (expandedIdRef.current) refreshLogs(expandedIdRef.current);
         }, 3000); 
         return () => clearInterval(interval);
-    }, [token, showArchived]); // ✅ Refetch when toggle changes
+    }, [token, showArchived]); 
 
     const fetchData = async (isFirstLoad = false) => {
         try {
@@ -64,7 +64,7 @@ function ShipmentView({ user, token, onLogout }) {
             if (user.role === 'Driver' || user.role === 'Helper') {
                 params = { userID: user.userID };
             } else {
-                params = { archived: showArchived }; // ✅ Send archived param
+                params = { archived: showArchived }; 
             }
 
             const url = `/shipments?_t=${new Date().getTime()}`;
@@ -135,7 +135,6 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // ✅ NEW: Archive Handler
     const initiateArchive = (id) => {
         setFeedbackModal({
             type: 'warning',
@@ -161,7 +160,6 @@ function ShipmentView({ user, token, onLogout }) {
         });
     };
 
-    // ✅ NEW: Restore Handler
     const initiateRestore = (id) => {
         setFeedbackModal({
             type: 'restore',
@@ -453,7 +451,7 @@ function ShipmentView({ user, token, onLogout }) {
                                     <td style={{textAlign: 'center'}}>
                                         {showArchived ? (
                                             <button 
-                                                className="icon-action-btn" // Removed 'restore' class
+                                                className="icon-action-btn" 
                                                 onClick={(e) => { e.stopPropagation(); initiateRestore(s.shipmentID); }} 
                                                 title="Restore Shipment"
                                             >
@@ -461,7 +459,7 @@ function ShipmentView({ user, token, onLogout }) {
                                             </button>
                                         ) : (
                                             <button 
-                                                className="icon-action-btn" // Removed 'archive' class
+                                                className="icon-action-btn" 
                                                 onClick={(e) => { e.stopPropagation(); initiateArchive(s.shipmentID); }} 
                                                 title="Archive Shipment"
                                             >

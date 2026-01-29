@@ -303,14 +303,12 @@
     font-size: 13px;
     font-weight: 600;
     transition: all 0.2s ease;
-    
-    /* ✅ FIXED WIDTH LOGIC */
-    width: 145px;                /* Set to fit "Back to Active" comfortably */
+    width: 145px;             
     display: flex;
     align-items: center;
-    justify-content: center;     /* Center content so it doesn't look lopsided */
+    justify-content: center;   
     gap: 8px;
-    flex-shrink: 0;              /* Prevents the button itself from squishing */
+    flex-shrink: 0;             
     outline: none;
 }
 
@@ -320,7 +318,6 @@
     border-color: #BBB;
 }
 
-/* Active State (Dark Gray background, White text) */
 .archive-toggle-btn.active {
     background-color: #666;
     color: white;
@@ -331,7 +328,6 @@
     background-color: #555;
 }
 
-/* ✅ UPDATED: Action Icons (Neutral Colors) */
 .icon-action-btn {
     background: transparent;
     border: none;
@@ -342,12 +338,12 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #555; /* 👈 Neutral Gray by default */
+    color: #555; 
 }
 
 .icon-action-btn:hover {
     background-color: #F0F0F0;
-    color: #000; /* Darker on hover, but no red/green */
+    color: #000; 
     transform: scale(1.1);
 }
 
