@@ -7,19 +7,20 @@ import FeedbackModal from '../FeedbackModal';
 const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure'];
 
 function ShipmentView({ user, token, onLogout }) {
-    
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [statusFilter, setStatusFilter] = useState('All'); 
     
-    // Timeframe & Date Filters
+    // Filters
     const [timeframe, setTimeframe] = useState('All');
     const [dateFilter, setDateFilter] = useState(''); 
+    const [showArchived, setShowArchived] = useState(false); 
     
-    // Pagination State
+    // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const rowsPerPage = 10; 
 
+    // UI State
     const [expandedShipmentID, setExpandedShipmentID] = useState(null);
     const [closingId, setClosingId] = useState(null);
     const [activeLogs, setActiveLogs] = useState([]);
@@ -30,7 +31,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [showModal, setShowModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [showNoDataModal, setShowNoDataModal] = useState(false);
-    const [feedbackModal, setFeedbackModal] = useState(null); // ✨ 2. New Feedback State
+    const [feedbackModal, setFeedbackModal] = useState(null); 
 
     const [dateRange, setDateRange] = useState({
         start: new Date().toISOString().split('T')[0],
@@ -44,7 +45,7 @@ function ShipmentView({ user, token, onLogout }) {
     const expandedIdRef = useRef(null);
     useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
     
-    // --- EFFECTS ---
+    // --- FETCH DATA ---
     useEffect(() => {
         fetchData(true); 
         const interval = setInterval(() => {
@@ -52,13 +53,19 @@ function ShipmentView({ user, token, onLogout }) {
             if (expandedIdRef.current) refreshLogs(expandedIdRef.current);
         }, 3000); 
         return () => clearInterval(interval);
-    }, [token]); 
+    }, [token, showArchived]); 
 
     const fetchData = async (isFirstLoad = false) => {
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
             let params = {};
-            if (user.role === 'Driver' || user.role === 'Helper') params = { userID: user.userID };
+            
+            // Driver sees own, Admin sees based on toggle
+            if (user.role === 'Driver' || user.role === 'Helper') {
+                params = { userID: user.userID };
+            } else {
+                params = { archived: showArchived }; 
+            }
 
             const url = `/shipments?_t=${new Date().getTime()}`;
             const response = await api.get(url, { ...config, params });
@@ -123,15 +130,58 @@ function ShipmentView({ user, token, onLogout }) {
                 message: 'The new shipment has been successfully scheduled.',
                 onClose: () => setFeedbackModal(null)
             });
-
         } catch (err) { 
-            setFeedbackModal({
-                type: 'error',
-                title: 'Creation Failed',
-                message: err.response?.data?.error || "Failed to create shipment.",
-                onClose: () => setFeedbackModal(null)
-            });
+            setFeedbackModal({ type: 'error', title: 'Creation Failed', message: err.response?.data?.error, onClose: () => setFeedbackModal(null) });
         }
+    };
+
+    const initiateArchive = (id) => {
+        setFeedbackModal({
+            type: 'warning',
+            title: 'Archive Shipment?',
+            message: `Are you sure you want to archive Shipment #${id}?`,
+            subMessage: "It will be moved to the archived view.",
+            confirmLabel: "Yes, Archive",
+            onConfirm: async () => {
+                try {
+                    await api.put(`/shipments/${id}/archive`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
+                    fetchData(true);
+                    setFeedbackModal({
+                        type: 'success',
+                        title: 'Archived!',
+                        message: `Shipment #${id} has been archived.`,
+                        onClose: () => setFeedbackModal(null)
+                    });
+                } catch (err) {
+                    setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed to archive.', onClose: () => setFeedbackModal(null) });
+                }
+            },
+            onClose: () => setFeedbackModal(null)
+        });
+    };
+
+    const initiateRestore = (id) => {
+        setFeedbackModal({
+            type: 'restore',
+            title: 'Restore Shipment?',
+            message: `Restore Shipment #${id} to active list?`,
+            confirmLabel: "Restore",
+            onConfirm: async () => {
+                try {
+                    await api.put(`/shipments/${id}/restore`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
+                    fetchData(true);
+                    setFeedbackModal({
+                        type: 'success',
+                        title: 'Restored!',
+                        message: `Shipment #${id} is active again.`,
+                        onClose: () => setFeedbackModal(null)
+                    });
+                } catch (err) {
+                    setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed to restore.', onClose: () => setFeedbackModal(null) });
+                }
+            },
+            onClose: () => setFeedbackModal(null)
+        });
     };
 
     const getTodayString = () => {
@@ -337,6 +387,12 @@ function ShipmentView({ user, token, onLogout }) {
                                     );
                                 })}
                             </select>
+                            <button 
+                                className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} 
+                                onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
+                            >
+                                {showArchived ? '← Back to Active' : 'View Archived'}
+                            </button>
                             <div className="count-badge">{finalFiltered.length} Results</div>
                         </div>
                     </div>
@@ -363,6 +419,7 @@ function ShipmentView({ user, token, onLogout }) {
                             <th>Destination Location</th>
                             <th>Plate No.</th>
                             <th>Assigned Crew</th>
+                            <th>Actions</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -391,10 +448,29 @@ function ShipmentView({ user, token, onLogout }) {
                                             <div className="mini-avatar"><Icons.Profile/></div>
                                         </div>
                                     </td>
+                                    <td style={{textAlign: 'center'}}>
+                                        {showArchived ? (
+                                            <button 
+                                                className="icon-action-btn" 
+                                                onClick={(e) => { e.stopPropagation(); initiateRestore(s.shipmentID); }} 
+                                                title="Restore Shipment"
+                                            >
+                                                <Icons.Restore />
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                className="icon-action-btn" 
+                                                onClick={(e) => { e.stopPropagation(); initiateArchive(s.shipmentID); }} 
+                                                title="Archive Shipment"
+                                            >
+                                                <Icons.Trash />
+                                            </button>
+                                        )}
+                                    </td>
                                     <td><button className={`expand-btn ${isOpen && !isClosing ? 'open' : ''}`} onClick={() => toggleRow(s.shipmentID)}>▼</button></td>
                                 </tr>
                                 {(isOpen || isClosing) && (
-                                    <tr className="expanded-row-container"><td colSpan="7">
+                                    <tr className="expanded-row-container"><td colSpan="8">
                                         <div className={`timeline-wrapper ${isClosing ? 'closing' : ''}`}>
                                             <div className="timeline-content">
                                             {PHASE_ORDER.map((phase, index) => {

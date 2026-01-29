@@ -69,6 +69,40 @@
 
 .create-user-btn:hover { background-color: #38A1C6; }
 
+.archive-toggle-btn {
+    padding: 8px 15px;
+    border-radius: 20px;
+    border: 1px solid #CCC;
+    background-color: white;
+    color: #666;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+    width: 145px;                
+    display: flex;
+    align-items: center;
+    justify-content: center;    
+    gap: 8px;
+    flex-shrink: 0;             
+    outline: none;
+}
+
+.archive-toggle-btn:hover {
+    background-color: #F9F9F9;
+    color: #333;
+    border-color: #BBB;
+}
+
+.archive-toggle-btn.active {
+    background-color: #666;
+    color: white;
+    border-color: #666;
+}
+
+.archive-toggle-btn.active:hover {
+    background-color: #555;
+}
 .table-wrapper {
     background: white;
     flex: 1;             
@@ -85,7 +119,7 @@
 
 .user-table th {
     text-align: left;
-    padding: 16px 15px;
+    padding: 15px;
     color: #888;
     font-size: 13px;
     font-weight: 700;

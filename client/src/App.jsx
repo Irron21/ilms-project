@@ -8,6 +8,7 @@ import ShipmentDetails from './components/Mobile/ShipmentDetails';
 import Profile from './components/Mobile/ProfileModal';
 import DesktopApp from './components/Desktop/DesktopApp';
 import './App.css';
+import React from 'react'
 
 function App() {
   const [isKickedOut, setIsKickedOut] = useState(false);
