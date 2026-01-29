@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import './UserManagement.css';
 import FeedbackModal from '../FeedbackModal';
 import { Icons } from '../Icons';
@@ -45,7 +45,7 @@ function UserManagement({ activeTab = "users" }) {
 
   const fetchUsers = async () => {
     try {
-        const res = await axios.get(`http://localhost:4000/api/users?archived=${showArchived}`, { 
+        const res = await api.get(`/users?archived=${showArchived}`, { 
             headers: { Authorization: `Bearer ${token}` } 
         });
         setUsers(res.data);
@@ -54,7 +54,7 @@ function UserManagement({ activeTab = "users" }) {
   
   const fetchVehicles = async () => {
     try {
-        const res = await axios.get(`http://localhost:4000/api/vehicles?archived=${showArchived}`, { 
+        const res = await api.get(`/vehicles?archived=${showArchived}`, { 
             headers: { Authorization: `Bearer ${token}` } 
         });
         setVehicles(res.data);
@@ -79,7 +79,7 @@ function UserManagement({ activeTab = "users" }) {
     }
 
     try {
-        await axios.post('http://localhost:4000/api/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } });
+        await api.post('/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } });
         setShowCreateModal(false);
         fetchUsers();
         
@@ -109,7 +109,7 @@ function UserManagement({ activeTab = "users" }) {
       }
 
       try {
-        await axios.put(`http://localhost:4000/api/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } });
+        await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } });
         setShowEditModal(false);
         fetchUsers();
         
@@ -125,7 +125,7 @@ function UserManagement({ activeTab = "users" }) {
   const handleTruckSubmit = async (e) => {
       e.preventDefault();
       try {
-          await axios.post('http://localhost:4000/api/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } });
+          await api.post('/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } });
           setShowTruckModal(false);
           fetchVehicles();
           
@@ -141,7 +141,7 @@ function UserManagement({ activeTab = "users" }) {
   const handleUpdateTruck = async (e) => {
       e.preventDefault();
       try {
-          await axios.put(`http://localhost:4000/api/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } });
+          await api.put(`/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } });
           setShowEditTruckModal(false);
           fetchVehicles();
           
@@ -168,8 +168,8 @@ function UserManagement({ activeTab = "users" }) {
 
   const performDelete = async (type, id) => {
       try {
-          const endpoint = type === 'user' ? `http://localhost:4000/api/users/${id}` : `http://localhost:4000/api/vehicles/${id}`;
-          await axios.delete(endpoint, { headers: { Authorization: `Bearer ${token}` } });
+          const endpoint = type === 'user' ? `/users/${id}` : `/vehicles/${id}`;
+          await api.delete(endpoint, { headers: { Authorization: `Bearer ${token}` } });
           if (type === 'user') fetchUsers(); else fetchVehicles();
 
           setFeedbackModal({ type: 'success', title: 'Deleted!', message: 'Record removed successfully.', onClose: () => setFeedbackModal(null) });
@@ -199,10 +199,10 @@ function UserManagement({ activeTab = "users" }) {
           onConfirm: async () => {
               try {
                   const endpoint = type === 'user' 
-                    ? `http://localhost:4000/api/users/${id}/restore` 
-                    : `http://localhost:4000/api/vehicles/${id}/restore`;
-                  
-                  await axios.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
+                    ? `/users/${id}/restore` 
+                    : `/vehicles/${id}/restore`;
+
+                  await api.put(endpoint, {}, { headers: { Authorization: `Bearer ${token}` } });
                   
                   if (type === 'user') fetchUsers(); else fetchVehicles();
 
@@ -220,7 +220,7 @@ function UserManagement({ activeTab = "users" }) {
   const toggleTruckStatus = async (vehicle) => {
       const newStatus = vehicle.status === 'Working' ? 'Maintenance' : 'Working';
       try {
-          await axios.put(`http://localhost:4000/api/vehicles/${vehicle.vehicleID}/status`, 
+          await api.put(`/vehicles/${vehicle.vehicleID}/status`, 
             { status: newStatus }, { headers: { Authorization: `Bearer ${token}` } }
           );
           fetchVehicles();

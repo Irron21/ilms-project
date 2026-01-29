@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import api from '../../utils/api';
 import { Icons } from '../Icons'; 
 import './ShipmentView.css';
 import FeedbackModal from '../FeedbackModal'; 
@@ -59,9 +59,9 @@ function ShipmentView({ user, token, onLogout }) {
             const config = { headers: { Authorization: `Bearer ${token}` } };
             let params = {};
             if (user.role === 'Driver' || user.role === 'Helper') params = { userID: user.userID };
-            
-            const url = `http://localhost:4000/api/shipments?_t=${new Date().getTime()}`;
-            const response = await axios.get(url, { ...config, params });
+
+            const url = `/shipments?_t=${new Date().getTime()}`;
+            const response = await api.get(url, { ...config, params });
             const newData = response.data;
 
             if (!isFirstLoad && prevShipmentsRef.current.length > 0) {
@@ -80,8 +80,8 @@ function ShipmentView({ user, token, onLogout }) {
     const refreshLogs = async (id) => {
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
-            const url = `http://localhost:4000/api/shipments/${id}/logs?_t=${new Date().getTime()}`;
-            const res = await axios.get(url, config);
+            const url = `/shipments/${id}/logs?_t=${new Date().getTime()}`;
+            const res = await api.get(url, config);
             setActiveLogs(res.data);
         } catch (error) { console.error("Log sync error", error); }
     };
@@ -101,7 +101,7 @@ function ShipmentView({ user, token, onLogout }) {
     const handleOpenModal = async () => {
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
-            const res = await axios.get('http://localhost:4000/api/shipments/resources', config);
+            const res = await api.get('/shipments/resources', config);
             setResources(res.data);
             setShowModal(true);
         } catch (err) { alert("Could not load resources."); }
@@ -111,7 +111,7 @@ function ShipmentView({ user, token, onLogout }) {
         e.preventDefault();
         try {
             const config = { headers: { Authorization: `Bearer ${token}` } };
-            await axios.post('http://localhost:4000/api/shipments/create', { ...formData, operationsUserID: user.userID }, config);
+            await api.post('/shipments/create', { ...formData, operationsUserID: user.userID }, config);
 
             setShowModal(false);
             setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
@@ -161,7 +161,7 @@ function ShipmentView({ user, token, onLogout }) {
                 params: { startDate: dateRange.start, endDate: dateRange.end },
                 responseType: 'blob' 
             };
-            const response = await axios.get('http://localhost:4000/api/shipments/export', config);
+            const response = await api.get('/shipments/export', config);
 
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
