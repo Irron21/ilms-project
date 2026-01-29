@@ -1,12 +1,6 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
-
-// --- HELPER: Log Activity ---
-const logActivity = (connection, userID, action, details, callback) => {
-    const finalUserID = userID || 1; 
-    const sql = "INSERT INTO UserActivityLog (userID, actionType, details) VALUES (?, ?, ?)";
-    connection.query(sql, [finalUserID, action, details], callback);
-};
+const logActivity = require('../utils/activityLogger');
 
 // GET USERS
 exports.getAllUsers = (req, res) => {

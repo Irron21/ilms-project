@@ -1,26 +1,23 @@
 const db = require('../config/db');
 const xlsx = require('xlsx');
 const fs = require('fs');
+const logActivity = require('../utils/activityLogger'); // ✅ Use the shared helper
 
 // 1. UPLOAD REPORT
 exports.uploadKPIReport = (req, res) => {
+    const adminID = req.user ? req.user.userID : 1; 
+
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    // Helper: Safely delete file without crashing
     const cleanup = () => {
         try {
-            if (req.file && fs.existsSync(req.file.path)) {
-                fs.unlinkSync(req.file.path);
-            }
-        } catch (err) {
-            console.error("Warning: Failed to delete temp file:", err.message);
-        }
+            if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        } catch (err) { console.error("Warning:", err.message); }
     };
 
     try {
         const workbook = xlsx.readFile(req.file.path);
         
-        // 1. Sheet Detection
         let summarySheet = workbook.Sheets['K2MAC'];
         if (!summarySheet) {
             const firstSheetName = workbook.SheetNames[0];
@@ -28,23 +25,28 @@ exports.uploadKPIReport = (req, res) => {
         }
 
         if (!summarySheet) {
-            cleanup(); // Delete before returning error
-            return res.status(400).json({ error: "No valid sheet found in file." });
+            cleanup(); 
+            const msg = "Upload Failed - No valid sheet found";
+            return logActivity(db, adminID, 'UPLOAD_KPI_FAILED', `${msg}: ${req.file.originalname}`, () => {
+                res.status(400).json({ error: "No valid sheet found. Please use the correct template." });
+            });
         }
 
         const data = xlsx.utils.sheet_to_json(summarySheet, { header: 1 });
         const fileName = req.file.originalname.toUpperCase();
-        console.log(`Processing: ${fileName}`);
 
-        // 2. Logic (Date & Score Extraction)
+        // 2. STRICT Date Detection
         let detectedMonth = null;
-        let detectedYear = 2025;
+        let detectedYear = null; // ❌ WAS 2025 (Removed default)
+        
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
+        // Try Filename First
         months.forEach(m => { if (fileName.includes(m)) detectedMonth = m; });
         const yearMatch = fileName.match(/202[0-9]/);
         if (yearMatch) detectedYear = parseInt(yearMatch[0]);
 
+        // Try Inside Excel (Cell A1 or similar)
         if (!detectedMonth) {
             data.forEach(row => {
                 if (row[0] && months.includes(row[0].toString().toUpperCase())) {
@@ -53,7 +55,16 @@ exports.uploadKPIReport = (req, res) => {
             });
         }
 
-        // Score Parsing
+        // ❌ BLOCK IF DATE MISSING
+        if (!detectedMonth || !detectedYear) {
+            cleanup();
+            const msg = `Upload Failed - Could not detect date (Month: ${detectedMonth}, Year: ${detectedYear})`;
+            return logActivity(db, adminID, 'UPLOAD_KPI_FAILED', msg, () => {
+                res.status(400).json({ error: "Could not detect Month or Year in file. Please ensure filename includes e.g., 'January 2025'." });
+            });
+        }
+
+        // Score Parsing (Same as before)
         let targetRowIndex = -1;
         data.forEach((row, index) => {
             if (row[0] && months.includes(row[0].toString().toUpperCase())) targetRowIndex = index;
@@ -79,7 +90,16 @@ exports.uploadKPIReport = (req, res) => {
             pod:      parseScore(scoreRow[18])
         };
 
-        // Failure Reasons Extraction
+        // ❌ BLOCK IF EMPTY SCORES (Prevent "Ghost" records)
+        const totalScore = Object.values(metrics).reduce((a, b) => a + b, 0);
+        if (totalScore === 0) {
+            cleanup();
+            return logActivity(db, adminID, 'UPLOAD_KPI_FAILED', "Upload Failed - All scores detected as 0", () => {
+                res.status(400).json({ error: "No valid scores detected. Check the excel format." });
+            });
+        }
+
+        // Failure Reasons Extraction (Same as before)
         let reasonStartRowIndex = -1;
         data.forEach((row, index) => {
             const rowStr = row.join(" ").toUpperCase();
@@ -96,13 +116,11 @@ exports.uploadKPIReport = (req, res) => {
                 { category: 'Delivery', start: 12, end: 14 },
                 { category: 'POD', start: 15, end: 19 }
             ];
-
             for (let i = reasonStartRowIndex + 1; i < data.length; i++) {
                 const row = data[i];
                 if (!row) continue;
                 const firstCell = row[0] ? row[0].toString().toLowerCase() : "";
                 if (firstCell.includes('action') || firstCell.includes('recommendation')) break;
-
                 ranges.forEach(range => {
                     for (let col = range.start; col <= range.end; col++) {
                         if (row[col]) {
@@ -118,8 +136,8 @@ exports.uploadKPIReport = (req, res) => {
             }
         }
 
-        // 3. Database Operation (ASYNC START)
-        const reportDate = new Date(`${detectedMonth || 'NOVEMBER'} 1, ${detectedYear}`);
+        // 3. Database Operation
+        const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); // ✅ No default 'NOVEMBER'
         const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
 
         db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], () => {
@@ -138,18 +156,25 @@ exports.uploadKPIReport = (req, res) => {
                 
                 if (err) {
                     console.error("DB Error:", err);
-                    return res.status(500).json({ error: "Database error: " + err.message });
+                    return logActivity(db, adminID, 'UPLOAD_KPI_FAILED', `Database Error: ${err.message}`, () => {
+                        res.status(500).json({ error: "Database error: " + err.message });
+                    });
                 }
                 
-                console.log(`Saved ${detectedMonth} ${detectedYear}`);
-                res.json({ message: "Success", scores: metrics });
+                const logDetails = `Uploaded KPI Report - ${detectedMonth} ${detectedYear} [ID: ${result.insertId}]`;
+                logActivity(db, adminID, 'UPLOAD_KPI_REPORT', logDetails, () => {
+                    console.log(`Saved ${detectedMonth} ${detectedYear}`);
+                    res.json({ message: "Success", scores: metrics });
+                });
             });
         });
 
     } catch (e) {
         cleanup(); 
         console.error("Upload Error:", e);
-        res.status(500).json({ error: e.message });
+        logActivity(db, adminID, 'UPLOAD_KPI_FAILED', `Processing Error: ${e.message}`, () => {
+            res.status(500).json({ error: e.message });
+        });
     }
 };
 
@@ -157,10 +182,7 @@ exports.getAvailableMonths = (req, res) => {
     const sql = "SELECT reportID, reportMonth FROM KPI_Monthly_Reports ORDER BY reportMonth DESC, reportID DESC";
     
     db.query(sql, (err, results) => {
-        if (err) {
-            console.error("Database Error:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
         
         const reports = results.map(r => ({
             id: r.reportID,  
@@ -236,28 +258,25 @@ exports.getDashboardData = (req, res) => {
 // Delete Report (Hard Delete)
 exports.deleteReport = (req, res) => {
     const { id } = req.body;
+    const adminID = req.user ? req.user.userID : 1; // Capture User ID
 
-    if (!id) {
-        console.error("Delete Request Failed: No ID provided");
-        return res.status(400).json({ error: "Report ID required" });
-    }
-
-    console.log(`Attempting to delete report ID: ${id}`);
+    if (!id) return res.status(400).json({ error: "Report ID required" });
 
     const sql = "DELETE FROM KPI_Monthly_Reports WHERE reportID = ?";
     
     db.query(sql, [id], (err, result) => {
-        if (err) {
-            console.error("Database Error during delete:", err.message);
-            return res.status(500).json({ error: err.message });
-        }
+        if (err) return res.status(500).json({ error: err.message });
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: "Report not found or already deleted" });
         }
 
-        console.log("Report deleted successfully");
-        res.json({ message: "Report deleted permanently" });
+        // ✅ LOG ACTIVITY
+        const logDetails = `Deleted KPI Report - [ID: ${id}]`;
+        logActivity(db, adminID, 'DELETE_KPI_REPORT', logDetails, () => {
+             console.log("Report deleted successfully");
+             res.json({ message: "Report deleted permanently" });
+        });
     });
 };
 
