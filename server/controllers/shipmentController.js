@@ -1,63 +1,51 @@
 const db = require('../config/db');
 const XLSX = require('xlsx');
+const logActivity = require('../utils/activityLogger');
 
-// 1. Get Active Shipments
+// 1. Get Shipments (Updated for Archive Support)
 exports.getActiveShipments = (req, res) => {
     const currentUserID = req.query.userID;
-    
+    const showArchived = req.query.archived === 'true';
+    const isArchivedVal = showArchived ? 1 : 0; // 0 = Active, 1 = Archived
+
     let sql;
     let params = [];
 
     if (currentUserID) {
-        // DRIVER/HELPER MODE: Show only assigned jobs
-        console.log("Fetching shipments for specific User ID:", currentUserID);
+        // DRIVER/HELPER MODE: Always show active assigned jobs (ignore archive toggle for them)
         sql = `
             SELECT 
-                s.shipmentID, 
-                c.clientName,
-                s.destName,
-                s.destLocation, 
-                s.currentStatus, 
-                s.creationTimestamp,
-                v.plateNo,      
-                v.type as truckType
+                s.shipmentID, c.clientName, s.destName, s.destLocation, 
+                s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType
             FROM Shipments s
             JOIN Clients c ON s.clientID = c.clientID
             JOIN Vehicles v ON s.vehicleID = v.vehicleID 
             JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
-            WHERE sc.userID = ?
+            WHERE sc.userID = ? AND s.isArchived = 0 
             ORDER BY s.creationTimestamp DESC
         `;
         params = [currentUserID];
     } else {
-        // ADMIN MODE: Show ALL shipments + Group names
-        console.log("Fetching ALL shipments for Admin");
+        // ADMIN MODE: Filter by isArchived status
         sql = `
             SELECT 
-                s.shipmentID, 
-                c.clientName,
-                s.destName,
-                s.destLocation, 
-                s.currentStatus, 
-                s.creationTimestamp,
-                v.plateNo,     
-                v.type as truckType,
+                s.shipmentID, c.clientName, s.destName, s.destLocation, 
+                s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType,
                 GROUP_CONCAT(CONCAT(u.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
             FROM Shipments s
             JOIN Clients c ON s.clientID = c.clientID
             JOIN Vehicles v ON s.vehicleID = v.vehicleID
             LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
             LEFT JOIN Users u ON sc.userID = u.userID
+            WHERE s.isArchived = ? 
             GROUP BY s.shipmentID
             ORDER BY s.creationTimestamp DESC
         `;
+        params = [isArchivedVal];
     }
     
     db.query(sql, params, (err, results) => {
-        if (err) {
-            console.error("Database Error:", err);
-            return res.status(500).json({ error: "Failed to fetch shipments" });
-        }
+        if (err) return res.status(500).json({ error: "Failed to fetch shipments" });
         res.json(results);
     });
 };
@@ -87,6 +75,8 @@ exports.updateStatus = (req, res) => {
                 console.error("Log Error:", err);
                 return res.status(500).json({ error: err.message });
             }
+
+            logActivity(db, userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
             res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
         });
     });
@@ -194,22 +184,13 @@ exports.createShipment = (req, res) => {
                     
                     // Step 5: Insert Log
                     connection.query(sqlLog, [shipmentID, operationsUserID], (err) => {
-                        if (err) {
-                            return connection.rollback(() => {
-                                connection.release();
-                                res.status(500).json({ error: "Logging failed: " + err.message });
-                            });
-                        }
+                        if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Log fail" }); });
 
-                        connection.commit((err) => {
-                            if (err) {
-                                return connection.rollback(() => {
-                                    connection.release();
-                                    res.status(500).json({ error: "Commit failed." });
-                                });
-                            }
-                            connection.release();
-                            res.json({ message: "Success", shipmentID: shipmentID });
+                        logActivity(connection, operationsUserID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
+                            connection.commit((err) => {
+                                connection.release();
+                                res.json({ message: "Success", shipmentID });
+                            });
                         });
                     });
                 });
@@ -292,5 +273,35 @@ exports.exportShipments = (req, res) => {
             console.error("Excel Generation Error:", error);
             res.status(500).json({ message: "Error generating Excel file" });
         }
+    });
+};
+
+exports.archiveShipment = (req, res) => {
+    const { id } = req.params;
+    const adminID = req.body.userID || 1; 
+
+    const sql = "UPDATE Shipments SET isArchived = 1 WHERE shipmentID = ?";
+    
+    db.query(sql, [id], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        logActivity(db, adminID, 'ARCHIVE_SHIPMENT', `Archived Shipment #${id}`, () => {
+            res.json({ message: "Shipment archived successfully" });
+        });
+    });
+};
+
+exports.restoreShipment = (req, res) => {
+    const { id } = req.params;
+    const adminID = req.body.userID || 1;
+
+    const sql = "UPDATE Shipments SET isArchived = 0 WHERE shipmentID = ?";
+    
+    db.query(sql, [id], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        logActivity(db, adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
+            res.json({ message: "Shipment restored successfully" });
+        });
     });
 };

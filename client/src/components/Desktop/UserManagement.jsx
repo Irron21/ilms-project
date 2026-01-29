@@ -266,8 +266,7 @@ function UserManagement({ activeTab = "users" }) {
                   <select value={truckFilter} onChange={e => setTruckFilter(e.target.value)} className="role-filter-dropdown">
                     <option value="All">All Statuses</option><option value="Working">Working</option><option value="Maintenance">Maintenance</option>
                   </select>
-                  <button onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
-                    style={{ padding: '8px 15px', borderRadius: '20px', border: '1px solid #CCC', background: showArchived ? '#666' : 'white', color: showArchived ? 'white' : '#666', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                  <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}>
                     {showArchived ? '← Back to Active' : 'View Archived'}
                   </button>
                   <div className="count-badge">{filteredVehicles.length} Vehicles</div>                 
@@ -318,8 +317,7 @@ function UserManagement({ activeTab = "users" }) {
                 <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="role-filter-dropdown">
                     <option value="All">All Roles</option><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option>
                 </select>
-                <button onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}
-                    style={{ padding: '8px 15px', borderRadius: '20px', border: '1px solid #CCC', background: showArchived ? '#666' : 'white', color: showArchived ? 'white' : '#666', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}>
                     {showArchived ? '← Back to Active' : 'View Archived'}
                 </button>
                 <div className="count-badge">{filteredUsers.length} Users</div>

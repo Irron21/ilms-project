@@ -8,5 +8,7 @@ router.put('/:shipmentID/status', shipmentController.updateStatus);
 router.get('/resources', shipmentController.getFormResources);
 router.post('/create', shipmentController.createShipment);
 router.get('/export', shipmentController.exportShipments);
+router.put('/:id/archive', shipmentController.archiveShipment);
+router.put('/:id/restore', shipmentController.restoreShipment);
 
 module.exports = router;

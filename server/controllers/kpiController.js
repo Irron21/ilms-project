@@ -1,7 +1,7 @@
 const db = require('../config/db');
 const xlsx = require('xlsx');
 const fs = require('fs');
-const logActivity = require('../utils/activityLogger'); // ✅ Use the shared helper
+const logActivity = require('../utils/activityLogger');
 
 // 1. UPLOAD REPORT
 exports.uploadKPIReport = (req, res) => {
@@ -37,11 +37,10 @@ exports.uploadKPIReport = (req, res) => {
 
         // 2. STRICT Date Detection
         let detectedMonth = null;
-        let detectedYear = null; // ❌ WAS 2025 (Removed default)
+        let detectedYear = null; 
         
         const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
-        // Try Filename First
         months.forEach(m => { if (fileName.includes(m)) detectedMonth = m; });
         const yearMatch = fileName.match(/202[0-9]/);
         if (yearMatch) detectedYear = parseInt(yearMatch[0]);
@@ -55,7 +54,6 @@ exports.uploadKPIReport = (req, res) => {
             });
         }
 
-        // ❌ BLOCK IF DATE MISSING
         if (!detectedMonth || !detectedYear) {
             cleanup();
             const msg = `Upload Failed - Could not detect date (Month: ${detectedMonth}, Year: ${detectedYear})`;
@@ -64,7 +62,7 @@ exports.uploadKPIReport = (req, res) => {
             });
         }
 
-        // Score Parsing (Same as before)
+        // Score Parsing 
         let targetRowIndex = -1;
         data.forEach((row, index) => {
             if (row[0] && months.includes(row[0].toString().toUpperCase())) targetRowIndex = index;
@@ -90,7 +88,6 @@ exports.uploadKPIReport = (req, res) => {
             pod:      parseScore(scoreRow[18])
         };
 
-        // ❌ BLOCK IF EMPTY SCORES (Prevent "Ghost" records)
         const totalScore = Object.values(metrics).reduce((a, b) => a + b, 0);
         if (totalScore === 0) {
             cleanup();
@@ -99,7 +96,7 @@ exports.uploadKPIReport = (req, res) => {
             });
         }
 
-        // Failure Reasons Extraction (Same as before)
+        // Failure Reasons Extraction 
         let reasonStartRowIndex = -1;
         data.forEach((row, index) => {
             const rowStr = row.join(" ").toUpperCase();
@@ -137,7 +134,7 @@ exports.uploadKPIReport = (req, res) => {
         }
 
         // 3. Database Operation
-        const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); // ✅ No default 'NOVEMBER'
+        const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); 
         const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
 
         db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], () => {
@@ -258,7 +255,7 @@ exports.getDashboardData = (req, res) => {
 // Delete Report (Hard Delete)
 exports.deleteReport = (req, res) => {
     const { id } = req.body;
-    const adminID = req.user ? req.user.userID : 1; // Capture User ID
+    const adminID = req.user ? req.user.userID : 1; 
 
     if (!id) return res.status(400).json({ error: "Report ID required" });
 
@@ -271,7 +268,6 @@ exports.deleteReport = (req, res) => {
             return res.status(404).json({ error: "Report not found or already deleted" });
         }
 
-        // ✅ LOG ACTIVITY
         const logDetails = `Deleted KPI Report - [ID: ${id}]`;
         logActivity(db, adminID, 'DELETE_KPI_REPORT', logDetails, () => {
              console.log("Report deleted successfully");
