@@ -70,11 +70,9 @@ exports.updateVehicleStatus = (req, res) => {
         db.query(checkSql, [id], (err, results) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            // ❌ CONFLICT FOUND: Truck is busy
             if (results.length > 0) {
                 const activeIDs = results.map(r => r.shipmentID).join(', ');
-                
-                // 📝 LOG THE FAILURE
+
                 const logDetails = `Status Change DENIED - Vehicle busy with Shipment(s) ${activeIDs} [ID: ${id}]`;
                 
                 return logActivity(adminID, 'UPDATE_STATUS_DENIED', logDetails, () => {

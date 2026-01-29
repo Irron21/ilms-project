@@ -143,7 +143,7 @@ exports.createShipment = (req, res) => {
 
     db.getConnection((err, connection) => {
         if (err) {
-            console.error("❌ Connection Error:", err);
+            console.error("Connection Error:", err);
             return res.status(500).json({ error: "Database connection failed." });
         }
 
@@ -233,8 +233,7 @@ exports.exportShipments = (req, res) => {
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
       LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
       LEFT JOIN Users u ON sc.userID = u.userID
-      
-      -- CHANGED 'ssl' TO 'sLog' HERE 👇
+
       LEFT JOIN ShipmentStatusLog sLog ON s.shipmentID = sLog.shipmentID
       
       WHERE s.creationTimestamp BETWEEN ? AND ?
