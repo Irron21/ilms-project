@@ -1,6 +1,5 @@
 import React from 'react';
 
-// Shared style to force crisp outlines and prevent "solid blob" look
 const iconStyle = {
   fill: 'none',
   stroke: 'currentColor',
@@ -10,7 +9,23 @@ const iconStyle = {
 };
 
 export const Icons = {
-  // --- MOBILE ICONS (Restored to Line Art) ---
+  Pin: (props) => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+             </svg>
+  ),
+  Building: (props) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 9v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9"/>
+                <path d="M9 22V12h6v10M2 10.6L12 2l10 8.6"/>
+            </svg>
+  ),
+  ArrowDown: (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#888" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M7 13l5 5 5-5M7 6l5 5 5-5"/>
+    </svg>
+  ),
   Truck: (props) => (
     <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
       <rect x="1" y="3" width="15" height="13"></rect>
@@ -70,9 +85,20 @@ export const Icons = {
     </svg>
   ),
   Hourglass: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
-      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
-      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+    <svg 
+      width="20" 
+      height="20" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      style={iconStyle} 
+      {...props}
+    >
+      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2H7z" />
+      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22H17z" />
     </svg>
   ),
   Minus: (props) => (

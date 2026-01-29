@@ -1,7 +1,9 @@
 import React from 'react';
 import './ProfileModal.css';
+import { Icons } from '../Icons';
+import api from '../../utils/api';
 
-function ProfileModal({ user, onClose, onLogout }) {
+function ProfileModal({ user, onClose, onLogout, token }) {
   
   // 1. Handle Overlay Click (Close)
   const handleOverlayClick = (e) => {
@@ -17,6 +19,25 @@ function ProfileModal({ user, onClose, onLogout }) {
     if (onClose) onClose();
   };
 
+  const handleLogoutClick = async () => {
+    try {
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+      // 3. Send request WITH config
+      await api.post('/logs', {
+        action: 'LOGOUT',
+        details: 'User logged out via Mobile App',
+        timestamp: new Date().toISOString()
+      }, config); // <--- Added config here
+
+    } catch (error) {
+      console.error("Failed to log logout activity:", error);
+    } finally {
+      // 4. Always logout user even if logging fails
+      onLogout();
+    }
+  };
+
   return (
     <div className="profile-modal-overlay" onClick={handleOverlayClick}>
       
@@ -30,9 +51,7 @@ function ProfileModal({ user, onClose, onLogout }) {
 
         <div className="modal-avatar">
           {/* Use your Icon component or the SVG */}
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-          </svg>
+          <Icons.Profile />
         </div>
 
         <h2 className="modal-name">{user.fullName || "Crew Member"}</h2>
@@ -45,7 +64,7 @@ function ProfileModal({ user, onClose, onLogout }) {
 
         <div className="modal-divider"></div>
 
-        <button className="modal-logout-btn" onClick={onLogout}>
+        <button className="modal-logout-btn" onClick={handleLogoutClick}>
           Log Out
         </button>
 

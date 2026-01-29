@@ -76,7 +76,7 @@ exports.updateStatus = (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
 
-            logActivity(db, userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
+            logActivity(userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
             res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
         });
     });
@@ -143,7 +143,7 @@ exports.createShipment = (req, res) => {
 
     db.getConnection((err, connection) => {
         if (err) {
-            console.error("❌ Connection Error:", err);
+            console.error("Connection Error:", err);
             return res.status(500).json({ error: "Database connection failed." });
         }
 
@@ -233,8 +233,7 @@ exports.exportShipments = (req, res) => {
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
       LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
       LEFT JOIN Users u ON sc.userID = u.userID
-      
-      -- CHANGED 'ssl' TO 'sLog' HERE 👇
+
       LEFT JOIN ShipmentStatusLog sLog ON s.shipmentID = sLog.shipmentID
       
       WHERE s.creationTimestamp BETWEEN ? AND ?
@@ -285,7 +284,7 @@ exports.archiveShipment = (req, res) => {
     db.query(sql, [id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'ARCHIVE_SHIPMENT', `Archived Shipment #${id}`, () => {
+        logActivity(adminID, 'ARCHIVE_SHIPMENT', `Archived Shipment #${id}`, () => {
             res.json({ message: "Shipment archived successfully" });
         });
     });
@@ -300,7 +299,7 @@ exports.restoreShipment = (req, res) => {
     db.query(sql, [id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
+        logActivity(adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
             res.json({ message: "Shipment restored successfully" });
         });
     });

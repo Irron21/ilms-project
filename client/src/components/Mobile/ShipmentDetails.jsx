@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from 'react';
+// client/src/components/Mobile/ShipmentDetails.jsx
+
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../utils/api';
 import { Icons } from '../Icons';
 import './ShipmentDetails.css';
 import { queueManager } from '../../utils/queueManager';
+import FeedbackModal from '../FeedbackModal';
 
 const STEPS = [
   { label: 'Arrival Time', dbStatus: 'Arrival', icon: <Icons.Truck /> },
@@ -13,96 +16,207 @@ const STEPS = [
   { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Flag /> }
 ];
 
-function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user' prop
+// Helper to determine status priority (Used to prevent downgrading status)
+const getStatusPriority = (status) => {
+    if (status === 'Completed') return 100;
+    const index = STEPS.findIndex(s => s.dbStatus === status);
+    return index === -1 ? 0 : index + 1;
+};
+
+const getPendingOfflineData = (shipmentID) => {
+  try {
+    const queueStr = localStorage.getItem('offline_shipment_queue') || localStorage.getItem('offlineQueue');
+    if (!queueStr) return null;
+
+    const queue = JSON.parse(queueStr);
+    const myActions = queue.filter(item => 
+      item.type === 'UPDATE_STATUS' && 
+      String(item.shipmentID) === String(shipmentID)
+    );
+
+    if (myActions.length === 0) return null;
+
+    const lastAction = myActions[myActions.length - 1];
+    const pendingLogs = myActions.map(action => ({
+      phaseName: action.status,
+      timestamp: action.timestamp || new Date().toISOString(),
+      isPending: true
+    }));
+
+    return { 
+      status: lastAction.status === 'Completed' ? 'Completed' : lastAction.status,
+      logs: pendingLogs 
+    };
+  } catch (e) {
+    console.error("Error reading offline queue", e);
+    return null;
+  }
+};
+
+function ShipmentDetails({ shipment, onBack, token, user }) { 
   const [showOverlay, setShowOverlay] = useState(true);
-  const [logs, setLogs] = useState([]);
-  
-  // ✨ OPTIMISTIC STATE: We use this instead of waiting for the database
-  const [localStatus, setLocalStatus] = useState(shipment.currentStatus);
+  const [confirmStep, setConfirmStep] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
+  // 1. INITIALIZE STATUS
+  const [localStatus, setLocalStatus] = useState(() => {
+    const offlineData = getPendingOfflineData(shipment.shipmentID);
+    return offlineData ? offlineData.status : shipment.currentStatus;
+  });
+
+  // 2. INITIALIZE LOGS
+  const [logs, setLogs] = useState(() => {
+    const offlineData = getPendingOfflineData(shipment.shipmentID);
+    return offlineData ? offlineData.logs : [];
+  });
+
+  // ✅ 3. FETCH LOGS & AUTO-UPDATE STATUS
+  const fetchLogs = useCallback(async () => {
+    if (!navigator.onLine) return; 
+
+    try {
+        const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+        const url = `/shipments/${shipment.shipmentID}/logs?_t=${new Date().getTime()}`;
+        const res = await api.get(url, config);
+        const serverLogs = res.data;
+
+        // A. Update Logs
+        setLogs(prev => {
+            const pendingLogs = prev.filter(l => l.isPending);
+            const distinctPending = pendingLogs.filter(p => 
+              !serverLogs.some(s => s.phaseName === p.phaseName)
+            );
+            return [...serverLogs, ...distinctPending];
+        });
+
+        // ✅ B. CRITICAL FIX: Calculate Status from Server Logs
+        // This prevents reverting to Yellow if the parent prop is stale.
+        if (serverLogs.length > 0) {
+            const lastLog = serverLogs[serverLogs.length - 1];
+            // If the last log is "Departure", we know it's Completed
+            const newStatus = lastLog.phaseName === 'Departure' || lastLog.phaseName === 'Completed' 
+                ? 'Completed' 
+                : lastLog.phaseName;
+
+            // Only update if this new status is "ahead" or same as what we have
+            setLocalStatus(current => {
+                const currentPri = getStatusPriority(current);
+                const newPri = getStatusPriority(newStatus);
+                return newPri >= currentPri ? newStatus : current;
+            });
+        }
+
+    } catch (err) { console.error("Error fetching logs:", err); }
+  }, [shipment.shipmentID, token]);
+
+
+  // 4. Online/Offline Listeners
   useEffect(() => {
-    // 1. Listen for Online/Offline changes
-    const handleOnline = () => { setIsOffline(false); queueManager.process(); };
+    const handleOnline = () => { 
+        setIsOffline(false); 
+        queueManager.process(); 
+        setTimeout(fetchLogs, 1000); 
+    };
     const handleOffline = () => setIsOffline(true);
     
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    // 2. Try to process queue on load
-    queueManager.process();
-
+    
     return () => {
         window.removeEventListener('online', handleOnline);
         window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [fetchLogs]);
 
+
+  // 5. Polling to remove "Saving..."
   useEffect(() => {
-      // Sync local status if parent updates (e.g. after a successful sync)
-      setLocalStatus(shipment.currentStatus);
-  }, [shipment.currentStatus]);
+    if (isOffline) return;
+    fetchLogs(); 
+    const intervalId = setInterval(fetchLogs, 3000);
+    return () => clearInterval(intervalId);
+  }, [isOffline, fetchLogs]);
 
-  // OFFLINE-SAFE LOG FETCHING
+
+  // ✅ 6. SYNC FROM PARENT (Smart Guard)
   useEffect(() => {
-      const fetchLogs = async () => {
-          if (!navigator.onLine) return;
-          try {
-              const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-              const url = `/shipments/${shipment.shipmentID}/logs?_t=${new Date().getTime()}`;
-              const res = await api.get(url, config);
-              setLogs(res.data);
-          } catch (err) { console.error("Error fetching logs:", err); }
-      };
-      if (shipment.shipmentID) fetchLogs();
-  }, [shipment.shipmentID, token]);
+      if (navigator.onLine) {
+         // Check if we have pending logs (if so, we are definitely ahead of parent)
+         const hasPending = logs.some(l => l.isPending);
+         
+         if (!hasPending) {
+             // Even if no pending logs, CHECK PRIORITY.
+             // Don't let a "Pending" prop overwrite a "Completed" local state
+             const parentPriority = getStatusPriority(shipment.currentStatus);
+             const localPriority = getStatusPriority(localStatus);
 
-  // OFFLINE HANDLER
-  const handleStepClick = async (dbStatus) => {
-      // 1. Determine if this is the final step
+             // Only sync if parent is same or ahead
+             if (parentPriority >= localPriority) {
+                 setLocalStatus(shipment.currentStatus);
+             }
+         }
+      }
+  }, [shipment.currentStatus, logs, localStatus]);
+
+
+  const executeStepUpdate = (dbStatus) => {
       const isFinishing = dbStatus === 'Departure';
       const finalStatus = isFinishing ? 'Completed' : dbStatus;
+      const now = new Date().toISOString(); 
 
-      // 2. Optimistic Update
       setLocalStatus(finalStatus);
 
-      // 3. Create Fake Log (Immediate Feedback)
-      const now = new Date().toISOString(); 
-      setLogs(prevLogs => [
-          ...prevLogs, 
-          { phaseName: dbStatus, timestamp: now }, // Log for the specific step (e.g., Departure)
-          ...(isFinishing ? [{ phaseName: 'Completed', timestamp: now }] : []) // Optional: Log for Completed too
-      ]);
+      const newLog = { phaseName: dbStatus, timestamp: now, isPending: true };
+      
+      setLogs(prevLogs => {
+          if (prevLogs.some(l => l.phaseName === dbStatus)) return prevLogs;
+          const updated = [...prevLogs, newLog];
+          if (isFinishing) {
+             updated.push({ phaseName: 'Completed', timestamp: now, isPending: true });
+          }
+          return updated;
+      });
 
-      // 4. Add to Queue
-      // First: The actual step (e.g., Arrival, Departure)
       queueManager.add({
           type: 'UPDATE_STATUS',
           shipmentID: shipment.shipmentID,
           status: dbStatus,
+          timestamp: now,
           userID: user?.userID || 1
       });
 
-      // Second: If Departure, ALSO send 'Completed'
       if (isFinishing) {
           queueManager.add({
               type: 'UPDATE_STATUS',
               shipmentID: shipment.shipmentID,
               status: 'Completed',
+              timestamp: now,
               userID: user?.userID || 1
           });
       }
 
-      // 5. Sync
-      queueManager.process();
+      if (navigator.onLine) {
+          queueManager.process();
+          setTimeout(fetchLogs, 1000);
+      }
+      
+      setConfirmStep(null);
+  };
+
+  const handleStepClick = (step) => {
+      setConfirmStep(step);
   };
 
   const getStepTimestamp = (dbStatus) => {
     if (!logs || logs.length === 0) return null;
     const log = logs.find(l => l.phaseName === dbStatus || l.phase === dbStatus || l.newStatus === dbStatus);
+
     if (log) {
       const date = new Date(log.timestamp);
-      return `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${date.toLocaleDateString()}`;
+      return {
+        text: `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${date.toLocaleDateString()}`,
+        isPending: !!log.isPending
+      };
     }
     return null;
   };
@@ -121,12 +235,13 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
 
   return (
     <div className="details-container">
-      {/* ✨ OFFLINE INDICATOR */}
-      {isOffline && (
-        <div style={{background: '#333', color: 'white', textAlign: 'center', padding: '5px', fontSize: '12px'}}>
-           You are Offline. Changes will save automatically when online.
-        </div>
-      )}
+      <div className="notification-spacer">
+        {isOffline && (
+          <div className="offline-banner">
+             You are Offline. Changes will save automatically when online.
+          </div>
+        )}
+      </div>
 
       <div className="details-header">
         <div className="back-btn-absolute" onClick={onBack}>
@@ -135,13 +250,34 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
         <h2 className="shipment-title-inline">DELIVERY #{shipment.shipmentID}</h2>
       </div>
 
-      <div className="info-box">
-        <div className="info-row"><strong>Location:</strong> {shipment.destLocation}</div>
-        <div className="info-row"><strong>Client:</strong> {shipment.clientName}</div>
+      <div className="info-card">
+        <div className="info-item">
+          <div className="info-icon-box">
+             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 9v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9"/>
+                <path d="M9 22V12h6v10M2 10.6L12 2l10 8.6"/>
+             </svg>
+          </div>
+          <div className="info-content">
+             <span className="info-label">Destination</span>
+             <span className="info-value">{shipment.destName || 'N/A'}</span>
+          </div>
+        </div>
+        <div className="info-item">
+          <div className="info-icon-box">
+             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                <circle cx="12" cy="10" r="3"></circle>
+             </svg>
+          </div>
+          <div className="info-content">
+             <span className="info-label">Address</span>
+             <span className="info-value">{shipment.destLocation}</span>
+          </div>
+        </div>
       </div>
 
       <div className="steps-wrapper">
-        
         {isCompleted && showOverlay && (
           <div className="completion-overlay" onClick={() => setShowOverlay(false)}>
             <div className="lockout-badge">
@@ -153,24 +289,33 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
 
         <div className={`steps-container ${isCompleted && showOverlay ? 'blurred-background' : ''}`}>
           {STEPS.map((step, index) => {
-            const state = getStepState(localStatus, index); // Use localStatus here!
-            const timestamp = getStepTimestamp(step.dbStatus);
+            const state = getStepState(localStatus, index);
+            const timeData = getStepTimestamp(step.dbStatus);
 
             return (
               <button
                 key={index}
                 className={`step-button step-${state}`}
                 disabled={state !== 'active' || isCompleted} 
-                // ✨ USE NEW HANDLER
-                onClick={() => handleStepClick(step.dbStatus)}
+                onClick={() => handleStepClick(step)} 
               >
                 <div className="step-content">
                   <span className="step-icon">{step.icon}</span>
                   <div className="step-text-group">
                       <span className="step-label">{step.label}</span>
-                      {state === 'done' && timestamp && <span className="step-timestamp">Completed: {timestamp}</span>}
-                      {/* Show 'Pending Sync' if done but no timestamp yet (meaning it's queued) */}
-                      {state === 'done' && !timestamp && <span className="step-timestamp" style={{color: 'orange'}}>Saving...</span>}
+                      
+                      {state === 'done' && (
+                        <>
+                          {timeData ? (
+                            <span className="step-timestamp">
+                              Completed: {timeData.text} 
+                              {timeData.isPending && <span style={{color: 'orange', marginLeft: '5px'}}>(Saving...)</span>}
+                            </span>
+                          ) : (
+                             <span className="step-timestamp">Completed</span>
+                          )}
+                        </>
+                      )}
                   </div>
                 </div>
 
@@ -184,6 +329,18 @@ function ShipmentDetails({ shipment, onBack, token, user }) { // ✨ Added 'user
           })}
         </div>
       </div>
+      
+      {confirmStep && (
+        <FeedbackModal 
+          type="warning"
+          title="Confirm Status Update"
+          message={`Are you sure you want to mark "${confirmStep.label}" as completed?`}
+          subMessage="This will update the shipment progress."
+          confirmLabel="Confirm"
+          onClose={() => setConfirmStep(null)}
+          onConfirm={() => executeStepUpdate(confirmStep.dbStatus)}
+        />
+      )}
     </div>
   );
 }

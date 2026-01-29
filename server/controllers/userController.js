@@ -39,7 +39,7 @@ exports.restoreUser = (req, res) => {
                 connection.query(enableLoginSql, [id], (err) => {
                     if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to enable login" }); });
 
-                    logActivity(connection, adminID, 'RESTORE_USER', `Restored User - [ID: ${id}]`, () => {
+                    logActivity(adminID, 'RESTORE_USER', `Restored User - [ID: ${id}]`, () => {
                         connection.commit(err => {
                             if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
                             connection.release();
@@ -81,7 +81,7 @@ exports.createUser = async (req, res) => {
                     if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
 
                     const logDetails = `Created User - ${firstName} ${lastName} (${role}) [ID: ${newUserID}]`;
-                    logActivity(connection, adminID, 'CREATE_USER', logDetails, () => {
+                    logActivity(adminID, 'CREATE_USER', logDetails, () => {
                         connection.commit(err => {
                             if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
                             connection.release();
@@ -105,7 +105,7 @@ exports.updateUser = (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const logDetails = `Updated User - ${firstName} ${lastName} [ID: ${id}]`;
-        logActivity(db, adminID, 'UPDATE_USER', logDetails, () => {
+        logActivity(adminID, 'UPDATE_USER', logDetails, () => {
              res.json({ message: "User updated successfully" });
         });
     });
@@ -133,7 +133,7 @@ exports.deleteUser = (req, res) => {
 
             const logDetails = `Archive DENIED - User has active Shipment(s) ${activeIDs} [ID: ${id}]`;
 
-            return logActivity(db, adminID, 'ARCHIVE_USER_DENIED', logDetails, () => {
+            return logActivity(adminID, 'ARCHIVE_USER_DENIED', logDetails, () => {
                 res.status(409).json({ 
                     error: "Dependency Conflict", 
                     activeShipments: results.map(r => r.shipmentID) 
@@ -156,7 +156,7 @@ exports.deleteUser = (req, res) => {
                     connection.query(disableLoginSql, [id], (err) => {
                         if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to disable login" }); });
 
-                        logActivity(connection, adminID, 'ARCHIVE_USER', `Archived User - [ID: ${id}]`, () => {
+                        logActivity(adminID, 'ARCHIVE_USER', `Archived User - [ID: ${id}]`, () => {
                             connection.commit(err => {
                                 if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
                                 connection.release();
