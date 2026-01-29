@@ -1,11 +1,5 @@
 const db = require('../config/db');
-
-// --- HELPER: Log Activity ---
-const logActivity = (connection, userID, action, details, callback) => {
-    const finalUserID = userID || 1; 
-    const sql = "INSERT INTO UserActivityLog (userID, actionType, details) VALUES (?, ?, ?)";
-    connection.query(sql, [finalUserID, action, details], callback);
-};
+const logActivity = require('../utils/activityLogger');
 
 // GET VEHICLES
 exports.getAllVehicles = (req, res) => {
