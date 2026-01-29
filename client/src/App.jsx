@@ -184,6 +184,7 @@ function App() {
       {showProfile && (
       <Profile
         user={user}
+        token={token}
         onClose={() => setShowProfile(false)}
         onLogout={handleLogout}
       />

@@ -1,8 +1,9 @@
 import React from 'react';
 import './ProfileModal.css';
 import { Icons } from '../Icons';
+import api from '../../utils/api';
 
-function ProfileModal({ user, onClose, onLogout }) {
+function ProfileModal({ user, onClose, onLogout, token }) {
   
   // 1. Handle Overlay Click (Close)
   const handleOverlayClick = (e) => {
@@ -16,6 +17,25 @@ function ProfileModal({ user, onClose, onLogout }) {
   const handleCloseButtonClick = (e) => {
     e.stopPropagation();
     if (onClose) onClose();
+  };
+
+  const handleLogoutClick = async () => {
+    try {
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+      // 3. Send request WITH config
+      await api.post('/logs', {
+        action: 'LOGOUT',
+        details: 'User logged out via Mobile App',
+        timestamp: new Date().toISOString()
+      }, config); // <--- Added config here
+
+    } catch (error) {
+      console.error("Failed to log logout activity:", error);
+    } finally {
+      // 4. Always logout user even if logging fails
+      onLogout();
+    }
   };
 
   return (
@@ -44,7 +64,7 @@ function ProfileModal({ user, onClose, onLogout }) {
 
         <div className="modal-divider"></div>
 
-        <button className="modal-logout-btn" onClick={onLogout}>
+        <button className="modal-logout-btn" onClick={handleLogoutClick}>
           Log Out
         </button>
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import logoPng from '../../assets/k2mac_logo2.png'; 
 import { Icons } from '../Icons'; 
 import './DesktopApp.css'; 
+import api from '../../utils/api';
 
 // Import Views
 import ShipmentView from './ShipmentView';
@@ -29,6 +30,26 @@ function DesktopApp({ user, token, onLogout }) {
     if (showProfile) window.addEventListener('click', closeMenu);
     return () => window.removeEventListener('click', closeMenu);
   }, [showProfile]);
+
+  const handleLogoutClick = async () => {
+    try {
+      // Create config with the token (Crucial to prevent 401 Unauthorized)
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+
+      // Send the log request
+      await api.post('/logs', {
+        action: 'LOGOUT',
+        details: 'User logged out via Desktop Portal', 
+        timestamp: new Date().toISOString()
+      }, config);
+
+    } catch (error) {
+      console.error("Failed to log desktop logout:", error);
+    } finally {
+      // ✅ 4. Always logout, even if the log fails
+      onLogout();
+    }
+  };
 
   const getHeaderTitle = () => {
       switch(view) {
@@ -111,7 +132,7 @@ function DesktopApp({ user, token, onLogout }) {
                     </div>
                     
                     <div className="menu-divider"></div>
-                    <button className="menu-logout-btn" onClick={onLogout}>
+                    <button className="menu-logout-btn" onClick={handleLogoutClick}>
                         Log Out
                     </button>
                 </div>

@@ -1,4 +1,3 @@
-/* The Full Screen Overlay */
 .profile-modal-overlay {
   position: fixed;
   top: 0;
@@ -7,21 +6,18 @@
   height: 100vh;
   background-color: rgba(0, 0, 0, 0.4);
   backdrop-filter: blur(4px);
-  
-  /* 🔒 FORCE ON TOP OF EVERYTHING */
   z-index: 99999 !important; 
-  
   display: flex;
   justify-content: center;
   align-items: center;
   animation: fadeIn 0.2s ease-out;
 }
 
-/* The White Card */
+
 .profile-modal-card {
   background: white;
   width: 90%;
-  max-width: 320px; /* Looks good on mobile & desktop */
+  max-width: 320px; 
   border-radius: 16px;
   padding: 30px 20px;
   position: relative;
@@ -32,7 +28,6 @@
   animation: scaleUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* Close Button */
 .close-modal-btn {
   position: absolute;
   top: 10px;
@@ -46,7 +41,6 @@
 }
 .close-modal-btn:hover { color: #333; }
 
-/* Avatar Circle */
 .modal-avatar {
     width: 70px;
     height: 70px;

@@ -21,7 +21,7 @@ exports.restoreVehicle = (req, res) => {
     db.query(sql, [id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'RESTORE_VEHICLE', `Restored Vehicle - [ID: ${id}]`, () => {
+        logActivity(adminID, 'RESTORE_VEHICLE', `Restored Vehicle - [ID: ${id}]`, () => {
              res.json({ message: "Vehicle restored successfully" });
         });
     });
@@ -37,7 +37,7 @@ exports.createVehicle = (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const logDetails = `Created Vehicle - ${plateNo} (${type}) [ID: ${result.insertId}]`;
-        logActivity(db, adminID, 'CREATE_VEHICLE', logDetails, () => {
+        logActivity(adminID, 'CREATE_VEHICLE', logDetails, () => {
             res.json({ message: "Vehicle added successfully", id: result.insertId });
         });
     });
@@ -53,7 +53,7 @@ exports.updateVehicle = (req, res) => {
     db.query(sql, [plateNo, type, status, id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'UPDATE_VEHICLE', `Updated Vehicle - ${plateNo} [ID: ${id}]`, () => {
+        logActivity(adminID, 'UPDATE_VEHICLE', `Updated Vehicle - ${plateNo} [ID: ${id}]`, () => {
              res.json({ message: "Vehicle updated successfully" });
         });
     });
@@ -77,7 +77,7 @@ exports.updateVehicleStatus = (req, res) => {
                 // 📝 LOG THE FAILURE
                 const logDetails = `Status Change DENIED - Vehicle busy with Shipment(s) ${activeIDs} [ID: ${id}]`;
                 
-                return logActivity(db, adminID, 'UPDATE_STATUS_DENIED', logDetails, () => {
+                return logActivity(adminID, 'UPDATE_STATUS_DENIED', logDetails, () => {
                     res.status(409).json({ 
                         error: "Vehicle is currently in an active shipment", 
                         activeShipments: results.map(r => r.shipmentID) 
@@ -96,7 +96,7 @@ exports.updateVehicleStatus = (req, res) => {
         db.query(sql, [status, id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            logActivity(db, adminID, 'UPDATE_VEHICLE_STATUS', `Updated Status - [ID: ${id}] to ${status}`, () => {
+            logActivity(adminID, 'UPDATE_VEHICLE_STATUS', `Updated Status - [ID: ${id}] to ${status}`, () => {
                 res.json({ message: "Status updated successfully" });
             });
         });
@@ -119,7 +119,7 @@ exports.deleteVehicle = (req, res) => {
 
             const logDetails = `Archive DENIED - Vehicle busy with Shipment(s) ${activeIDs} [ID: ${id}]`;
 
-            return logActivity(db, adminID, 'ARCHIVE_VEHICLE_DENIED', logDetails, () => {
+            return logActivity(adminID, 'ARCHIVE_VEHICLE_DENIED', logDetails, () => {
                 res.status(409).json({ 
                     error: "Dependency Conflict", 
                     activeShipments: results.map(r => r.shipmentID) 
@@ -132,7 +132,7 @@ exports.deleteVehicle = (req, res) => {
         db.query(archiveSql, [id], (err) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            logActivity(db, adminID, 'ARCHIVE_VEHICLE', `Archived Vehicle - [ID: ${id}]`, () => {
+            logActivity(adminID, 'ARCHIVE_VEHICLE', `Archived Vehicle - [ID: ${id}]`, () => {
                 res.json({ message: "Vehicle archived successfully" });
             });
         });

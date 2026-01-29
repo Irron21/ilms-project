@@ -76,7 +76,7 @@ exports.updateStatus = (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
 
-            logActivity(db, userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
+            logActivity(userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
             res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
         });
     });
@@ -285,7 +285,7 @@ exports.archiveShipment = (req, res) => {
     db.query(sql, [id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'ARCHIVE_SHIPMENT', `Archived Shipment #${id}`, () => {
+        logActivity(adminID, 'ARCHIVE_SHIPMENT', `Archived Shipment #${id}`, () => {
             res.json({ message: "Shipment archived successfully" });
         });
     });
@@ -300,7 +300,7 @@ exports.restoreShipment = (req, res) => {
     db.query(sql, [id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(db, adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
+        logActivity(adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
             res.json({ message: "Shipment restored successfully" });
         });
     });

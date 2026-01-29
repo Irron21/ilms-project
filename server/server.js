@@ -8,6 +8,7 @@ const verifyToken = require('./middleware/authMiddleware');
 const kpiRoutes = require('./routes/kpiRoutes');
 const app = express();
 const PORT = process.env.PORT || 4000;
+const logRoutes = require('./routes/logRoutes');
 
 // Define allowed origins
 const allowedOrigins = [
@@ -56,6 +57,7 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shipments', verifyToken, shipmentRoutes);
 app.use('/api/vehicles', require('./routes/vehicleRoutes'));
 app.use('/api/kpi', kpiRoutes);
+app.use('/api/logs', logRoutes);
 
 // Start Server
 app.listen(PORT, () => {
