@@ -1,0 +1,177 @@
+/* client/src/components/Desktop/PaymentModal.css */
+
+/* 1. Modal Card - Fixed Max Height */
+.payment-modal-card {
+    width: 700px !important;
+    max-width: 95vw;
+    height: 85vh; /* Fixed height so internal parts scroll */
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    overflow: hidden; /* Prevents modal itself from growing */
+}
+
+/* 2. Header */
+.payment-header {
+    padding: 20px 30px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    flex-shrink: 0; /* Keeps header fixed size */
+}
+
+/* 3. Body - Flex Column */
+.payment-body {
+    padding: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+    flex: 1;         /* Takes remaining height */
+    overflow: hidden; /* Stops body from scrolling, forces inner parts to scroll */
+}
+
+/* 4. Stats Row */
+.payment-stats-row {
+    display: flex;
+    gap: 20px;
+    flex-shrink: 0; /* Prevents stats from shrinking */
+}
+
+.stat-box {
+    flex: 1;
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border: 1px solid transparent;
+}
+
+.stat-box.neutral { background: #fff; border-color: #e9ecef; box-shadow: 0 4px 15px rgba(0,0,0,0.03); }
+.stat-box.balance-pending { background: #fff8e1; border-color: #ffe0b2; color: #e67e22; }
+.stat-box.balance-cleared { background: #e9f7ef; border-color: #d4efdf; color: #27ae60; }
+
+.stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; opacity: 0.7; }
+.stat-value { font-size: 26px; letter-spacing: -0.5px; }
+
+/* 5. Form (Toolbar) */
+.payment-form-container {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 20px 25px;
+    flex-shrink: 0; /* Prevents form from shrinking */
+}
+
+.form-label-small { font-size: 11px; font-weight: 700; color: #95a5a6; text-transform: uppercase; margin-bottom: 10px; display: block; }
+.payment-form { display: flex; gap: 12px; width: 100%; flex-direction: row;}
+.payment-input-wrapper { position: relative; }
+.currency-symbol { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #b2bec3; font-weight: 600; z-index: 2; }
+
+.payment-input {
+    height: 44px;
+    border: 1px solid #dcdde1;
+    border-radius: 8px;
+    font-size: 14px;
+    padding: 0 15px;
+    outline: none;
+    width: 100%;
+}
+.payment-input:focus { border-color: #3498db; }
+.payment-input.amount { width: 140px; text-align: right; padding-left: 30px; font-weight: 700; color: #2c3e50; }
+.payment-input.notes { flex: 1; }
+
+.btn-pay-action {
+    height: 44px; padding: 0 30px; background: #39ba6f; color: black; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; border: 2px solid #27ae60;
+}
+.btn-pay-action:hover { background: #2ecc71; }
+
+/* 6. History Table - FIXED SCROLLING & ALIGNMENT */
+.history-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1;          /* Grow to fill remaining space */
+    min-height: 0;    /* Crucial for flex scrolling */
+    margin-top: 10px;
+}
+
+.history-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #95a5a6;
+    text-transform: uppercase;
+}
+
+/* The Wrapper that scrolls */
+.history-box {
+    border: 1px solid #eee;
+    border-radius: 12px;
+    overflow-y: auto; /* Enable Scroll Here */
+    flex: 1;          /* Fill the history-section */
+    background: white;
+}
+
+/* Remove default table borders/spacing */
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.history-table th {
+    position: sticky;
+    top: 0;
+    background: #fafafa;
+    z-index: 2;
+    padding: 12px 15px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #95a5a6;
+    text-transform: uppercase;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+}
+
+.history-table td {
+    padding: 12px 15px;
+    font-size: 13px;
+    border-bottom: 1px solid #f9f9f9;
+    color: #2d3436;
+}
+
+/* --- COLUMN ALIGNMENT FIXES --- */
+
+/* Date Column */
+.history-table th:nth-child(1),
+.history-table td:nth-child(1) {
+    width: 25%;
+    padding-left: 20px;
+}
+
+/* Notes Column */
+.history-table th:nth-child(2),
+.history-table td:nth-child(2) {
+    width: 40%;
+}
+
+/* Amount Column (Right Aligned) */
+.history-table th:nth-child(3),
+.history-table td:nth-child(3) {
+    width: 25%;
+    text-align: right !important; /* Force Right Align */
+    padding-right: 25px; /* Add padding so it's not stuck to the edge */
+}
+
+/* Actions Column (Trash Icon) */
+.history-table th:nth-child(4),
+.history-table td:nth-child(4) {
+    width: 10%;
+    text-align: center;
+}

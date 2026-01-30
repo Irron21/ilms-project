@@ -3,7 +3,8 @@ import api from '../../utils/api';
 import './PayrollView.css'; 
 import RatesManager from './RatesManager';
 import { Icons } from '../Icons'; 
-import FeedbackModal from '../FeedbackModal';
+import EmployeeLedger from './EmployeeLedger';
+import PaymentModal from './PaymentModal';
 
 function PayrollView() {
     const [periods, setPeriods] = useState([]);
@@ -12,6 +13,8 @@ function PayrollView() {
     const [loading, setLoading] = useState(false);
     const [stats, setStats] = useState({ totalSalary: 0, totalAllowance: 0, headCount: 0 });
     const [showRatesManager, setShowRatesManager] = useState(false);
+    const [selectedEmployee, setSelectedEmployee] = useState(null);
+    const [payingEmployee, setPayingEmployee] = useState(null);
 
     // 1. Load Periods
     useEffect(() => {
@@ -154,11 +157,13 @@ function PayrollView() {
                                 <th>Bonus</th>
                                 <th>Net Salary</th>
                                 <th>Allowance</th>
+                                <th>Paid</th>
+                                <th>Status</th>                                 
                             </tr>
                         </thead>
                         <tbody>
                             {payrollData.map((row) => (
-                                <tr key={row.userID}>
+                                <tr key={row.userID} onClick={() => setSelectedEmployee(row)} style={{cursor: 'pointer'}}>
                                     <td className="employee-name">{row.firstName} {row.lastName}</td>
                                     <td>
                                         <span className={`role-badge ${row.role === 'Driver' ? 'role-driver' : 'role-helper'}`}>
@@ -168,7 +173,7 @@ function PayrollView() {
                                     <td style={{textAlign: 'center'}}>{row.tripCount}</td>
                                     <td className="text-right money-positive">{formatMoney(row.totalBasePay)}</td>
                                     <td className="text-right money-negative">
-                                        {row.totalDeductions > 0 ? `(${formatMoney(row.totalDeductions)})` : '-'}
+                                        {row.totalDeductions > 0 ? `-${formatMoney(row.totalDeductions)}` : '-'}
                                     </td>
                                     <td className="text-right money-positive">
                                         {row.totalBonus > 0 ? `+${formatMoney(row.totalBonus)}` : '-'}
@@ -179,6 +184,44 @@ function PayrollView() {
                                     <td className="text-right money-neutral">
                                         {formatMoney(row.totalAllowance)}
                                     </td>
+                                    <td className="text-right">
+                                        {formatMoney(row.totalPaid)}
+                                    </td>
+                                    <td style={{textAlign:'center'}}>
+                                      {/* CASE 1: OVERPAID (Paid > Net) - Employee owes company */}
+                                      {Number(row.totalPaid) > Number(row.netSalary) ? (
+                                          <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
+                                              <span className="vehicle-badge" style={{background:'#fff3cd', color:'#856404', border:'1px solid #ffeeba'}}>
+                                                  OVERPAID
+                                              </span>
+                                              <span style={{fontSize:'10px', color:'#e74c3c', fontWeight:'700', marginTop:'2px'}}>
+                                                  (Owes {formatMoney(row.totalPaid - row.netSalary)})
+                                              </span>
+                                          </div>
+                                      ) : 
+                                      
+                                      /* CASE 2: FULLY PAID (Paid == Net) */
+                                      Number(row.totalPaid) === Number(row.netSalary) && Number(row.netSalary) > 0 ? (
+                                          <span className="vehicle-badge" style={{background:'#e9f7ef', color:'#27ae60'}}>
+                                              PAID
+                                          </span>
+                                      ) : 
+                                      
+                                      /* CASE 3: BALANCE REMAINING (Paid < Net) */
+                                      (
+                                          <button 
+                                              className="action-btn" 
+                                              style={{
+                                                  background:'#eaf6fa', color:'#3498db', padding:'4px 10px', 
+                                                  borderRadius:'15px', fontSize:'11px', fontWeight:'700', width:'auto',
+                                                  whiteSpace: 'nowrap', border: '1px solid #2191dcff'
+                                              }}
+                                              onClick={(e) => { e.stopPropagation(); setPayingEmployee(row); }}
+                                          >
+                                              PAY BAL
+                                          </button>
+                                      )}
+</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -190,6 +233,24 @@ function PayrollView() {
                 <RatesManager onClose={() => setShowRatesManager(false)} />
             )}
 
+            {selectedEmployee && (
+                <EmployeeLedger 
+                    employee={selectedEmployee} 
+                    periodID={selectedPeriod}
+                    onClose={() => setSelectedEmployee(null)}
+                    onUpdate={() => fetchPayrollSummary(selectedPeriod)} // Refresh main numbers when they close ledger
+                />
+            )}
+
+            {payingEmployee && (
+                <PaymentModal 
+                    employee={payingEmployee}
+                    periodID={selectedPeriod}
+                    netSalary={payingEmployee.netSalary}
+                    onClose={() => setPayingEmployee(null)}
+                    onUpdate={() => fetchPayrollSummary(selectedPeriod)}
+                />
+            )}
         </div>
     );
 }

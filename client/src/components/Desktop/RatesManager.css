@@ -49,6 +49,7 @@
     flex: 1;              /* Takes all remaining height */
     overflow-y: auto;     /* <--- CRITICAL: Scroll happens here */
     padding: 0 25px 25px 25px;
+    scrollbar-gutter: stable;
 }
 
 /* 4. Mini Input Groups */
