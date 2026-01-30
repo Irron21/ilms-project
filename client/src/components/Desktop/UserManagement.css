@@ -132,7 +132,7 @@
 }
 
 .user-table td {
-    padding: 12.9px 15px;
+    padding: 10.9px 15px;
     border-bottom: 1px solid #F5F7FA;
     vertical-align: middle;
     font-size: 14px;
@@ -157,7 +157,6 @@
 }
 .role-tag.admin { background: #E0E0E0; color: #333; }
 .role-tag.operations { background: #E3F2FD; color: #1565C0; }
-.role-tag.crew { background: #F3E5F5; color: #7B1FA2; }
 .role-tag.driver { background: #E8F5E9; color: #2E7D32; }
 .role-tag.helper { background: #FFF3E0; color: #E65100; }
 
@@ -168,14 +167,16 @@
 }
 
 .icon-btn {
-    background: transparent !important;
-    border: none !important;
+    background: transparent;
+    border: none;
     cursor: pointer;
-    padding: 6px;
-    display: flex;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.2s;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 0.2s;
+    color: #555; 
 }
 
 .icon-btn svg {
@@ -188,11 +189,9 @@
 }
 
 .icon-btn:hover {
-    opacity: 0.5;
-}
-
-.icon-btn:hover svg {
-    opacity: 1;
+    background-color: #F0F0F0;
+    color: #000; 
+    transform: scale(1.1);
 }
 
 /* --- MODAL STYLES --- */

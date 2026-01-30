@@ -155,5 +155,71 @@ export const Icons = {
        <polyline points="1 4 1 10 7 10"></polyline>
        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
     </svg>
-  )
+  ),
+  Settings: (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <circle cx="12" cy="12" r="3"></circle>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+    </svg>
+  ),
+
+  X: (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <line x1="18" y1="6" x2="6" y2="18"></line>
+      <line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  ),
+
+  Plus: (props) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <line x1="12" y1="5" x2="12" y2="19"></line>
+      <line x1="5" y1="12" x2="19" y2="12"></line>
+    </svg>
+  ),
+  Refresh: (props) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+    </svg>
+  ),
+  CheckCircle: (props) => (
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+            <polyline points="22 4 12 14.01 9 11.01"></polyline>
+        </svg>
+    ),
+    Wallet: (props) => (
+        <svg 
+            width={props.size || 24} 
+            height={props.size || 24} 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            {...props}
+        >
+            <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+            <path d="M4 6v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6a2 2 0 0 1-2-2z" />
+            <line x1="16" y1="14" x2="16.01" y2="14" />
+        </svg>
+    ),
+
+    Cash: (props) => (
+        <svg 
+            width={props.size || 24} 
+            height={props.size || 24} 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            {...props}
+        >
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+            <path d="M12 15a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" /> 
+        </svg>
+    ),
 };

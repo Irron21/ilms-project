@@ -10,5 +10,6 @@ router.post('/create', shipmentController.createShipment);
 router.get('/export', shipmentController.exportShipments);
 router.put('/:id/archive', shipmentController.archiveShipment);
 router.put('/:id/restore', shipmentController.restoreShipment);
+router.get('/payroll-routes', shipmentController.getPayrollRoutes);
 
 module.exports = router;
