@@ -58,6 +58,8 @@ app.use('/api/shipments', verifyToken, shipmentRoutes);
 app.use('/api/vehicles', require('./routes/vehicleRoutes'));
 app.use('/api/kpi', kpiRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/payroll', require('./routes/payrollRoutes'));
+app.use('/api/rates', require('./routes/ratesRoutes'));
 
 // Start Server
 app.listen(PORT, () => {

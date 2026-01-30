@@ -46,7 +46,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px;
+    padding: 10px 15px;
     flex-shrink: 0;
     background-color: white;
     min-height: 70px;
@@ -81,7 +81,7 @@
 
 .custom-table th {
     text-align: left;
-    padding: 8px 15px;
+    padding: 15px;
     color: #888;
     font-size: 13px;
     font-weight: 700;
@@ -103,7 +103,7 @@
 .custom-table th:nth-child(8) { width: 8%; }  /* Expand Button (Now 8th) */
 
 .custom-table td {
-    padding: 15.9px 15px; /* 15.9px vertical padding to fill ghost rows on a native resolution */
+    padding: 10.9px 15px;
     border-bottom: 1px solid #F0F0F0; 
     vertical-align: middle;
     white-space: nowrap;
@@ -194,9 +194,14 @@
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 .crew-popup h4 { margin: 0 0 10px 0; font-size: 11px; color: #888; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #EEE; padding-bottom: 5px; }
 .crew-popup-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
-.role-badge { font-size: 10px; padding: 3px 6px; border-radius: 4px; color: white; font-weight: 700; text-transform: uppercase; }
-.role-badge.driver { background-color: #2D9CDB; }
-.role-badge.helper { background-color: #F2C94C; color: #333; }
+.role-badge { padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.role-badge.driver { background: #E8F5E9; color: #2E7D32; }
+.role-badge.helper { background: #FFF3E0; color: #E65100; }
 
 .modal-overlay-desktop {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
