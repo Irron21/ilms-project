@@ -10,49 +10,57 @@ exports.getPeriods = (req, res) => {
 };
 
 // Function to carry over debts from the previous period
+// Function to carry over debts from the previous period
 const processCarryOverDebts = async (currentPeriodID, dbConnection) => {
-    // 1. Get the current period details to find the Previous Period
-    // (Assuming IDs are sequential, or you rely on dates. Sequential ID - 1 is easiest for now)
+    // 1. Get previous period ID
     const previousPeriodID = currentPeriodID - 1; 
-    if (previousPeriodID <= 0) return; // No previous period
+    if (previousPeriodID <= 0) return; 
 
-    // 2. Find everyone who was OVERPAID in the previous period
-    // We reuse the logic from getPayrollSummary essentially
-    const sql = `
-        SELECT 
-            u.userID,
-            -- Calculate Net Salary of Previous Period
-            (
-                COALESCE(SUM(sp.baseFee), 0) + 
-                COALESCE((SELECT SUM(amount) FROM PayrollAdjustments WHERE userID = u.userID AND periodID = ? AND type = 'BONUS'), 0) -
-                COALESCE((SELECT SUM(amount) FROM PayrollAdjustments WHERE userID = u.userID AND periodID = ? AND type = 'DEDUCTION'), 0)
-            ) as netSalary,
-            -- Calculate Amount Paid
-            COALESCE((SELECT SUM(amount) FROM PayrollPayments WHERE userID = u.userID AND periodID = ?), 0) as totalPaid
-        FROM Users u
-        LEFT JOIN ShipmentPayroll sp ON u.userID = sp.crewID AND sp.periodID = ?
-        GROUP BY u.userID
-        HAVING totalPaid > netSalary
+    // ✅ FIX START: Delete existing carry-overs for this period first!
+    // This prevents "Stacking" deductions if you click Generate multiple times.
+    const cleanUpSql = `
+        DELETE FROM PayrollAdjustments 
+        WHERE periodID = ? 
+        AND reason = 'Cash Advance / Overage from Previous Period'
     `;
+    
+    // We wrap the rest in a callback to ensure cleanup happens first
+    dbConnection.query(cleanUpSql, [currentPeriodID], (err) => {
+        if (err) return console.error("Error cleaning up old debts:", err);
 
-    // Execute Query
-    // We pass previousPeriodID 4 times
-    dbConnection.query(sql, [previousPeriodID, previousPeriodID, previousPeriodID, previousPeriodID], (err, results) => {
-        if (err) return console.error("Error checking debts:", err);
+        // 2. NOW calculate the debts from the previous period
+        const sql = `
+            SELECT 
+                u.userID,
+                (
+                    COALESCE(SUM(sp.baseFee), 0) + 
+                    COALESCE((SELECT SUM(amount) FROM PayrollAdjustments WHERE userID = u.userID AND periodID = ? AND type = 'BONUS' AND status != 'VOID'), 0) -
+                    COALESCE((SELECT SUM(amount) FROM PayrollAdjustments WHERE userID = u.userID AND periodID = ? AND type = 'DEDUCTION' AND status != 'VOID'), 0)
+                ) as netSalary,
+                COALESCE((SELECT SUM(amount) FROM PayrollPayments WHERE userID = u.userID AND periodID = ? AND status = 'COMPLETED'), 0) as totalPaid
+            FROM Users u
+            LEFT JOIN ShipmentPayroll sp ON u.userID = sp.crewID AND sp.periodID = ?
+            GROUP BY u.userID
+            HAVING totalPaid > netSalary
+        `;
 
-        results.forEach(row => {
-            const debt = row.totalPaid - row.netSalary;
-            
-            if (debt > 0) {
-                console.log(`Carrying over debt of ${debt} for User ${row.userID}`);
+        dbConnection.query(sql, [previousPeriodID, previousPeriodID, previousPeriodID, previousPeriodID], (err, results) => {
+            if (err) return console.error("Error checking debts:", err);
+
+            results.forEach(row => {
+                const debt = row.totalPaid - row.netSalary;
                 
-                // 3. Insert Deduction into CURRENT Period
-                const insertSql = `
-                    INSERT INTO PayrollAdjustments (userID, periodID, type, amount, reason)
-                    VALUES (?, ?, 'DEDUCTION', ?, 'Cash Advance / Overage from Previous Period')
-                `;
-                dbConnection.query(insertSql, [row.userID, currentPeriodID, debt]);
-            }
+                if (debt > 0) {
+                    console.log(`Carrying over debt of ${debt} for User ${row.userID}`);
+                    
+                    // 3. Insert fresh Deduction
+                    const insertSql = `
+                        INSERT INTO PayrollAdjustments (userID, periodID, type, amount, reason)
+                        VALUES (?, ?, 'DEDUCTION', ?, 'Cash Advance / Overage from Previous Period')
+                    `;
+                    dbConnection.query(insertSql, [row.userID, currentPeriodID, debt]);
+                }
+            });
         });
     });
 };
@@ -85,16 +93,15 @@ exports.generatePayroll = (req, res) => {
 
         db.query(updateSql, [periodID, start, end], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
-            
+
+            processCarryOverDebts(periodID, db); 
+
             res.json({ 
                 message: "Payroll Generated Successfully", 
                 rowsProcessed: result.changedRows 
             });
         });
     });
-    processCarryOverDebts(periodID, db); 
-
-    res.json({ message: "Payroll Generated and Debts Carried Over" });
 };
 
 // 3. VIEW: Get the "Suggestion" (Summary by Employee)
@@ -153,5 +160,33 @@ exports.getPayrollSummary = (req, res) => {
         }));
         
         res.json(finalResults);
+    });
+};
+
+// GET: Fetch all trips (shipments) for a specific employee in a period
+exports.getEmployeeTrips = (req, res) => {
+    const { periodID, userID } = req.params;
+
+    const sql = `
+        SELECT 
+            s.shipmentID,
+            s.creationTimestamp as shipmentDate,  -- ✅ Fix: Map real column to expected name
+            s.destLocation as routeCluster,           -- ✅ Fix: Use destName since routeCluster column is missing
+            v.type as vehicleType,                -- ✅ Fix: Get type from joined Vehicles table
+            sp.baseFee,
+            sp.allowance
+        FROM ShipmentPayroll sp
+        JOIN Shipments s ON sp.shipmentID = s.shipmentID
+        LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID  -- ✅ Fix: Join Vehicles table
+        WHERE sp.periodID = ? AND sp.crewID = ?
+        ORDER BY s.creationTimestamp DESC
+    `;
+
+    db.query(sql, [periodID, userID], (err, results) => {
+        if (err) {
+            console.error("SQL Error in getEmployeeTrips:", err.message); 
+            return res.status(500).json({ error: err.message });
+        }
+        res.json(results);
     });
 };

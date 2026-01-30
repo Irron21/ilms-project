@@ -91,8 +91,8 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                 {/* 1. HEADER */}
                 <div className="payment-header">
                     <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
-                        <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#e3f2fd', display:'flex', alignItems:'center', justifyContent:'center', color:'#2196f3'}}>
-                            <Icons.Profile size={24} />
+                        <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#cff1ddff', display:'flex', alignItems:'center', justifyContent:'center', color:'#1cca62ff'}}>
+                            <Icons.Cash size={24} />
                         </div>
                         <div>
                             <h2 style={{margin:0, fontSize:'20px', color:'#2d3436'}}>Payout: {employee.firstName} {employee.lastName}</h2>
@@ -164,13 +164,12 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                     <div className="history-section">
                         <h4>Payment History</h4>
                         <div className="history-box">
-                            {/* ✅ Changed className to 'history-table' to use our new fixed CSS */}
                             <table className="history-table">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
                                         <th>Notes</th>
-                                        <th>Amount</th> {/* CSS now handles the alignment */}
+                                        <th>Amount</th>
                                         <th></th> 
                                     </tr>
                                 </thead>
@@ -186,7 +185,7 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                                                 <td style={{fontWeight:'500', textDecoration: isVoid ? 'line-through' : 'none'}}>
                                                     {pay.notes}
                                                 </td>
-                                                <td style={{fontWeight:'700', color: isVoid ? '#b2bec3' : '#27ae60', textDecoration: isVoid ? 'line-through' : 'none'}}>
+                                                <td style={{color: isVoid ? '#b2bec3' : '#27ae60', textDecoration: isVoid ? 'line-through' : 'none'}}>
                                                     -₱{Number(pay.amount).toLocaleString()}
                                                 </td>
                                                 <td>
@@ -195,7 +194,6 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                                                             onClick={() => handleVoidClick(pay)} 
                                                             className="action-btn"
                                                             title="Void Transaction"
-                                                            style={{color:'#e74c3c'}}
                                                         >
                                                             <Icons.Trash size={16} />
                                                         </button>

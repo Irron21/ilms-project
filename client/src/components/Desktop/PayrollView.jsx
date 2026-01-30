@@ -5,6 +5,7 @@ import RatesManager from './RatesManager';
 import { Icons } from '../Icons'; 
 import EmployeeLedger from './EmployeeLedger';
 import PaymentModal from './PaymentModal';
+import ShipmentHistoryModal from './ShipmentHistoryModal';
 
 function PayrollView() {
     const [periods, setPeriods] = useState([]);
@@ -15,6 +16,12 @@ function PayrollView() {
     const [showRatesManager, setShowRatesManager] = useState(false);
     const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [payingEmployee, setPayingEmployee] = useState(null);
+    const [viewingTrips, setViewingTrips] = useState(null);
+    
+    const getPeriodName = () => {
+        const p = periods.find(item => item.periodID === Number(selectedPeriod));
+        return p ? p.periodName : '';
+    };
 
     // 1. Load Periods
     useEffect(() => {
@@ -60,17 +67,29 @@ function PayrollView() {
     };
 
     const handleGenerate = async () => {
-        if (!selectedPeriod) return;
+        // 1. SAFETY CHECK: Stop if already loading or no period selected
+        if (!selectedPeriod || loading) return;
         
         setLoading(true);
 
-        await new Promise(resolve => setTimeout(resolve, 600));
-
         try {
-            const res = await api.post('/payroll/generate', { periodID: selectedPeriod });
-            fetchPayrollSummary(selectedPeriod); 
+            // 2. Artificial delay (Optional, visual feedback only)
+            await new Promise(resolve => setTimeout(resolve, 600));
+
+            // 3. Call Generate API
+            await api.post('/payroll/generate', { periodID: selectedPeriod });
+            
+            // 4. Success! Now Refresh the Data
+            // We await this so the spinner stays until data is visible
+            await fetchPayrollSummary(selectedPeriod); 
+
         } catch (error) {
-            alert("Failed to generate payroll.");
+            console.error("Generation failed:", error);
+            // Optional: meaningful error message
+            alert("Failed to generate payroll. Please check if the server is running.");
+        } finally {
+            // 5. CRITICAL: Always turn off loading, even if it crashed
+            setLoading(false);
         }
     };
 
@@ -164,7 +183,24 @@ function PayrollView() {
                         <tbody>
                             {payrollData.map((row) => (
                                 <tr key={row.userID} onClick={() => setSelectedEmployee(row)} style={{cursor: 'pointer'}}>
-                                    <td className="employee-name">{row.firstName} {row.lastName}</td>
+                                    <td className="employee-name">
+                                        <span 
+                                            onClick={(e) => {
+                                                e.stopPropagation(); 
+                                                setViewingTrips(row);
+                                            }}
+                                            style={{
+                                                color: '#2980b9', 
+                                                fontWeight: '700', 
+                                                textDecoration: 'underline', 
+                                                cursor: 'pointer',
+                                                textUnderlineOffset: '3px'
+                                            }}
+                                            title="View Trip History"
+                                        >
+                                            {row.firstName} {row.lastName}
+                                        </span>
+                                    </td>
                                     <td>
                                         <span className={`role-badge ${row.role === 'Driver' ? 'role-driver' : 'role-helper'}`}>
                                             {row.role}
@@ -251,6 +287,15 @@ function PayrollView() {
                     onUpdate={() => fetchPayrollSummary(selectedPeriod)}
                 />
             )}
+
+            {viewingTrips && (
+              <ShipmentHistoryModal 
+                  employee={viewingTrips}
+                  periodID={selectedPeriod}
+                  periodName={getPeriodName()}
+                  onClose={() => setViewingTrips(null)}
+              />
+          )}
         </div>
     );
 }
