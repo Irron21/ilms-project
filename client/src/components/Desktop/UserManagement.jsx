@@ -488,7 +488,14 @@ function UserManagement({ activeTab = "users" }) {
           <form className="modal-card" onSubmit={handleTruckSubmit}>
             <h3>Add Vehicle</h3>
             <label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required />
-            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="Wing-Van">Wing-Van</option><option value="L300">L300</option><option value="Travis">Travis</option><option value="Forward">Forward</option></select>
+            <label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}>
+              <option value="6WH">6-Wheeler</option>
+              <option value="10WH">10-Wheeler</option>
+              <option value="4WH">4-Wheeler</option>
+              <option value="AUV">AUV</option>       
+              <option value="FWD">Forward</option>
+              <option value="H100">H100</option>
+            </select>
             <div className="modal-footer">
                 <button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button>
                 <button type="submit" className="btn-save">Save</button>

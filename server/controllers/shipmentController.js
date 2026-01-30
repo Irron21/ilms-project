@@ -15,10 +15,9 @@ exports.getActiveShipments = (req, res) => {
         // DRIVER/HELPER MODE: Always show active assigned jobs (ignore archive toggle for them)
         sql = `
             SELECT 
-                s.shipmentID, c.clientName, s.destName, s.destLocation, 
+                s.shipmentID, s.destName, s.destLocation, 
                 s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType
             FROM Shipments s
-            JOIN Clients c ON s.clientID = c.clientID
             JOIN Vehicles v ON s.vehicleID = v.vehicleID 
             JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
             WHERE sc.userID = ? AND s.isArchived = 0 
@@ -29,11 +28,10 @@ exports.getActiveShipments = (req, res) => {
         // ADMIN MODE: Filter by isArchived status
         sql = `
             SELECT 
-                s.shipmentID, c.clientName, s.destName, s.destLocation, 
+                s.shipmentID, s.destName, s.destLocation, 
                 s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType,
                 GROUP_CONCAT(CONCAT(u.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
             FROM Shipments s
-            JOIN Clients c ON s.clientID = c.clientID
             JOIN Vehicles v ON s.vehicleID = v.vehicleID
             LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
             LEFT JOIN Users u ON sc.userID = u.userID
@@ -47,6 +45,87 @@ exports.getActiveShipments = (req, res) => {
     db.query(sql, params, (err, results) => {
         if (err) return res.status(500).json({ error: "Failed to fetch shipments" });
         res.json(results);
+    });
+};
+
+const calculatePayroll = (shipmentID) => {
+    console.log(`💰 Attempting to calculate payroll for Shipment #${shipmentID}...`);
+
+    // 1. Get Shipment Info AND All Crew Members
+    const getCrewSQL = `
+        SELECT 
+            sc.userID as crewID, 
+            u.role,          
+            s.destLocation, 
+            v.type as vehicleType
+        FROM ShipmentCrew sc
+        JOIN Users u ON sc.userID = u.userID        
+        JOIN Shipments s ON s.shipmentID = sc.shipmentID
+        LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID 
+        WHERE s.shipmentID = ?
+    `;
+
+    db.query(getCrewSQL, [shipmentID], (err, crewMembers) => {
+        if (err) return console.error("Payroll Error (Get Crew):", err);
+        if (crewMembers.length === 0) return console.error("Payroll Error: No crew found for this shipment.");
+
+        // 2. Get the Rates for this Location/Vehicle
+        const { destLocation, vehicleType } = crewMembers[0]; 
+
+        const getRateSQL = `
+            SELECT * FROM PayrollRates 
+            WHERE ? LIKE CONCAT('%', routeCluster, '%') 
+            AND vehicleType = ? 
+            LIMIT 1
+        `;
+
+        db.query(getRateSQL, [destLocation, vehicleType || 'AUV'], (err, rates) => {
+            if (err) return console.error("Payroll Error (Get Rate):", err);
+
+            // Default rates if not found in DB
+            const rateData = rates.length > 0 ? rates[0] : null;
+            const standardDriverPay = rateData ? rateData.driverBaseFee : 600.00;
+            const standardHelperPay = rateData ? rateData.helperBaseFee : 400.00;
+            
+            // 3. CALCULATE SPLIT ALLOWANCE
+            // Example: 350 Total / 2 Crew = 175 Each
+            const totalAllowance = rateData ? rateData.foodAllowance : 350.00;
+            const crewCount = crewMembers.length;
+            const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
+
+            console.log(`📍 Route: ${destLocation} | 🚛 Type: ${vehicleType}`);
+            console.log(`🍔 Total Allowance: ${totalAllowance} / ${crewCount} people = ${allowancePerPerson} each`);
+
+            // 4. Loop through EACH crew member
+            crewMembers.forEach(member => {
+                let payAmount = 0;
+
+                // Determine Salary based on Role
+                if (member.role === 'Driver') {
+                    payAmount = standardDriverPay;
+                } else {
+                    payAmount = standardHelperPay; 
+                }
+
+                // 5. Insert Record
+                // NOTE: We save 'allowancePerPerson' so Admin can see it, 
+                // but the Database SQL we just ran ensures it is NOT added to the Total Payout.
+                const insertPayrollSQL = `
+                    INSERT INTO ShipmentPayroll 
+                    (shipmentID, crewID, baseFee, allowance, status, payoutDate) 
+                    VALUES (?, ?, ?, ?, 'PENDING', NOW())
+                    ON DUPLICATE KEY UPDATE payoutDate = NOW()
+                `;
+
+                db.query(insertPayrollSQL, [shipmentID, member.crewID, payAmount, allowancePerPerson], (err) => {
+                    if (err) {
+                        console.error(`❌ Payroll Failed for User ${member.crewID}:`, err.message);
+                    } else {
+                        console.log(`✅ Logged User ${member.crewID}: Salary ${payAmount}, Allowance Received ${allowancePerPerson}`);
+                    }
+                });
+            });
+        });
     });
 };
 
@@ -79,6 +158,10 @@ exports.updateStatus = (req, res) => {
             logActivity(userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
             res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
         });
+
+        if (status === 'Completed') { 
+            calculatePayroll(shipmentID); 
+        }
     });
 };
 
@@ -127,13 +210,12 @@ exports.getFormResources = (req, res) => {
 exports.createShipment = (req, res) => {
     // 1. Extract and Parse Data (Ensure IDs are Numbers)
     const shipmentID = req.body.shipmentID;
-    const clientID = 1; 
     const vehicleID = req.body.vehicleID;
     const destName = req.body.destName;
     const destLocation = req.body.destLocation;
     const driverID = parseInt(req.body.driverID); 
     const helperID = parseInt(req.body.helperID); 
-    const operationsUserID = req.body.operationsUserID;
+    const userID = req.body.userID;
 
     // 2. Basic Validation
     if (!shipmentID) return res.status(400).json({ error: "Shipment ID is required." });
@@ -154,12 +236,12 @@ exports.createShipment = (req, res) => {
             }
 
             const sqlShipment = `
-                INSERT INTO Shipments (shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID, currentStatus) 
-                VALUES (?, ?, ?, ?, ?, ?, 'Pending') 
+                INSERT INTO Shipments (shipmentID, vehicleID, destName, destLocation, userID, currentStatus) 
+                VALUES (?, ?, ?, ?, ?, 'Pending') 
             `;
 
             // Step 3: Insert Shipment
-            connection.query(sqlShipment, [shipmentID, clientID, vehicleID, destName, destLocation, operationsUserID], (err, result) => {
+            connection.query(sqlShipment, [shipmentID, vehicleID, destName, destLocation, userID], (err, result) => {
                 if (err) {
                     return connection.rollback(() => {
                         connection.release();
@@ -183,10 +265,10 @@ exports.createShipment = (req, res) => {
                     const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
                     
                     // Step 5: Insert Log
-                    connection.query(sqlLog, [shipmentID, operationsUserID], (err) => {
+                    connection.query(sqlLog, [shipmentID, userID], (err) => {
                         if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Log fail" }); });
 
-                        logActivity(connection, operationsUserID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
+                        logActivity(userID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
                             connection.commit((err) => {
                                 connection.release();
                                 res.json({ message: "Success", shipmentID });
@@ -205,7 +287,6 @@ exports.exportShipments = (req, res) => {
     const query = `
       SELECT 
         s.shipmentID AS "Shipment ID",
-        c.clientName AS "Client",
         c.defaultLocation AS "Origin",
         s.destName AS "Destination Name",
         s.destLocation AS "Destination Address",
@@ -229,7 +310,6 @@ exports.exportShipments = (req, res) => {
         DATE_FORMAT(MAX(CASE WHEN sLog.phaseName = 'Completed' THEN sLog.timestamp END), '%Y-%m-%d %H:%i:%s') AS "Completion Time"
 
       FROM Shipments s
-      JOIN Clients c ON s.clientID = c.clientID
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
       LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
       LEFT JOIN Users u ON sc.userID = u.userID
@@ -302,5 +382,34 @@ exports.restoreShipment = (req, res) => {
         logActivity(adminID, 'RESTORE_SHIPMENT', `Restored Shipment #${id}`, () => {
             res.json({ message: "Shipment restored successfully" });
         });
+    });
+};
+
+exports.getPayrollRoutes = (req, res) => {
+    // We select Route AND VehicleType to build a map
+    const sql = "SELECT routeCluster, vehicleType FROM PayrollRates ORDER BY routeCluster ASC";
+    
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error("Error fetching routes:", err);
+            return res.status(500).json({ error: "Failed to fetch routes" });
+        }
+
+        // Transform data into a clean structure:
+        // { "CANDELARIA": ["AUV"], "TAGUIG": ["AUV", "6WH"] }
+        const routeMap = {};
+        
+        results.forEach(row => {
+            const route = row.routeCluster; // Case sensitive matches usually fine here
+            if (!routeMap[route]) {
+                routeMap[route] = [];
+            }
+            // Avoid duplicates
+            if (!routeMap[route].includes(row.vehicleType)) {
+                routeMap[route].push(row.vehicleType);
+            }
+        });
+
+        res.json(routeMap);
     });
 };

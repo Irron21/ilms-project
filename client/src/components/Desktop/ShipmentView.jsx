@@ -41,9 +41,100 @@ function ShipmentView({ user, token, onLogout }) {
     const [resources, setResources] = useState({ drivers: [], helpers: [], vehicles: [] });
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     const [formData, setFormData] = useState({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
+    
+    // --- 2. DATA STATE ---
+    // routeRules: The Object from API { "Taguig": ["AUV", "6WH"], "Candelaria": ["AUV"] }
+    const [routeRules, setRouteRules] = useState({}); 
+    const [allVehicles, setAllVehicles] = useState([]); 
+    
+    // --- 3. UI STATE ---
+    const [filteredRoutes, setFilteredRoutes] = useState([]); // For Datalist suggestions
+    const [filteredVehicles, setFilteredVehicles] = useState([]); // For Vehicle Dropdown
+    const [isVehicleDisabled, setIsVehicleDisabled] = useState(true); // 🔒 Locked by default
+
+    // --- 5. Handle Typing (The "Smart" Logic) ---
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                // A. Get Route Rules (Returns Object)
+                const routeRes = await api.get('/shipments/payroll-routes');
+                setRouteRules(routeRes.data || {});
+
+                // B. Get Vehicles (Returns Array)
+                const vehicleRes = await api.get('/vehicles'); 
+                setAllVehicles(vehicleRes.data || []);
+
+            } catch (error) {
+                console.error("Error loading data:", error);
+            }
+        };
+        loadData();
+    }, []);
+
+    // --- 5. SMART INPUT HANDLER ---
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        
+        setFormData(prev => ({ ...prev, [name]: value }));
+
+        // === LOGIC: Route Autocomplete & Vehicle Locking ===
+        if (name === 'destLocation') {
+            const cleanInput = value.toLowerCase().trim();
+            const allRouteNames = Object.keys(routeRules); // Get list from the Object keys
+
+            // 1. Filter Suggestions
+            if (cleanInput.length > 0) {
+                const matches = allRouteNames
+                    .filter(r => r.toLowerCase().includes(cleanInput))
+                    .slice(0, 10);
+                setFilteredRoutes(matches);
+            } else {
+                setFilteredRoutes([]);
+            }
+
+            // 2. Unlock Vehicles if Exact Match Found
+            const matchedRouteKey = allRouteNames.find(
+                r => r.toLowerCase() === cleanInput
+            );
+
+            if (matchedRouteKey) {
+                // ✅ Valid Route: Filter trucks allowed for this route
+                const allowedTypes = routeRules[matchedRouteKey]; // e.g. ["AUV"]
+                
+                const validTrucks = allVehicles.filter(truck => 
+                    allowedTypes.includes(truck.type)
+                );
+                
+                setFilteredVehicles(validTrucks);
+                setIsVehicleDisabled(false); // 🔓 Unlock
+            } else {
+                // ❌ Invalid Route: Lock dropdown
+                setFilteredVehicles([]);
+                setIsVehicleDisabled(true); 
+                
+                // Clear selected vehicle if route changes to invalid
+                if (formData.vehicleID) {
+                    setFormData(prev => ({ ...prev, vehicleID: '' }));
+                }
+            }
+        }
+    };
 
     const expandedIdRef = useRef(null);
     useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
+
+    const [availableRoutes, setAvailableRoutes] = useState([]);
+    useEffect(() => {
+        const fetchRoutes = async () => {
+            try {
+                const response = await api.get('/shipments/payroll-routes');
+                setAvailableRoutes(response.data);
+            } catch (error) {
+                console.error("Could not load routes", error);
+            }
+        };
+        fetchRoutes();
+    }, []);
     
     // --- FETCH DATA ---
     useEffect(() => {
@@ -115,25 +206,45 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     const handleCreateShipment = async (e) => {
-        e.preventDefault();
-        try {
-            const config = { headers: { Authorization: `Bearer ${token}` } };
-            await api.post('/shipments/create', { ...formData, operationsUserID: user.userID }, config);
+            e.preventDefault();
+            const allRouteNames = Object.keys(routeRules);
+            const routeExists = allRouteNames.some(
+                r => r.toLowerCase() === formData.destLocation.trim().toLowerCase()
+            );
 
-            setShowModal(false);
-            setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
-            fetchData(true); 
+            if (!routeExists) {
+                setFeedbackModal({ 
+                    type: 'error', 
+                    title: 'Invalid Route', 
+                    message: 'Please select a valid route from the list to unlock vehicle assignment.'
+                });
+                return;
+            }
+            try {
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+                await api.post('/shipments/create', { ...formData, userID: user.userID }, config);
+    
+                setShowModal(false);
+                setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '' });
+                fetchData(true); 
+                setIsVehicleDisabled(true);
 
-            setFeedbackModal({
-                type: 'success',
-                title: 'Shipment Created!',
-                message: 'The new shipment has been successfully scheduled.',
-                onClose: () => setFeedbackModal(null)
-            });
-        } catch (err) { 
-            setFeedbackModal({ type: 'error', title: 'Creation Failed', message: err.response?.data?.error, onClose: () => setFeedbackModal(null) });
-        }
-    };
+                setFeedbackModal({
+                    type: 'success',
+                    title: 'Shipment Created!',
+                    message: 'The new shipment has been successfully scheduled.',
+                    onClose: () => setFeedbackModal(null)
+                });
+    
+            } catch (err) { 
+                setFeedbackModal({
+                    type: 'error',
+                    title: 'Creation Failed',
+                    message: err.response?.data?.error || "Failed to create shipment.",
+                    onClose: () => setFeedbackModal(null)
+                });
+            }
+        };
 
     const initiateArchive = (id) => {
         setFeedbackModal({
@@ -540,8 +651,57 @@ function ShipmentView({ user, token, onLogout }) {
                                 <div className="form-group"><label>Shipment ID</label><input type="number" required value={formData.shipmentID} onChange={e => setFormData({...formData, shipmentID: e.target.value})} /></div>
                                 <div className="form-group"><label>Destination Name</label><input type="text" required value={formData.destName} onChange={e => setFormData({...formData, destName: e.target.value})} /></div>
                             </div>
-                            <div className="form-group"><label>Destination Location</label><input type="text" required value={formData.destLocation} onChange={e => setFormData({...formData, destLocation: e.target.value})} /></div>
-                            <div className="form-group"><label>Assign Vehicle</label><select required value={formData.vehicleID} onChange={e => setFormData({...formData, vehicleID: e.target.value})}><option value="">-- Select Truck --</option>{resources.vehicles.map(v => <option key={v.vehicleID} value={v.vehicleID}>{v.plateNo} ({v.type})</option>)}</select></div>
+                            {/* ✅ THE SMART INPUT */}
+                            <div className="form-group" style={{ marginBottom: '15px' }}>
+                                <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Route / Cluster</label>
+                                <input 
+                                    type="text" name="destLocation" 
+                                    value={formData.destLocation} onChange={handleChange}
+                                    list={filteredRoutes.length > 0 ? "route-list" : ""}
+                                    className="form-input" 
+                                    placeholder="Start typing to search..." 
+                                    autoComplete="off" required 
+                                />
+                                <datalist id="route-list">
+                                    {filteredRoutes.map((r, i) => <option key={i} value={r} />)}
+                                </datalist>
+                            </div>
+                            <div className="form-group" style={{marginBottom: '15px'}}>
+                                <label style={{fontWeight: 'bold', color: isVehicleDisabled ? '#999' : 'black'}}>
+                                    Vehicle Assignment
+                                </label>
+                                <select 
+                                    name="vehicleID" 
+                                    value={formData.vehicleID} 
+                                    onChange={handleChange} 
+                                    className="form-input"
+                                    required
+                                    disabled={isVehicleDisabled} // 🔒 Controlled here
+                                    style={{ 
+                                        backgroundColor: isVehicleDisabled ? '#f0f0f0' : 'white',
+                                        cursor: isVehicleDisabled ? 'not-allowed' : 'pointer'
+                                    }}
+                                >
+                                    <option value="">
+                                        {isVehicleDisabled 
+                                            ? "Select a valid route first..." 
+                                            : "-- Select Available Vehicle --"}
+                                    </option>
+                                    
+                                    {filteredVehicles.map(v => (
+                                        <option key={v.vehicleID} value={v.vehicleID}>
+                                            {v.plateNo} ({v.type})
+                                        </option>
+                                    ))}
+                                </select>
+                                
+                                {/* Helper Text */}
+                                {!isVehicleDisabled && formData.destLocation && (
+                                    <small style={{color: 'green', display:'block', marginTop:'5px'}}>
+                                        Unlocked: Showing valid trucks for this route.
+                                    </small>
+                                )}
+                            </div>
                             <div className="form-row">
                                 <div className="form-group"><label>Driver</label><select required value={formData.driverID} onChange={e => setFormData({...formData, driverID: e.target.value})}><option value="">-- Select Driver --</option>{resources.drivers.map(d => <option key={d.userID} value={d.userID}>{d.firstName} {d.lastName}</option>)}</select></div>
                                 <div className="form-group"><label>Helper</label><select required value={formData.helperID} onChange={e => setFormData({...formData, helperID: e.target.value})}><option value="">-- Select Helper --</option>{resources.helpers.map(h => <option key={h.userID} value={h.userID} >{h.firstName} {h.lastName}</option>)}</select></div>
