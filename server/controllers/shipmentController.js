@@ -49,9 +49,6 @@ exports.getActiveShipments = (req, res) => {
 };
 
 const calculatePayroll = (shipmentID) => {
-    console.log(`💰 Attempting to calculate payroll for Shipment #${shipmentID}...`);
-
-    // 1. Get Shipment Info AND All Crew Members
     const getCrewSQL = `
         SELECT 
             sc.userID as crewID, 
@@ -93,9 +90,6 @@ const calculatePayroll = (shipmentID) => {
             const crewCount = crewMembers.length;
             const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
 
-            console.log(`📍 Route: ${destLocation} | 🚛 Type: ${vehicleType}`);
-            console.log(`🍔 Total Allowance: ${totalAllowance} / ${crewCount} people = ${allowancePerPerson} each`);
-
             // 4. Loop through EACH crew member
             crewMembers.forEach(member => {
                 let payAmount = 0;
@@ -119,9 +113,9 @@ const calculatePayroll = (shipmentID) => {
 
                 db.query(insertPayrollSQL, [shipmentID, member.crewID, payAmount, allowancePerPerson], (err) => {
                     if (err) {
-                        console.error(`❌ Payroll Failed for User ${member.crewID}:`, err.message);
+                        console.error(`Payroll Failed for User ${member.crewID}:`, err.message);
                     } else {
-                        console.log(`✅ Logged User ${member.crewID}: Salary ${payAmount}, Allowance Received ${allowancePerPerson}`);
+                        console.log(`Logged User ${member.crewID}: Salary ${payAmount}, Allowance Received ${allowancePerPerson}`);
                     }
                 });
             });
@@ -165,7 +159,7 @@ exports.updateStatus = (req, res) => {
     });
 };
 
-// 3. Get Logs (THIS WAS MISSING)
+// 3. Get Logs 
 exports.getShipmentLogs = (req, res) => {
     const id = req.params.id; 
 
@@ -400,7 +394,7 @@ exports.getPayrollRoutes = (req, res) => {
         const routeMap = {};
         
         results.forEach(row => {
-            const route = row.routeCluster; // Case sensitive matches usually fine here
+            const route = row.routeCluster; 
             if (!routeMap[route]) {
                 routeMap[route] = [];
             }

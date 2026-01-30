@@ -8,6 +8,7 @@ function RatesManager({ onClose }) {
     const [rates, setRates] = useState([]);
     const [loading, setLoading] = useState(false);
     const [feedback, setFeedback] = useState(null);
+
     // Form State
     const [isEditing, setIsEditing] = useState(null); 
     const [editForm, setEditForm] = useState({});
@@ -56,12 +57,7 @@ function RatesManager({ onClose }) {
         }
     };
 
-    // 1. CLICK DELETE -> SHOW WARNING MODAL
-    const handleDeleteClick = (rate) => {
-        // DEBUG: Check what the rate object actually contains
-        console.log("Attempting to delete rate:", rate); 
-
-        // SAFETY CHECK: Handle common ID variations
+    const handleDeleteClick = (rate) => {      
         const targetID = rate.rateID || rate.id || rate.rateId;
 
         if (!targetID) {
@@ -76,26 +72,22 @@ function RatesManager({ onClose }) {
             subMessage: "This action cannot be undone.",
             confirmLabel: "Delete",
             onClose: () => setFeedback(null),
-            // ✅ CRITICAL: Pass the captured targetID explicitly
             onConfirm: () => confirmDelete(targetID) 
         });
     };
 
-    // 2. CONFIRM DELETE -> API CALL -> SHOW SUCCESS MODAL
     const confirmDelete = async (id) => {
         try {
             await api.delete(`/rates/${id}`);
-            
-            // Instantly remove from UI
+
             setRates(prev => prev.filter(r => r.rateID !== id));
 
-            // Switch Modal to Success
             setFeedback({
                 type: 'success',
                 title: 'Deleted Successfully',
                 message: 'The payroll rate has been removed.',
                 confirmLabel: 'Great',
-                onClose: () => setFeedback(null) // No onConfirm means it's just an info modal
+                onClose: () => setFeedback(null) 
             });
 
         } catch (error) {
@@ -116,21 +108,13 @@ function RatesManager({ onClose }) {
 
     const saveEdit = async () => {
     try {
-        // 1. Send update to server
         await api.put(`/rates/${isEditing}`, editForm);
 
-        // 2. INSTANTLY update the local list with the new numbers
-        // This ensures that when we switch to 'View Mode', the data is already correct.
         setRates(prevRates => prevRates.map(rate => 
             rate.rateID === isEditing ? { ...rate, ...editForm } : rate
         ));
 
-        // 3. Now it's safe to close Edit Mode
         setIsEditing(null);
-        
-        // (Optional: You can still fetch in the background if you want, but it's not needed for the UI anymore)
-        // fetchRates(); 
-
     } catch (error) {
         alert("Error updating rate");
     }
@@ -138,10 +122,8 @@ function RatesManager({ onClose }) {
 
     return (
         <div className="modal-backdrop">
-            {/* The CSS .rates-modal will now force this to be 900px wide */}
             <div className="modal-card rates-modal">
-                
-                {/* Header */}
+
                 <div className="rates-header">
                     <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
                         <div style={{
@@ -164,7 +146,7 @@ function RatesManager({ onClose }) {
                 {/* Body: Form + Table */}
                 <div className="rates-body">
                     
-                    {/* ✅ HORIZONTAL FORM ROW */}
+                    {/* HORIZONTAL FORM ROW */}
                     <form onSubmit={handleAdd} className="rates-form">
                         
                         {/* Route Input (Flexible Width) */}
@@ -238,8 +220,6 @@ function RatesManager({ onClose }) {
                             <tbody>
                                 {rates.map(rate => (
                                     <tr key={rate.rateID} style={{background: isEditing === rate.rateID ? '#fff8e1' : 'transparent'}}>
-                                         {/* ... (Keep your existing table row logic exactly as is) ... */}
-                                         {/* Just ensure the buttons use the new generic icons if needed */}
                                        {isEditing === rate.rateID ? (
                                         // --- EDIT MODE ---
                                         <>

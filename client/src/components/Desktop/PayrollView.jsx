@@ -23,7 +23,7 @@ function PayrollView() {
         return p ? p.periodName : '';
     };
 
-    // 1. Load Periods
+    // Load Periods
     useEffect(() => {
         api.get('/payroll/periods')
            .then(res => {
@@ -32,14 +32,12 @@ function PayrollView() {
                const openPeriod = res.data.find(p => p.status === 'OPEN');
                if (openPeriod) {
                    setSelectedPeriod(openPeriod.periodID);
-                   // Optionally fetch immediately on load:
-                   // fetchPayrollSummary(openPeriod.periodID); 
                }
            })
            .catch(err => console.error(err));
     }, []);
 
-    // 2. Fetch Data when Period Changes
+    // Fetch Data when Period Changes
     useEffect(() => {
         if (selectedPeriod) fetchPayrollSummary(selectedPeriod);
     }, [selectedPeriod]);
@@ -67,28 +65,22 @@ function PayrollView() {
     };
 
     const handleGenerate = async () => {
-        // 1. SAFETY CHECK: Stop if already loading or no period selected
         if (!selectedPeriod || loading) return;
         
         setLoading(true);
 
         try {
-            // 2. Artificial delay (Optional, visual feedback only)
+            // Artificial delay for spinner visibility 
             await new Promise(resolve => setTimeout(resolve, 600));
 
-            // 3. Call Generate API
             await api.post('/payroll/generate', { periodID: selectedPeriod });
-            
-            // 4. Success! Now Refresh the Data
-            // We await this so the spinner stays until data is visible
+
             await fetchPayrollSummary(selectedPeriod); 
 
         } catch (error) {
             console.error("Generation failed:", error);
-            // Optional: meaningful error message
             alert("Failed to generate payroll. Please check if the server is running.");
         } finally {
-            // 5. CRITICAL: Always turn off loading, even if it crashed
             setLoading(false);
         }
     };
@@ -99,7 +91,6 @@ function PayrollView() {
 
     return (
         <div className="payroll-container">
-            {/* 1. Header (Minimal & Functional) */}
             <div className="payroll-header">                              
                 <div className="payroll-controls">
                   
@@ -107,7 +98,7 @@ function PayrollView() {
                     <label style={{ fontSize: 13, color: "#555", fontWeight: 600 }}>Select Period:</label>
                     <select 
                         className="period-select" 
-                        style={{ minWidth: '200px' }} // Only control width here
+                        style={{ minWidth: '200px' }} 
                         value={selectedPeriod}
                         onChange={(e) => setSelectedPeriod(e.target.value)}
                     >
@@ -141,26 +132,26 @@ function PayrollView() {
                 </button>
             </div>
 
-            {/* 2. Stats Dashboard */}
+            {/* Stats Dashboard */}
             <div className="stats-row">
                 <StatCard 
                     label="Estimated Salary Payout" 
                     value={formatMoney(stats.totalSalary)} 
-                    color="#27ae60" // Green
+                    color="#27ae60" 
                 />
                 <StatCard 
                     label="Total Allowance (Cash)" 
                     value={formatMoney(stats.totalAllowance)} 
-                    color="#f39c12" // Orange
+                    color="#f39c12" 
                 />
                 <StatCard 
                     label="Active Employees" 
                     value={stats.headCount} 
-                    color="#3498db" // Blue
+                    color="#3498db"
                 />
             </div>
 
-            {/* 3. The Table */}
+            {/* Table */}
             <div className="table-wrapper">
                 {payrollData.length === 0 ? (
                     <EmptyState />
@@ -257,7 +248,7 @@ function PayrollView() {
                                               PAY BAL
                                           </button>
                                       )}
-</td>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -274,7 +265,7 @@ function PayrollView() {
                     employee={selectedEmployee} 
                     periodID={selectedPeriod}
                     onClose={() => setSelectedEmployee(null)}
-                    onUpdate={() => fetchPayrollSummary(selectedPeriod)} // Refresh main numbers when they close ledger
+                    onUpdate={() => fetchPayrollSummary(selectedPeriod)} 
                 />
             )}
 
@@ -300,7 +291,6 @@ function PayrollView() {
     );
 }
 
-// Sub-components for cleaner code
 const StatCard = ({ label, value, color }) => (
     <div className="stat-card" style={{ '--card-color': color }}>
         <div className="stat-label">{label}</div>

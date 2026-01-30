@@ -1,9 +1,8 @@
-/* Layout Wrapper (reuses your main layout logic) */
 .payroll-container {
     display: flex;
     flex-direction: column;
     height: 100%;
-    background-color: #f4f7f6; /* Light gray background for contrast */
+    background-color: #f4f7f6; 
 }
 
 /* 1. Compact Header Section */
@@ -13,14 +12,13 @@
     border-bottom: 1px solid #e0e0e0;
     display: flex;
     justify-content: space-between;
-    align-items: center; /* This ensures the button and input center vertically */
+    align-items: center; 
     flex-shrink: 0;
 }
 
-/* Updated Controls Wrapper */
 .payroll-controls {
     display: flex;
-    gap: 15px;       /* Space between dropdown and button */
+    gap: 15px;     
     align-items: center;
 }
 
@@ -35,8 +33,6 @@
     outline: none;
 }
 
-/* Update the Generate Button to match the height */
-/* Adjust Button to be flexible */
 .manage-rates-button {
     background-color: #43B2DA;
     color: black;
@@ -54,14 +50,14 @@
 }
 
 .btn-generate {
-    width: 35px;          /* Make it a perfect circle or square */
+    width: 35px;         
     height: 35px;
-    padding: 0;           /* Remove padding so icon centers */
-    border-radius: 50%;   /* Circle shape looks better for spin */
+    padding: 0;          
+    border-radius: 50%;  
     border: 1px solid #dcdde1;
     background-color: white;
     cursor: pointer;
-    display: flex;        /* CRITICAL for centering */
+    display: flex;       
     align-items: center;
     justify-content: center;
     transition: all 0.2s ease;
@@ -85,11 +81,9 @@
 }
 
 .icon-spin {
-    /* 0.6s is the speed of one revolution */
     animation: spinOne 0.6s ease-in-out infinite; 
 }
 
-/* 2. Dashboard Cards Section */
 .stats-row {
     display: flex;
     gap: 20px;
@@ -132,7 +126,6 @@
     color: black;
 }
 
-/* 3. The "Proper" Table */
 .table-wrapper {
     flex: 1;
     overflow-y: auto;
@@ -151,39 +144,32 @@
 
 .payroll-table th, 
 .payroll-table td {
-    padding: 12px 15px; /* Consistent padding */
+    padding: 12px 15px; 
     vertical-align: middle;
-    box-sizing: border-box; /* Ensures padding doesn't break width */
+    box-sizing: border-box; 
 }
 
-/* 2. Define Explicit Widths for Each Column */
-/* Total must equal 100% or be close to it */
-
-/* Col 1: Employee Name (Wider) */
 .payroll-table th:nth-child(1),
 .payroll-table td:nth-child(1) {
     width: 20%;
     text-align: left;
 }
 
-/* Col 2: Role (Badge) */
 .payroll-table th:nth-child(2),
 .payroll-table td:nth-child(2) {
     width: 10%;
     text-align: left;
 }
 
-/* Col 3: Trips (Center) */
 .payroll-table th:nth-child(3),
 .payroll-table td:nth-child(3) {
     width: 8%;
     text-align: center;
 }
 
-/* Col 4-8: Money Columns (Right Aligned & Equal Width) */
 .payroll-table th:nth-child(n+4),
 .payroll-table td:nth-child(n+4) {
-    width: 12.4%; /* Remaining 62% divided by 5 columns */
+    width: 12.4%; 
     text-align: right;
 }
 
@@ -227,7 +213,6 @@
     border-bottom: none;
 }
 
-/* Specific Column Styling */
 .employee-name {
     font-weight: 600;
     color: #2c3e50;

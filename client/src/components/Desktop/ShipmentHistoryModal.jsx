@@ -3,7 +3,6 @@ import api from '../../utils/api';
 import { Icons } from '../Icons';
 import './PaymentModal.css'; 
 
-// ✅ Accept 'periodName' prop
 function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
     const [trips, setTrips] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -28,9 +27,8 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
 
     return (
         <div className="modal-backdrop">
-            <div className="payment-modal-card" style={{width: '850px'}}> {/* Made slightly wider */}
-                
-                {/* HEADER */}
+            <div className="payment-modal-card" style={{width: '850px'}}> 
+
                 <div className="payment-header">
                     <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
                         <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#fff3e0', display:'flex', alignItems:'center', justifyContent:'center', color:'#f39c12'}}>
@@ -38,7 +36,6 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
                         </div>
                         <div>
                             <h2 style={{margin:0, fontSize:'20px', color:'#2d3436'}}>Trip History: {employee.firstName} {employee.lastName}</h2>
-                            {/* ✅ DYNAMIC PERIOD NAME */}
                             <p style={{margin:0, fontSize:'13px', color:'#636e72'}}>Completed shipments for <b>{periodName || 'this period'}</b></p>
                         </div>
                     </div>
@@ -68,14 +65,12 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
                     <div className="history-section">
                         <h4>Shipment Log</h4>
                         <div className="history-box">
-                            {/* ✅ CHANGED CLASS TO 'shipment-table' */}
                             <table className="shipment-table">
                                 <thead>
                                     <tr>
                                         <th>Date</th>
                                         <th>Route / Cluster</th>
                                         <th>Vehicle</th>
-                                        {/* Swapped order to match your CSS alignment desire if needed, but keeping original order with new widths works too */}
                                         <th className="text-right">Base Fee</th>
                                         <th className="text-right">Allowance</th>
                                     </tr>

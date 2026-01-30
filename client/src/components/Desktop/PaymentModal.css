@@ -1,20 +1,16 @@
-/* client/src/components/Desktop/PaymentModal.css */
-
-/* 1. Modal Card - Fixed Max Height */
 .payment-modal-card {
     width: 700px !important;
     max-width: 95vw;
-    height: 85vh; /* Fixed height so internal parts scroll */
+    height: 85vh; 
     max-height: 800px;
     display: flex;
     flex-direction: column;
     background: white;
     border-radius: 16px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-    overflow: hidden; /* Prevents modal itself from growing */
+    overflow: hidden;
 }
 
-/* 2. Header */
 .payment-header {
     padding: 20px 30px;
     border-bottom: 1px solid #f0f0f0;
@@ -22,24 +18,22 @@
     justify-content: space-between;
     align-items: center;
     background: #fff;
-    flex-shrink: 0; /* Keeps header fixed size */
+    flex-shrink: 0; 
 }
 
-/* 3. Body - Flex Column */
 .payment-body {
     padding: 30px;
     display: flex;
     flex-direction: column;
     gap: 25px;
-    flex: 1;         /* Takes remaining height */
-    overflow: hidden; /* Stops body from scrolling, forces inner parts to scroll */
+    flex: 1;        
+    overflow: hidden; 
 }
 
-/* 4. Stats Row */
 .payment-stats-row {
     display: flex;
     gap: 20px;
-    flex-shrink: 0; /* Prevents stats from shrinking */
+    flex-shrink: 0; 
 }
 
 .stat-box {
@@ -61,13 +55,12 @@
 .stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; opacity: 0.7; }
 .stat-value { font-size: 26px; letter-spacing: -0.5px; }
 
-/* 5. Form (Toolbar) */
 .payment-form-container {
     background: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: 12px;
     padding: 20px 25px;
-    flex-shrink: 0; /* Prevents form from shrinking */
+    flex-shrink: 0; 
 }
 
 .form-label-small { font-size: 11px; font-weight: 700; color: #95a5a6; text-transform: uppercase; margin-bottom: 10px; display: block; }
@@ -93,12 +86,11 @@
 }
 .btn-pay-action:hover { background: #2ecc71; }
 
-/* 6. History Table - FIXED SCROLLING & ALIGNMENT */
 .history-section {
     display: flex;
     flex-direction: column;
-    flex: 1;          /* Grow to fill remaining space */
-    min-height: 0;    /* Crucial for flex scrolling */
+    flex: 1;        
+    min-height: 0;    
     margin-top: 10px;
 }
 
@@ -110,16 +102,14 @@
     text-transform: uppercase;
 }
 
-/* The Wrapper that scrolls */
 .history-box {
     border: 1px solid #eee;
     border-radius: 12px;
-    overflow-y: auto; /* Enable Scroll Here */
-    flex: 1;          /* Fill the history-section */
+    overflow-y: auto; 
+    flex: 1;         
     background: white;
 }
 
-/* Remove default table borders/spacing */
 .history-table {
     width: 100%;
     border-collapse: collapse;
@@ -146,9 +136,6 @@
     color: #2d3436;
 }
 
-/* --- COLUMN ALIGNMENT FIXES --- */
-
-/* 1. Date: Increased to 18% (Less cramped) */
 .history-table th:nth-child(1),
 .history-table td:nth-child(1) {
     width: 18%; 
@@ -156,13 +143,11 @@
     white-space: nowrap; 
 }
 
-/* 2. Reason/Notes: Reduced to 47% (Fixes "too much white space") */
 .history-table th:nth-child(2),
 .history-table td:nth-child(2) {
     width: 47%; 
 }
 
-/* 3. Amount: Increased to 25% (Better alignment for currency) */
 .history-table th:nth-child(3),
 .history-table td:nth-child(3) {
     width: 25%;
@@ -170,14 +155,12 @@
     padding-right: 25px; 
 }
 
-/* 4. Actions: 10% */
 .history-table th:nth-child(4),
 .history-table td:nth-child(4) {
     width: 10%;
     text-align: center;
 }
 
-/* --- NEW: SHIPMENT HISTORY TABLE (5 Columns) --- */
 .shipment-table {
     width: 100%;
     border-collapse: collapse;
@@ -205,34 +188,29 @@
     vertical-align: middle;
 }
 
-/* 1. Date */
 .shipment-table th:nth-child(1),
 .shipment-table td:nth-child(1) {
     width: 15%;
     padding-left: 25px;
 }
 
-/* 2. Route / Cluster (Made Smaller as requested) */
 .shipment-table th:nth-child(2),
 .shipment-table td:nth-child(2) {
-    width: 25%; /* Reduced width */
+    width: 25%; 
 }
 
-/* 3. Vehicle */
 .shipment-table th:nth-child(3),
 .shipment-table td:nth-child(3) {
     width: 10%;
     text-align: center;
 }
 
-/* 4. Base Fee (Made Wider to fix wrapping) */
 .shipment-table th:nth-child(4),
 .shipment-table td:nth-child(4) {
-    width: 25%; /* Increased width */
+    width: 25%; 
     text-align: right;
 }
 
-/* 5. Allowance */
 .shipment-table th:nth-child(5),
 .shipment-table td:nth-child(5) {
     width: 25%;

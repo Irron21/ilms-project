@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// 1. Get List of Pay Periods (for the Dropdown)
+// Get List of Pay Periods (for the Dropdown)
 exports.getPeriods = (req, res) => {
     const sql = "SELECT * FROM PayrollPeriods ORDER BY startDate DESC";
     db.query(sql, (err, results) => {
@@ -10,14 +10,10 @@ exports.getPeriods = (req, res) => {
 };
 
 // Function to carry over debts from the previous period
-// Function to carry over debts from the previous period
 const processCarryOverDebts = async (currentPeriodID, dbConnection) => {
-    // 1. Get previous period ID
     const previousPeriodID = currentPeriodID - 1; 
     if (previousPeriodID <= 0) return; 
 
-    // ✅ FIX START: Delete existing carry-overs for this period first!
-    // This prevents "Stacking" deductions if you click Generate multiple times.
     const cleanUpSql = `
         DELETE FROM PayrollAdjustments 
         WHERE periodID = ? 
@@ -28,7 +24,7 @@ const processCarryOverDebts = async (currentPeriodID, dbConnection) => {
     dbConnection.query(cleanUpSql, [currentPeriodID], (err) => {
         if (err) return console.error("Error cleaning up old debts:", err);
 
-        // 2. NOW calculate the debts from the previous period
+        // NOW calculate the debts from the previous period
         const sql = `
             SELECT 
                 u.userID,
@@ -53,7 +49,7 @@ const processCarryOverDebts = async (currentPeriodID, dbConnection) => {
                 if (debt > 0) {
                     console.log(`Carrying over debt of ${debt} for User ${row.userID}`);
                     
-                    // 3. Insert fresh Deduction
+                    // Insert fresh Deduction
                     const insertSql = `
                         INSERT INTO PayrollAdjustments (userID, periodID, type, amount, reason)
                         VALUES (?, ?, 'DEDUCTION', ?, 'Cash Advance / Overage from Previous Period')
@@ -65,7 +61,7 @@ const processCarryOverDebts = async (currentPeriodID, dbConnection) => {
     });
 };
 
-// 2. GENERATE: Assign Floating Shipments to a Period
+// ENERATE: Assign Floating Shipments to a Period
 exports.generatePayroll = (req, res) => {
     const { periodID } = req.body;
 
@@ -75,10 +71,7 @@ exports.generatePayroll = (req, res) => {
         if (err || periods.length === 0) return res.status(500).json({ error: "Invalid Period" });
 
         const period = periods[0];
-
-        // B. "Harvest" the records
-        // Find all ShipmentPayroll rows that exist within these dates but represent UNPAID/UNASSIGNED work
-        // We join Shipments to check the 'creationTimestamp'
+        // B. Now, update ShipmentPayroll entries
         const updateSql = `
             UPDATE ShipmentPayroll sp
             JOIN Shipments s ON sp.shipmentID = s.shipmentID
@@ -104,7 +97,7 @@ exports.generatePayroll = (req, res) => {
     });
 };
 
-// 3. VIEW: Get the "Suggestion" (Summary by Employee)
+// VIEW: Get the "Suggestion" (Summary by Employee)
 exports.getPayrollSummary = (req, res) => {
     const { periodID } = req.params;
 
@@ -147,7 +140,6 @@ exports.getPayrollSummary = (req, res) => {
         ORDER BY u.lastName ASC
     `;
 
-    // ✅ FIX: Ensure periodID is passed 5 times to match the 5 '?' above
     db.query(sql, [periodID, periodID, periodID, periodID, periodID], (err, results) => {
         if (err) {
             console.error("SQL Error:", err); // Log error to terminal
@@ -170,14 +162,14 @@ exports.getEmployeeTrips = (req, res) => {
     const sql = `
         SELECT 
             s.shipmentID,
-            s.creationTimestamp as shipmentDate,  -- ✅ Fix: Map real column to expected name
-            s.destLocation as routeCluster,           -- ✅ Fix: Use destName since routeCluster column is missing
-            v.type as vehicleType,                -- ✅ Fix: Get type from joined Vehicles table
+            s.creationTimestamp as shipmentDate, 
+            s.destLocation as routeCluster,          
+            v.type as vehicleType,               
             sp.baseFee,
             sp.allowance
         FROM ShipmentPayroll sp
         JOIN Shipments s ON sp.shipmentID = s.shipmentID
-        LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID  -- ✅ Fix: Join Vehicles table
+        LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID 
         WHERE sp.periodID = ? AND sp.crewID = ?
         ORDER BY s.creationTimestamp DESC
     `;

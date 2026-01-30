@@ -1,14 +1,13 @@
-/* RATES MANAGER STYLES - FORCE WIDE LAYOUT */
 .rates-body {
     flex: 1;
     display: flex;
     flex-direction: column;
     background: #fff;
-    overflow: hidden; /* <--- CRITICAL: Stops the whole page from scrolling */
+    overflow: hidden; 
 }
-/* 1. Force the Modal Card to be Wide */
+
 .rates-modal {
-    width: 900px !important;    /* Forces width to override global defaults */
+    width: 900px !important;    
     max-width: 95vw !important;
     height: 80vh; 
     display: flex;
@@ -19,7 +18,6 @@
     box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 
-/* 2. Header Styling */
 .rates-header {
     background: #fff;
     padding-bottom: 20px;
@@ -27,10 +25,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0; /* Prevents header from squishing */
+    flex-shrink: 0; 
 }
 
-/* 3. The Horizontal Form Row */
 .rates-form {
     display: flex;
     flex-direction: row;
@@ -39,20 +36,19 @@
     padding: 20px 25px;
     background: #f8f9fa;
     border-bottom: 1px solid #e0e0e0;
-    flex-shrink: 0; /* <--- CRITICAL: Prevents form from squishing */
+    flex-shrink: 0;
     z-index: 20;
     position: relative;
-    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1); /* Optional: Adds subtle shadow under form */
+    box-shadow: 0 4px 6px -4px rgba(0,0,0,0.1); 
 }
 
 .rates-table-container {
-    flex: 1;              /* Takes all remaining height */
-    overflow-y: auto;     /* <--- CRITICAL: Scroll happens here */
+    flex: 1;              
+    overflow-y: auto;     
     padding: 0 25px 25px 25px;
     scrollbar-gutter: stable;
 }
 
-/* 4. Mini Input Groups */
 .form-group-mini {
     display: flex;
     flex-direction: column;
@@ -66,16 +62,14 @@
     letter-spacing: 0.5px;
 }
 
-/* 5. Inputs inside the form */
 .form-group-mini .form-input {
     padding: 8px 12px;
     border: 1px solid #dcdde1;
     border-radius: 6px;
     font-size: 13px;
-    height: 38px; /* Fixed height for alignment */
+    height: 38px; 
 }
 
-/* 6. The Add Button */
 .btn-add-rate {
     height: 38px;
     background-color: #27ae60;
@@ -91,10 +85,9 @@
 }
 .btn-add-rate:hover { background-color: #2ecc71; }
 
-/* 7. Table Area */
 .rates-body {
     flex: 1;
-    overflow-y: auto; /* Allows scrolling only on the table */
+    overflow-y: auto;
     padding: 0;
     background: #fff;
 }
@@ -103,7 +96,6 @@
     padding: 20px 25px;
 }
 
-/* 8. Utility Classes */
 .text-right { text-align: right; }
 .vehicle-badge {
     background: #dfe6e9; color: #2d3436;
@@ -137,21 +129,17 @@
     opacity: 0.8;
 }
 
-/* 1. Reset standard alignment conflicts from the main Payroll table */
 .rates-table-container .payroll-table th, 
 .rates-table-container .payroll-table td {
-    /* Reset widths so we can define them specifically below */
     width: auto; 
 }
 
-/* Col 1: Route (30%) */
 .rates-table-container .payroll-table th:nth-child(1),
 .rates-table-container .payroll-table td:nth-child(1) {
     width: 30%;
     text-align: left;
 }
 
-/* Col 2: Vehicle (15%) */
 .rates-table-container .payroll-table th:nth-child(2),
 .rates-table-container .payroll-table td:nth-child(2),
 .rates-table-container .payroll-table th:nth-child(3),
@@ -164,30 +152,28 @@
     text-align: left;
 }
 
-/* Col 6: Actions (10%) - Force Center Align */
 .rates-table-container .payroll-table th:nth-child(6),
 .rates-table-container .payroll-table td:nth-child(6) {
     width: auto;
     text-align: center;
 }
 
-/* 2. Fix the Actions Cell Alignment */
 .actions-cell {
     display: flex;
     gap: 12px;
     justify-content: center;
-    align-items: center;  /* Ensures buttons are vertically centered */
+    align-items: center; 
     height: 100%;
 }
 
 .compact-input {
-    width: 100%;       /* Fit the cell width */
-    height: 30px;      /* Shorter height */
-    padding: 4px 8px;  /* Less padding */
+    width: 100%;       
+    height: 30px;     
+    padding: 4px 8px;  
     font-size: 13px;
-    border: 1px solid #43B2DA; /* Highlight color so user knows it's editable */
+    border: 1px solid #43B2DA; 
     border-radius: 4px;
-    box-sizing: border-box; /* Crucial: padding doesn't add to width */
+    box-sizing: border-box; 
 }
 
 .compact-input:focus {
@@ -195,7 +181,6 @@
     box-shadow: 0 0 0 2px rgba(67, 178, 218, 0.2);
 }
 
-/* Fix alignment in edit mode cells */
 .rates-table-container .payroll-table td {
-    vertical-align: middle; /* Ensure inputs align with buttons */
+    vertical-align: middle; 
 }

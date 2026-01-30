@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import { Icons } from '../Icons';
-import './PaymentModal.css'; // ✅ Switch to the new unified CSS
+import './PaymentModal.css'; 
 import FeedbackModal from '../FeedbackModal';
 
 function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
@@ -36,7 +36,6 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
         e.preventDefault();
         if(!form.amount || !form.reason) return;
 
-        // Risk Check Logic (Same as before)
         if (form.type === 'DEDUCTION') {
             const deductionAmount = Number(form.amount);
             const validItems = items.filter(i => i.status !== 'VOID');
@@ -102,10 +101,7 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
 
     return (
         <div className="modal-backdrop">
-            {/* 1. CONTAINER: Use payment-modal-card style, slightly wider for the form */}
             <div className="payment-modal-card" style={{width: '850px'}}> 
-                
-                {/* 2. HEADER */}
                 <div className="payment-header">
                     <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
                         <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#cff1ddff', display:'flex', alignItems:'center', justifyContent:'center', color:'#1cca62ff'}}>
@@ -118,10 +114,8 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
                     </div>
                     <button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer', padding:'8px'}}><Icons.X size={24} color="#b2bec3"/></button>
                 </div>
-
-                {/* 3. BODY */}
                 <div className="payment-body">
-                    
+                                  
                     {/* STATS ROW */}
                     <div className="payment-stats-row">
                         <div className="stat-box neutral">

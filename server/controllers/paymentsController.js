@@ -18,8 +18,7 @@ exports.getUserPayments = (req, res) => {
 // ADD a payment
 exports.addPayment = (req, res) => {
     const { periodID, userID, amount, notes, referenceNumber } = req.body;
-    
-    // Simple validation
+
     if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
 
     const sql = `

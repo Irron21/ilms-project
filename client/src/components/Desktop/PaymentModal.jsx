@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import { Icons } from '../Icons';
-import './PaymentModal.css'; // ✅ IMPORT THE NEW CSS
+import './PaymentModal.css'; 
 import FeedbackModal from '../FeedbackModal';
 
 function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
@@ -87,8 +87,7 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
     return (
         <div className="modal-backdrop">
             <div className="payment-modal-card">
-                
-                {/* 1. HEADER */}
+
                 <div className="payment-header">
                     <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
                         <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#cff1ddff', display:'flex', alignItems:'center', justifyContent:'center', color:'#1cca62ff'}}>
@@ -102,10 +101,8 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                     <button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer', padding:'8px'}}><Icons.X size={24} color="#b2bec3"/></button>
                 </div>
 
-                {/* 2. BODY */}
                 <div className="payment-body">
-                    
-                    {/* STATS ROW (Centered) */}
+
                     <div className="payment-stats-row">
                         {/* Net Payable */}
                         <div className="stat-box neutral">
