@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const logActivity = require('../utils/activityLogger'); 
+const logController = require('../controllers/logController');
 
 const  verifyToken  = require('../middleware/authMiddleware'); 
 
+router.get('/actions', logController.getLogActions);
+router.get('/history', logController.getActivityLogs);
 router.post('/', verifyToken, (req, res) => {
     try {
         const { action, details } = req.body;

@@ -17,6 +17,47 @@ const INITIAL_PAYROLL_COLS = [
     { key: 'allowance', label: 'Allowance', checked: false },
 ];
 
+// --- ✅ SMART PAGINATION COMPONENT ---
+const PaginationControls = ({ currentPage, totalItems, rowsPerPage, onPageChange }) => {
+    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+    
+    // Sliding Window Logic (Show 5 pages at a time)
+    const currentBlock = Math.ceil(currentPage / 5);
+    const startPage = (currentBlock - 1) * 5 + 1;
+    const endPage = Math.min(startPage + 4, totalPages);
+
+    const pageNumbers = [];
+    for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
+
+    if (totalPages <= 1) return null;
+
+    return (
+        <div className="pagination-footer">
+            <button 
+                disabled={currentPage === 1} 
+                onClick={() => onPageChange(currentPage - 1)}
+            >
+                Prev
+            </button>
+            {pageNumbers.map(num => (
+                <button 
+                    key={num} 
+                    className={currentPage === num ? 'active' : ''} 
+                    onClick={() => onPageChange(num)}
+                >
+                    {num}
+                </button>
+            ))}
+            <button 
+                disabled={currentPage === totalPages} 
+                onClick={() => onPageChange(currentPage + 1)}
+            >
+                Next
+            </button>
+        </div>
+    );
+};
+
 function PayrollView() {
     const [periods, setPeriods] = useState([]);
     const [selectedPeriod, setSelectedPeriod] = useState('');
@@ -30,7 +71,9 @@ function PayrollView() {
     const [showExportModal, setShowExportModal] = useState(false);
     const [columnConfig, setColumnConfig] = useState(INITIAL_PAYROLL_COLS);
     const [selectedExportPeriods, setSelectedExportPeriods] = useState([]);
-
+    const [currentPage, setCurrentPage] = useState(1);
+    const rowsPerPage = 8;
+     
     const getPeriodName = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
         return p ? p.periodName : '';
@@ -200,6 +243,8 @@ function PayrollView() {
         return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(val);
     };
 
+    const paginatedData = payrollData.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+    
     return (
         <div className="payroll-container">
             <div className="payroll-header">                              
@@ -285,7 +330,8 @@ function PayrollView() {
 
             {/* Table */}
             <div className="table-wrapper">
-                {payrollData.length === 0 ? (
+                <div className="payroll-table-scroll-container">
+                {paginatedData.length === 0 ? (
                     <EmptyState />
                 ) : (
                     <table className="payroll-table">
@@ -304,7 +350,7 @@ function PayrollView() {
                             </tr>
                         </thead>
                         <tbody>
-                            {payrollData.map((row) => (
+                            {paginatedData.map((row) => (
                                 <tr key={row.userID} onClick={() => setSelectedEmployee(row)} style={{cursor: 'pointer'}}>
                                     <td className="employee-name">
                                         <span 
@@ -402,7 +448,16 @@ function PayrollView() {
                         </tbody>
                     </table>
                 )}
+                </div>
+                {/* 2. PAGINATION FOOTER (FIXED AT BOTTOM OF CARD) */}
+                <PaginationControls 
+                    currentPage={currentPage} 
+                    totalItems={payrollData.length} 
+                    rowsPerPage={rowsPerPage} 
+                    onPageChange={setCurrentPage} 
+                />
             </div>
+            
 
             {showRatesManager && (
                 <RatesManager onClose={() => setShowRatesManager(false)} />

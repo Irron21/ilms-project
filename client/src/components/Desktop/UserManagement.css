@@ -409,3 +409,30 @@
     width: 100%; 
     box-sizing: border-box; 
 }
+
+@keyframes spinOne {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.icon-spin {
+    animation: spinOne 0.6s ease-in-out infinite;
+}
+
+.log-filter-select {
+    padding: 8px 12px;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    background-color: #FAFAFA;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+    outline: none;
+    transition: all 0.2s;
+    min-width: 120px;
+}
+
+.log-filter-select:focus {
+    border-color: #43B2DA;
+    background-color: #FFF;
+}

@@ -181,8 +181,21 @@ function DesktopApp({ user, token, onLogout }) {
                     <h1>{getHeaderTitle()}</h1>
 
                     {view === 'users' && (
-                        <div className="resource-switch">
-                            <div className={`switch-bg ${resourceTab}`}></div>
+                        <div className="resource-switch" style={{ width: '300px' }}> 
+                            
+                            {/* DYNAMIC BACKGROUND SLIDER */}
+                            <div 
+                                className="switch-bg" 
+                                style={{
+                                    // Width is roughly 1/3 minus padding
+                                    width: '95px', 
+                                    // Precise pixel positions for 3 slots
+                                    transform: resourceTab === 'users' ? 'translateX(2px)' : 
+                                               resourceTab === 'trucks' ? 'translateX(100px)' : 
+                                               'translateX(198px)' 
+                                }}
+                            ></div>
+
                             <button 
                                 className={`switch-option ${resourceTab === 'users' ? 'active' : ''}`}
                                 onClick={() => setResourceTab('users')}
@@ -194,6 +207,12 @@ function DesktopApp({ user, token, onLogout }) {
                                 onClick={() => setResourceTab('trucks')}
                             >
                                 Trucks
+                            </button>
+                            <button 
+                                className={`switch-option ${resourceTab === 'logs' ? 'active' : ''}`}
+                                onClick={() => setResourceTab('logs')}
+                            >
+                                Logs
                             </button>
                         </div>
                     )}

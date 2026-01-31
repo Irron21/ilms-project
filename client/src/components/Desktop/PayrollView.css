@@ -70,6 +70,34 @@
     100% { transform: rotate(360deg); }
 }
 
+.icon-spin {
+    animation: spinOne 0.6s ease-in-out infinite;
+}
+
+.btn-alert {
+    display: flex;
+    flex-direction: row;
+    background: #7f8c8d;
+    cursor: pointer;
+    padding: 8px 14px;
+    border-radius: 25px;
+    border: 2px solid #727d7e;
+    font-size: 13px;
+    height: 40px;
+    align-items: center;
+}
+
+.btn-generate:hover:not(:disabled) {
+    background-color: #F9F9F9;
+    color: #333;
+    border-color: #BBB;
+}
+
+@keyframes spinOne {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 .icon-spin { animation: spinOne 0.6s ease-in-out infinite; }
 
 .stats-row {
@@ -115,24 +143,38 @@
 }
 
 .table-wrapper {
-    flex: 1; 
-    overflow-y: auto;
+    flex: 1;
     background: white;
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     margin: 0 20px 20px 20px;
+    
+    /* Layout: Stack Table + Footer vertically */
     display: flex;
     flex-direction: column; 
-    justify-content: flex-start; 
+    justify-content: flex-start;
+    
+    /* Ensure content stays inside rounded corners */
+    overflow: hidden; 
 }
 
+/* 2. New Scrollable Area for the Table Only */
+.payroll-table-scroll-container {
+    flex: 1;           /* Take all available space above footer */
+    overflow-y: auto;  /* Enable Vertical Scroll */
+    min-height: 0;     /* Critical for nested flex scrolling */
+}
+
+/* Ensure the table fills width */
 .payroll-table {
     width: 100%;
     border-collapse: separate; 
     border-spacing: 0;
-    height: max-content; 
+    /* ✅ KEY FIX: Forces columns to respect defined widths, ignoring content length */
+    table-layout: fixed; 
 }
 
+/* Sticky Header */
 .payroll-table thead {
     background-color: #f8f9fa;
     position: sticky;
@@ -140,32 +182,58 @@
     z-index: 5;
 }
 
+/* Header Base Styles */
 .payroll-table th {
-    padding: 15px;
+    padding: 15px 10px; /* Reduced side padding slightly to fit content */
     text-transform: uppercase;
     border-bottom: 2px solid #eef2f5;
     color: #7f8c8d;
-    font-size: 13px;
+    font-size: 13px; /* Slightly smaller font to fit fixed headers */
     font-weight: 700;
     background-color: white;
+    
+    /* Ensure headers don't wrap awkwardly */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
-.payroll-table th:last-child,
-.payroll-table td:last-child {
-    width: 140px; 
-    min-width: 140px;
-    text-align: center;
-}
+/* --- ✅ DEFINED COLUMN WIDTHS (Total = 100%) --- */
+/* 1. Employee Name (Wide) */
+.payroll-table th:nth-child(1) { width: 18%; text-align: left; }
 
-.payroll-table th.text-right,
-.payroll-table td.text-right { 
-    text-align: right; 
-}
+/* 2. Role (Narrow) */
+.payroll-table th:nth-child(2) { width: 8%; text-align: left; }
 
+/* 3. Trips (Narrow) */
+.payroll-table th:nth-child(3) { width: 6%; text-align: center; }
+
+/* 4. Base Pay */
+.payroll-table th:nth-child(4) { width: 9%; text-align: right; }
+
+/* 5. Deductions */
+.payroll-table th:nth-child(5) { width: 9%; text-align: right; }
+
+/* 6. Bonus */
+.payroll-table th:nth-child(6) { width: 9%; text-align: right; }
+
+/* 7. Net Salary (Highlighted) */
+.payroll-table th:nth-child(7) { width: 11%; text-align: right; }
+
+/* 8. Allowance */
+.payroll-table th:nth-child(8) { width: 9%; text-align: right; }
+
+/* 9. Paid */
+.payroll-table th:nth-child(9) { width: 9%; text-align: right; }
+
+/* 10. Status (Fixed Width for Buttons) */
+.payroll-table th:nth-child(10) { width: 12%; text-align: center; }
+
+
+/* --- ROW & CELL STYLES --- */
 .payroll-table tbody tr {
     transition: background 0.1s;
     border-bottom: 1px solid #f0f0f0;
-    height: 48px; 
 }
 
 .payroll-table tbody tr:hover {
@@ -173,12 +241,29 @@
 }
 
 .payroll-table td {
-    padding: 15px;
+    padding: 10.9px 15px;
     font-size: 14px;
     color: black;
     border-bottom: 1px solid #f0f0f0;
     vertical-align: middle;
+    
+    /* ✅ Prevent text wrapping / breaking layout */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
+
+/* Alignments for TD to match TH */
+.payroll-table td:nth-child(1) { text-align: left; }
+.payroll-table td:nth-child(2) { text-align: left; }
+.payroll-table td:nth-child(3) { text-align: center; }
+.payroll-table td:nth-child(4),
+.payroll-table td:nth-child(5),
+.payroll-table td:nth-child(6),
+.payroll-table td:nth-child(7),
+.payroll-table td:nth-child(8),
+.payroll-table td:nth-child(9) { text-align: right; }
+.payroll-table td:nth-child(10) { text-align: center; overflow: visible; /* Allows tooltips to pop out */ }
 
 .payroll-table tbody tr:last-child td {
     border-bottom: none;
@@ -192,10 +277,9 @@
 .role-badge {
     padding: 3px 8px;
     border-radius: 10px;
-    font-size: 10px;
+    font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-weight: 700;
 }
 
 .role-driver { background: #E8F5E9; color: #2E7D32; }

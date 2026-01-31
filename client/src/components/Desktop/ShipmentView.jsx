@@ -31,6 +31,30 @@ const INITIAL_COLUMNS = [
     { key: 'completed', label: 'Time: Completed', checked: true },
 ];
 
+const PaginationControls = ({ currentPage, totalItems, rowsPerPage, onPageChange }) => {
+    const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
+    
+    // Sliding Window Logic
+    const currentBlock = Math.ceil(currentPage / 5);
+    const startPage = (currentBlock - 1) * 5 + 1;
+    const endPage = Math.min(startPage + 4, totalPages);
+
+    const pageNumbers = [];
+    for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
+
+    if (totalPages <= 1) return null;
+
+    return (
+        <div className="pagination-footer">
+            <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Prev</button>
+            {pageNumbers.map(num => (
+                <button key={num} className={currentPage === num ? 'active' : ''} onClick={() => onPageChange(num)}>{num}</button>
+            ))}
+            <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button>
+        </div>
+    );
+};
+
 function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
@@ -47,8 +71,7 @@ function ShipmentView({ user, token, onLogout }) {
     
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const rowsPerPage = 10; 
-
+    const rowsPerPage = 9;
     // UI State
     const [expandedShipmentID, setExpandedShipmentID] = useState(null);
     const [closingId, setClosingId] = useState(null);
@@ -519,7 +542,6 @@ function ShipmentView({ user, token, onLogout }) {
         return log ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
     };
 
-    const totalPages = Math.ceil(finalFiltered.length / rowsPerPage);
     const paginatedShipments = finalFiltered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
     const getCount = (tabName) => {
@@ -637,10 +659,10 @@ function ShipmentView({ user, token, onLogout }) {
                                     </td>
                                     <td>{s.destName}</td>
                                     <td>{s.destLocation}</td>
-                                    <td style={{fontWeight:'600', color:'#2c3e50'}}>{formatDateDisplay(s.loadingDate)}</td>
-                                    <td style={{color: isDelayedRow ? '#c0392b' : '#7f8c8d', fontWeight: isDelayedRow ? '700' : '400'}}>
+                                    <td style={{fontWeight:'600'}}>{formatDateDisplay(s.loadingDate)}</td>
+                                    <td style={{color: isDelayedRow ? '#c0392b' : 'black', fontWeight: isDelayedRow ? '700' : '400'}}>
                                         {formatDateDisplay(s.deliveryDate)}
-                                        {isDelayedRow && ' ⚠️'}
+                                        {isDelayedRow}
                                     </td>
                                     <td>{s.plateNo || '-'}</td>
                                     <td>
@@ -685,15 +707,6 @@ function ShipmentView({ user, token, onLogout }) {
                     </tbody>
                 </table>
             </div>
-            {totalPages > 1 && (
-                <div className="pagination-footer">
-                    <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
-                    {[...Array(totalPages)].map((_, i) => (
-                        <button key={i} className={currentPage === i + 1 ? 'active' : ''} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
-                    ))}
-                    <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => prev + 1)}>Next</button>
-                </div>
-            )}
             
             {showModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowModal(false)}>
@@ -758,6 +771,13 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
             
+            <PaginationControls 
+                currentPage={currentPage} 
+                totalItems={finalFiltered.length} 
+                rowsPerPage={rowsPerPage} 
+                onPageChange={setCurrentPage} 
+            />
+            
             {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
@@ -774,7 +794,7 @@ function ShipmentView({ user, token, onLogout }) {
                 <div className="modal-overlay-desktop" onClick={() => setShowNoDataModal(false)}>
                     <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 30px'}}>
                         <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
-                        <button className="btn-alert" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
+                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
                     </div>
                 </div>
             )}
