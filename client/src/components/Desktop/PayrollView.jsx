@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
 import './PayrollView.css'; 
 import RatesManager from './RatesManager';
@@ -6,6 +6,16 @@ import { Icons } from '../Icons';
 import EmployeeLedger from './EmployeeLedger';
 import PaymentModal from './PaymentModal';
 import ShipmentHistoryModal from './ShipmentHistoryModal';
+
+const INITIAL_PAYROLL_COLS = [
+    { key: 'date', label: 'Date', checked: true },
+    { key: 'shipmentID', label: 'Shipment ID', checked: true },
+    { key: 'customer', label: 'Customer/Dest', checked: true },
+    { key: 'route', label: 'Route', checked: true },
+    { key: 'vehicleType', label: 'Vehicle Type', checked: true },
+    { key: 'rate', label: 'Rate/Fee', checked: true },
+    { key: 'allowance', label: 'Allowance', checked: false },
+];
 
 function PayrollView() {
     const [periods, setPeriods] = useState([]);
@@ -17,12 +27,17 @@ function PayrollView() {
     const [selectedEmployee, setSelectedEmployee] = useState(null);
     const [payingEmployee, setPayingEmployee] = useState(null);
     const [viewingTrips, setViewingTrips] = useState(null);
-    
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [columnConfig, setColumnConfig] = useState(INITIAL_PAYROLL_COLS);
+    const [selectedExportPeriods, setSelectedExportPeriods] = useState([]);
+
     const getPeriodName = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
         return p ? p.periodName : '';
     };
-
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+    
     // Load Periods
     useEffect(() => {
         api.get('/payroll/periods')
@@ -41,6 +56,102 @@ function PayrollView() {
     useEffect(() => {
         if (selectedPeriod) fetchPayrollSummary(selectedPeriod);
     }, [selectedPeriod]);
+
+    const isPeriodLocked = () => {
+        const p = periods.find(item => item.periodID === Number(selectedPeriod));
+        return p && p.status === 'CLOSED';
+    };
+
+    // HANDLER: Lock Period
+    const handleLockPeriod = async () => {
+        if (!confirm("Are you sure you want to LOCK this period?\n\n- No more adjustments can be added.\n- No more payments can be made.\n- 'Harvest' will be disabled.\n\nThis action is final.")) return;
+
+        try {
+            await api.post('/payroll/close', { periodID: selectedPeriod });
+            alert("Period Locked Successfully.");
+            
+            // Refresh periods to update status in UI
+            const res = await api.get('/payroll/periods');
+            setPeriods(res.data);
+        } catch (error) {
+            alert("Failed to lock period.");
+        }
+    };
+
+    // --- TOGGLE PERIOD HANDLER ---
+    const togglePeriod = (id) => {
+        setSelectedExportPeriods(prev => 
+            prev.includes(id) 
+                ? prev.filter(p => p !== id) 
+                : [...prev, id]
+        );
+    };
+
+    const handleSelectAllPeriods = () => {
+        if (selectedExportPeriods.length === periods.length) {
+            setSelectedExportPeriods([]);
+        } else {
+            setSelectedExportPeriods(periods.map(p => p.periodID));
+        }
+    };
+
+    const dragStart = (e, position) => {
+        dragItem.current = position;
+        e.target.classList.add('dragging'); 
+    };
+
+    const dragEnter = (e, position) => {
+        if (dragItem.current === null || dragItem.current === undefined) return;
+        if (dragItem.current !== position) {
+            const newList = [...columnConfig];
+            const draggedItemContent = newList[dragItem.current];
+            newList.splice(dragItem.current, 1);
+            newList.splice(position, 0, draggedItemContent);
+            dragItem.current = position;
+            setColumnConfig(newList);
+        }
+    };
+
+    const dragEnd = (e) => {
+        e.target.classList.remove('dragging');
+        dragItem.current = null;
+    };
+
+    // --- EXPORT HANDLER ---
+    const handleExport = async () => {
+        if (selectedExportPeriods.length === 0) return alert("Please select at least one period.");
+
+        try {
+            const selectedKeys = columnConfig.filter(c => c.checked).map(c => c.key);
+            
+            // Send IDs as a JSON string array
+            const params = { 
+                periodIDs: JSON.stringify(selectedExportPeriods),
+                columns: JSON.stringify(selectedKeys)
+            };
+
+            const config = { params: params, responseType: 'blob' };
+
+            const response = await api.get('/payroll/export', config);
+            
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            // Name file based on selection count
+            const fileName = selectedExportPeriods.length === 1 
+                ? `Payroll_Report_${periods.find(p=>p.periodID === selectedExportPeriods[0])?.periodName}.xlsx`
+                : `Payroll_Batch_Report_${new Date().toISOString().slice(0,10)}.xlsx`;
+
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            link.parentNode.removeChild(link);
+            setShowExportModal(false); 
+        } catch (error) {
+            console.error(error);
+            alert("Export Failed");
+        }
+    };
 
     const fetchPayrollSummary = async (id) => {
         setLoading(true);
@@ -109,27 +220,48 @@ function PayrollView() {
                         ))}
                     </select>
                   </div>
+                    {/* 2. UPDATE: Harvest Button (Disable if Locked) */}
                     <button 
                       className="btn-generate" 
                       onClick={handleGenerate} 
-                      disabled={!selectedPeriod || loading}
-                      title="Harvest & Refresh"
+                      disabled={loading || !selectedPeriod || isPeriodLocked()}
+                        style={{ opacity: isPeriodLocked() ? 0.5 : 1, cursor: isPeriodLocked() ? 'not-allowed' : 'pointer' }}
+                        title={isPeriodLocked() ? "Period is Locked" : "Generate Payroll"}
                   >
                       <Icons.Refresh 
                           size={18} 
                           className={loading ? "icon-spin" : ""} 
                       />
-                  </button>
+                    </button>   
+                  {/* 3. NEW: Lock Button (Only show if Open) */}
+                    {selectedPeriod && !isPeriodLocked() && (
+                        <button 
+                            className="btn-alert" 
+                            onClick={handleLockPeriod}
+                            style={{background: '#7f8c8d', border: 'none', fontSize:'13px'}}
+                        >
+                            <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
+                            Lock Period
+                        </button>
+                    )}         
                 </div>
-                <button 
-                className="manage-rates-button" 
-                onClick={() => setShowRatesManager(true)}
-                >
-                  <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
-                    <Icons.Settings size={14} />
-                    Manage Rates
-                  </div>
-                </button>
+                <div style={{display: "flex", gap: "10px"}}>
+                    <button className="extract-btn" onClick={() => setShowExportModal(true)}>
+                            <Icons.Upload size={16} /> Export to .xlsx
+                    </button>
+                    <button 
+                    className="manage-rates-button" 
+                    onClick={() => setShowRatesManager(true)}
+                    >
+                    <div style={{display:'flex', alignItems:'center', gap:'6px'}}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" style={{fill: 'none',stroke: 'currentColor',strokeWidth: '2px',strokeLinecap: 'round',strokeLinejoin: 'round'}}>
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        Manage Rates
+                    </div>
+                    </button>
+                </div>
             </div>
 
             {/* Stats Dashboard */}
@@ -280,6 +412,7 @@ function PayrollView() {
                 <EmployeeLedger 
                     employee={selectedEmployee} 
                     periodID={selectedPeriod}
+                    isLocked={isPeriodLocked()}
                     onClose={() => setSelectedEmployee(null)}
                     onUpdate={() => fetchPayrollSummary(selectedPeriod)} 
                 />
@@ -289,6 +422,7 @@ function PayrollView() {
                 <PaymentModal 
                     employee={payingEmployee}
                     periodID={selectedPeriod}
+                    isLocked={isPeriodLocked()}
                     netSalary={payingEmployee.netSalary}
                     onClose={() => setPayingEmployee(null)}
                     onUpdate={() => fetchPayrollSummary(selectedPeriod)}
@@ -303,6 +437,80 @@ function PayrollView() {
                   onClose={() => setViewingTrips(null)}
               />
           )}
+
+          {/* --- EXPORT MODAL --- */}
+            {showExportModal && (
+                <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
+                    <div className="modal-form-card" onClick={e => e.stopPropagation()} style={{width: '500px'}}>
+                        <div className="modal-header">
+                            <h2>Export Payroll</h2>
+                            <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
+                        </div>
+                        
+                        <div className="export-modal-body">
+                            
+                            {/* --- 1. PERIOD SELECTION --- */}
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+                                <label className="export-options-label" style={{marginBottom:0}}>Select Periods (Sheets)</label>
+                                <button className="text-link-btn" onClick={handleSelectAllPeriods} style={{fontSize:'11px', color:'#43B2DA', background:'none', border:'none', cursor:'pointer'}}>
+                                    {selectedExportPeriods.length === periods.length ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
+
+                            <div className="period-multiselect-container">
+                                {periods.map(p => (
+                                    <label key={p.periodID} className="period-checkbox-item">
+                                        <input 
+                                            type="checkbox" 
+                                            checked={selectedExportPeriods.includes(p.periodID)}
+                                            onChange={() => togglePeriod(p.periodID)}
+                                        />
+                                        <span>{p.periodName}</span>
+                                        <span style={{fontSize:'11px', color: p.status === 'OPEN' ? '#27ae60' : '#95a5a6', marginLeft:'auto'}}>
+                                            {p.status}
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* --- 2. COLUMN CONFIG --- */}
+                            <label className="export-options-label">Customize Columns</label>
+                            <div className="sortable-list">
+                                {columnConfig.map((col, index) => (
+                                    <div 
+                                        key={col.key} 
+                                        className="sortable-item"
+                                        draggable
+                                        onDragStart={(e) => dragStart(e, index)}
+                                        onDragEnter={(e) => dragEnter(e, index)}
+                                        onDragEnd={dragEnd}
+                                        onDragOver={(e) => e.preventDefault()}
+                                    >
+                                        <div className="drag-handle">☰</div>
+                                        <label>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={col.checked}
+                                                onChange={() => {
+                                                    const newConfig = [...columnConfig];
+                                                    newConfig[index].checked = !newConfig[index].checked;
+                                                    setColumnConfig(newConfig);
+                                                }}
+                                            />
+                                            {col.label}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="modal-actions">
+                                <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
+                                <button className="submit-btn" onClick={handleExport}>Download Excel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -4,7 +4,7 @@ import { Icons } from '../Icons';
 import './PaymentModal.css'; 
 import FeedbackModal from '../FeedbackModal';
 
-function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
+function PaymentModal({ employee, periodID, isLocked, netSalary, onClose, onUpdate }) {
     const [amount, setAmount] = useState('');
     const [notes, setNotes] = useState('');
     const [history, setHistory] = useState([]);
@@ -122,6 +122,7 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                     {balance > 0 ? (
                         <div className="payment-form-container">
                             <span className="form-label-small">Record New Payment</span>
+                            {!isLocked ? (
                             <form onSubmit={handlePayClick} className="payment-form">
                                 
                                 {/* Amount */}
@@ -150,6 +151,13 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                                     {loading ? 'Processing...' : 'Pay Now'}
                                 </button>
                             </form>
+                            ) : (
+                            <div className="locked-state-message" style={{padding:'20px', background:'#f8f9fa', borderRadius:'8px', textAlign:'center', color:'#7f8c8d'}}>
+                                <Icons.Lock size={24} style={{display:'block', margin:'0 auto 10px'}}/>
+                                <strong>Period Closed</strong>
+                                <p style={{fontSize:'12px', margin:'5px 0'}}>Payments cannot be added or voided.</p>
+                            </div>
+                        )}
                         </div>
                     ) : (
                         <div style={{textAlign:'center', padding:'20px', background:'#f8f9fa', color:'#7f8c8d', borderRadius:'12px', fontSize:'14px', border:'1px dashed #dcdde1'}}>
@@ -186,12 +194,8 @@ function PaymentModal({ employee, periodID, netSalary, onClose, onUpdate }) {
                                                     -₱{Number(pay.amount).toLocaleString()}
                                                 </td>
                                                 <td>
-                                                    {!isVoid && (
-                                                        <button 
-                                                            onClick={() => handleVoidClick(pay)} 
-                                                            className="action-btn"
-                                                            title="Void Transaction"
-                                                        >
+                                                    {!isLocked && pay.status !== 'VOID' && (
+                                                        <button onClick={() => handleVoidClick(pay)} className="action-btn">
                                                             <Icons.Trash size={16} />
                                                         </button>
                                                     )}

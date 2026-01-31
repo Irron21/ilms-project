@@ -603,7 +603,7 @@ function ShipmentView({ user, token, onLogout }) {
                         </div>
                     </div>
                     <div className="controls-right" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button className="extract-btn" onClick={() => setShowExportModal(true)}><Icons.Upload />Extract .xlsx</button>
+                        <button className="extract-btn" onClick={() => setShowExportModal(true)}><Icons.Upload />Export to .xlsx</button>
                         <button className="new-shipment-btn" onClick={handleOpenModal}>+ New Shipment</button>
                     </div>
                 </div>

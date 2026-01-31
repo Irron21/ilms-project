@@ -4,7 +4,7 @@ import { Icons } from '../Icons';
 import './PaymentModal.css'; 
 import FeedbackModal from '../FeedbackModal';
 
-function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
+function EmployeeLedger({ employee, periodID, isLocked, onClose, onUpdate }) {
     const [items, setItems] = useState([]);
     const [form, setForm] = useState({ type: 'DEDUCTION', amount: '', reason: '' });
     const [loading, setLoading] = useState(false);
@@ -137,6 +137,7 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
                     {/* FORM ROW */}
                     <div className="payment-form-container">
                         <span className="form-label-small">Add New Entry</span>
+                        {!isLocked && (
                         <form onSubmit={handleAdd} className="payment-form">
                             
                             {/* Type Select */}
@@ -175,6 +176,13 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
                                 {loading ? '...' : 'Add Entry'}
                             </button>
                         </form>
+                        )}
+                    
+                    {isLocked && (
+                        <div style={{padding:'10px', background:'#f1f2f6', marginBottom:'15px', borderRadius:'6px', textAlign:'center', fontSize:'12px', color:'#7f8c8d'}}>
+                            This period is closed. Adjustments are read-only.
+                        </div>
+                    )}
                     </div>
 
                     {/* TABLE SECTION */}
@@ -209,8 +217,8 @@ function EmployeeLedger({ employee, periodID, onClose, onUpdate }) {
                                                         {item.type === 'DEDUCTION' ? '-' : '+'}₱{Number(item.amount).toLocaleString()}
                                                     </td>
                                                     <td>
-                                                        {!isVoid && (
-                                                            <button onClick={() => handleDeleteClick(item)} className="action-btn" title="Void Entry">
+                                                        {!isLocked && item.status !== 'VOID' && (
+                                                            <button onClick={() => handleDeleteClick(item)} className="action-btn">
                                                                 <Icons.Trash size={16} />
                                                             </button>
                                                         )}

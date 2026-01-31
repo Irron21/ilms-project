@@ -235,8 +235,9 @@
     cursor: pointer;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     transition: all 0.2s ease;
+    height: 40px;
 }
 
 .extract-btn:hover {
