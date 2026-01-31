@@ -53,15 +53,6 @@
   object-fit: contain;
 }
 
-.tabs {
-  display: flex;
-  justify-content: center;
-  gap: 40px;
-  margin-top: 20px;
-  font-weight: bold;
-  color: #757575;
-}
-
 .tab {
   cursor: pointer;
   padding-bottom: 5px;

@@ -16,7 +16,6 @@ const STEPS = [
   { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Flag /> }
 ];
 
-// Helper to determine status priority (Used to prevent downgrading status)
 const getStatusPriority = (status) => {
     if (status === 'Completed') return 100;
     const index = STEPS.findIndex(s => s.dbStatus === status);
@@ -58,19 +57,24 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
   const [confirmStep, setConfirmStep] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
 
-  // 1. INITIALIZE STATUS
   const [localStatus, setLocalStatus] = useState(() => {
     const offlineData = getPendingOfflineData(shipment.shipmentID);
     return offlineData ? offlineData.status : shipment.currentStatus;
   });
 
-  // 2. INITIALIZE LOGS
   const [logs, setLogs] = useState(() => {
     const offlineData = getPendingOfflineData(shipment.shipmentID);
     return offlineData ? offlineData.logs : [];
   });
 
-  // ✅ 3. FETCH LOGS & AUTO-UPDATE STATUS
+  // --- HELPER: Date Formatter ---
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Not Set';
+    // Safe parse YYYY-MM-DD to avoid timezone shifts
+    const [year, month, day] = String(dateStr).substring(0, 10).split('-');
+    return `${month}/${day}/${year}`;
+  };
+
   const fetchLogs = useCallback(async () => {
     if (!navigator.onLine) return; 
 
@@ -80,7 +84,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         const res = await api.get(url, config);
         const serverLogs = res.data;
 
-        // A. Update Logs
         setLogs(prev => {
             const pendingLogs = prev.filter(l => l.isPending);
             const distinctPending = pendingLogs.filter(p => 
@@ -89,16 +92,12 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
             return [...serverLogs, ...distinctPending];
         });
 
-        // ✅ B. CRITICAL FIX: Calculate Status from Server Logs
-        // This prevents reverting to Yellow if the parent prop is stale.
         if (serverLogs.length > 0) {
             const lastLog = serverLogs[serverLogs.length - 1];
-            // If the last log is "Departure", we know it's Completed
             const newStatus = lastLog.phaseName === 'Departure' || lastLog.phaseName === 'Completed' 
                 ? 'Completed' 
                 : lastLog.phaseName;
 
-            // Only update if this new status is "ahead" or same as what we have
             setLocalStatus(current => {
                 const currentPri = getStatusPriority(current);
                 const newPri = getStatusPriority(newStatus);
@@ -109,8 +108,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     } catch (err) { console.error("Error fetching logs:", err); }
   }, [shipment.shipmentID, token]);
 
-
-  // 4. Online/Offline Listeners
   useEffect(() => {
     const handleOnline = () => { 
         setIsOffline(false); 
@@ -128,8 +125,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     };
   }, [fetchLogs]);
 
-
-  // 5. Polling to remove "Saving..."
   useEffect(() => {
     if (isOffline) return;
     fetchLogs(); 
@@ -137,27 +132,18 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     return () => clearInterval(intervalId);
   }, [isOffline, fetchLogs]);
 
-
-  // ✅ 6. SYNC FROM PARENT (Smart Guard)
   useEffect(() => {
       if (navigator.onLine) {
-         // Check if we have pending logs (if so, we are definitely ahead of parent)
          const hasPending = logs.some(l => l.isPending);
-         
          if (!hasPending) {
-             // Even if no pending logs, CHECK PRIORITY.
-             // Don't let a "Pending" prop overwrite a "Completed" local state
              const parentPriority = getStatusPriority(shipment.currentStatus);
              const localPriority = getStatusPriority(localStatus);
-
-             // Only sync if parent is same or ahead
              if (parentPriority >= localPriority) {
                  setLocalStatus(shipment.currentStatus);
              }
          }
       }
   }, [shipment.currentStatus, logs, localStatus]);
-
 
   const executeStepUpdate = (dbStatus) => {
       const isFinishing = dbStatus === 'Departure';
@@ -251,9 +237,10 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
       </div>
 
       <div className="info-card">
+        {/* 1. Destination */}
         <div className="info-item">
           <div className="info-icon-box">
-             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 9v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9"/>
                 <path d="M9 22V12h6v10M2 10.6L12 2l10 8.6"/>
              </svg>
@@ -263,9 +250,11 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
              <span className="info-value">{shipment.destName || 'N/A'}</span>
           </div>
         </div>
+
+        {/* 2. Address */}
         <div className="info-item">
           <div className="info-icon-box">
-             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
                 <circle cx="12" cy="10" r="3"></circle>
              </svg>
@@ -273,6 +262,36 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
           <div className="info-content">
              <span className="info-label">Address</span>
              <span className="info-value">{shipment.destLocation}</span>
+          </div>
+        </div>
+
+        {/* 3. Loading Date */}
+        <div className="info-item">
+          <div className="info-icon-box">
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="16" y1="2" x2="16" y2="6"></line>
+                <line x1="8" y1="2" x2="8" y2="6"></line>
+                <line x1="3" y1="10" x2="21" y2="10"></line>
+             </svg>
+          </div>
+          <div className="info-content">
+             <span className="info-label">Loading Date</span>
+             <span className="info-value" style={{color:'#2980b9'}}>{formatDate(shipment.loadingDate)}</span>
+          </div>
+        </div>
+
+        {/* 4. Delivery Date */}
+        <div className="info-item">
+          <div className="info-icon-box">
+             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                <line x1="4" y1="22" x2="4" y2="15"></line>
+             </svg>
+          </div>
+          <div className="info-content">
+             <span className="info-label">Delivery Date</span>
+             <span className="info-value" style={{color:'#d35400'}}>{formatDate(shipment.deliveryDate)}</span>
           </div>
         </div>
       </div>
