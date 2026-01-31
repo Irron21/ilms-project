@@ -140,7 +140,7 @@ function PayrollView() {
                     color="#27ae60" 
                 />
                 <StatCard 
-                    label="Total Allowance (Cash)" 
+                    label="Total Allowance Given" 
                     value={formatMoney(stats.totalAllowance)} 
                     color="#f39c12" 
                 />
@@ -215,26 +215,42 @@ function PayrollView() {
                                         {formatMoney(row.totalPaid)}
                                     </td>
                                     <td style={{textAlign:'center'}}>
-                                      {/* CASE 1: OVERPAID (Paid > Net) - Employee owes company */}
-                                      {Number(row.totalPaid) > Number(row.netSalary) ? (
-                                          <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
-                                              <span className="vehicle-badge" style={{background:'#fff3cd', color:'#856404', border:'1px solid #ffeeba'}}>
-                                                  OVERPAID
+                                      {/* CASE 1: DEFICIT (Negative Net Salary) */}
+                                      {Number(row.netSalary) < 0 ? (
+                                          <div className="status-tooltip-wrapper">
+                                              <span className="vehicle-badge badge-deficit">
+                                                  DEFICIT
                                               </span>
-                                              <span style={{fontSize:'10px', color:'#e74c3c', fontWeight:'700', marginTop:'2px'}}>
-                                                  (Owes {formatMoney(row.totalPaid - row.netSalary)})
+                                              {/* HOVER CONTENT */}
+                                              <div className="custom-tooltip">
+                                                  Will Carry Over:<br/>
+                                                  {formatMoney(Math.abs(row.netSalary))}
+                                              </div>
+                                          </div>
+                                      ) : 
+
+                                      /* CASE 2: BAL. DUE (Overpaid via Cash Advance) */
+                                      Number(row.totalPaid) > Number(row.netSalary) ? (
+                                          <div className="status-tooltip-wrapper">
+                                              <span className="vehicle-badge badge-bal-due">
+                                                  BAL. DUE
                                               </span>
+                                              {/* HOVER CONTENT */}
+                                              <div className="custom-tooltip">
+                                                  Overpaid Amount:<br/>
+                                                  {formatMoney(row.totalPaid - row.netSalary)}
+                                              </div>
                                           </div>
                                       ) : 
                                       
-                                      /* CASE 2: FULLY PAID (Paid == Net) */
+                                      /* CASE 3: CLEARED (Fully Paid) */
                                       Number(row.totalPaid) === Number(row.netSalary) && Number(row.netSalary) > 0 ? (
-                                          <span className="vehicle-badge" style={{background:'#e9f7ef', color:'#27ae60'}}>
-                                              PAID
+                                          <span className="vehicle-badge badge-cleared">
+                                              CLEARED
                                           </span>
                                       ) : 
                                       
-                                      /* CASE 3: BALANCE REMAINING (Paid < Net) */
+                                      /* CASE 4: NEEDS PAYMENT */
                                       (
                                           <button 
                                               className="action-btn" 
@@ -245,7 +261,7 @@ function PayrollView() {
                                               }}
                                               onClick={(e) => { e.stopPropagation(); setPayingEmployee(row); }}
                                           >
-                                              PAY BAL
+                                              PAY REMAINING
                                           </button>
                                       )}
                                     </td>
