@@ -480,3 +480,84 @@ exports.exportPayroll = async (req, res) => {
         if (!res.headersSent) res.status(500).json({ error: "Batch Export Failed" });
     }
 };
+
+exports.generateFuturePeriods = (req, res) => {
+    const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
+
+    // 1. Find the latest period currently in the DB
+    db.query("SELECT MAX(endDate) as lastDate FROM PayrollPeriods", (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        let startDate = new Date();
+        
+        // If DB has periods, start the day after the last one. 
+        // If DB is empty, start from Jan 1st of current year.
+        if (result[0].lastDate) {
+            startDate = new Date(result[0].lastDate);
+            startDate.setDate(startDate.getDate() + 1); // Start next day
+        } else {
+            startDate = new Date(new Date().getFullYear(), 0, 1); // Jan 1 this year
+        }
+
+        const newPeriods = [];
+        const monthNames = ["January", "February", "March", "April", "May", "June", 
+                            "July", "August", "September", "October", "November", "December"];
+
+        // 2. Generate 12 months worth of periods (24 periods)
+        // We loop through the next 12 months starting from our calculated startDate
+        let currentYear = startDate.getFullYear();
+        let currentMonth = startDate.getMonth();
+
+        for (let i = 0; i < 12; i++) {
+            // --- Period 1: 1st to 15th ---
+            // Only add if our start date is before or on the 1st
+            const firstPeriodStart = new Date(currentYear, currentMonth, 1);
+            const firstPeriodEnd = new Date(currentYear, currentMonth, 15);
+            
+            if (firstPeriodStart >= startDate) {
+                newPeriods.push([
+                    `${monthNames[currentMonth]} 1-15, ${currentYear}`, // Name
+                    formatDateLocal(firstPeriodStart),                  // Start
+                    formatDateLocal(firstPeriodEnd),                    // End
+                    'OPEN'                                              // Status
+                ]);
+            }
+
+            // --- Period 2: 16th to End of Month ---
+            // "0" as day gets the last day of previous month, so we use currentMonth + 1, 0
+            const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            const secondPeriodStart = new Date(currentYear, currentMonth, 16);
+            const secondPeriodEnd = new Date(currentYear, currentMonth, lastDayOfMonth);
+
+            if (secondPeriodStart >= startDate) {
+                newPeriods.push([
+                    `${monthNames[currentMonth]} 16-${lastDayOfMonth}, ${currentYear}`,
+                    formatDateLocal(secondPeriodStart),
+                    formatDateLocal(secondPeriodEnd),
+                    'OPEN'
+                ]);
+            }
+
+            // Move to next month
+            currentMonth++;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            }
+        }
+
+        if (newPeriods.length === 0) {
+            return res.json({ message: "Periods are already up to date." });
+        }
+
+        // 3. Bulk Insert
+        const sql = "INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES ?";
+        db.query(sql, [newPeriods], (err, insertRes) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            logActivity(adminID, 'GENERATE_PERIODS', `Generated ${insertRes.affectedRows} new payroll periods`, () => {
+                res.json({ message: `Successfully generated ${insertRes.affectedRows} new periods.` });
+            });
+        });
+    });
+};

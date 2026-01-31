@@ -8,4 +8,6 @@ router.post('/generate', payrollController.generatePayroll);
 router.get('/summary/:periodID', payrollController.getPayrollSummary);
 router.get('/trips/:periodID/:userID', payrollController.getEmployeeTrips);
 router.post('/close', payrollController.closePeriod);
+router.post('/periods/generate', payrollController.generateFuturePeriods);
+
 module.exports = router;

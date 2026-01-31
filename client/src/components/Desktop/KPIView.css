@@ -505,28 +505,3 @@ path, rect, g {
     color: #888;
     margin-bottom: 20px;
 }
-
-.btn-primary {
-    background: #27AE60;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-}
-
-.btn-danger {
-    background: #EB5757;
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 6px;
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-}
-
-.btn-primary:hover { background: #219150; }
-.btn-danger:hover { background: #C0392B; }

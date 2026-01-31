@@ -6,6 +6,7 @@ import { Icons } from '../Icons';
 import EmployeeLedger from './EmployeeLedger';
 import PaymentModal from './PaymentModal';
 import ShipmentHistoryModal from './ShipmentHistoryModal';
+import FeedbackModal from '../FeedbackModal';
 
 const INITIAL_PAYROLL_COLS = [
     { key: 'date', label: 'Date', checked: true },
@@ -73,7 +74,8 @@ function PayrollView() {
     const [selectedExportPeriods, setSelectedExportPeriods] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const rowsPerPage = 8;
-     
+    const [feedbackModal, setFeedbackModal] = useState(null);
+
     const getPeriodName = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
         return p ? p.periodName : '';
@@ -100,24 +102,73 @@ function PayrollView() {
         if (selectedPeriod) fetchPayrollSummary(selectedPeriod);
     }, [selectedPeriod]);
 
+    useEffect(() => {
+        const loadPeriods = async () => {
+            try {
+                const res = await api.get('/payroll/periods');
+                setPeriods(res.data);
+                
+                // ✅ Logic: Try to find the latest OPEN period. 
+                // If all are closed, default to the most recent one (index 0).
+                const openPeriod = res.data.find(p => p.status === 'OPEN');
+                const defaultPeriod = openPeriod || res.data[0];
+
+                if (defaultPeriod) {
+                    setSelectedPeriod(defaultPeriod.periodID);
+                }
+            } catch (err) {
+                console.error("Failed to load periods", err);
+            }
+        };
+        loadPeriods();
+    }, []);
+
+    // 2. AUTO-FETCH DATA WHEN PERIOD CHANGES
+    // This runs immediately after 'setSelectedPeriod' above, and whenever user changes dropdown
+    useEffect(() => {
+        if (selectedPeriod) {
+            fetchPayrollSummary(selectedPeriod);
+        }
+    }, [selectedPeriod]);
+
     const isPeriodLocked = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
         return p && p.status === 'CLOSED';
     };
 
+    const confirmLockPeriod = () => {
+        setFeedbackModal({
+            type: 'warning',
+            title: 'Lock Period?',
+            message: 'Are you sure you want to LOCK this payroll period?',
+            subMessage: "No more adjustments or payments can be made. This action is final.",
+            confirmLabel: "Lock Period",
+            onConfirm: () => executeLockPeriod(),
+            onClose: () => setFeedbackModal(null)
+        });
+    };
     // HANDLER: Lock Period
-    const handleLockPeriod = async () => {
-        if (!confirm("Are you sure you want to LOCK this period?\n\n- No more adjustments can be added.\n- No more payments can be made.\n- 'Harvest' will be disabled.\n\nThis action is final.")) return;
-
+    const executeLockPeriod = async () => {
         try {
             await api.post('/payroll/close', { periodID: selectedPeriod });
-            alert("Period Locked Successfully.");
             
-            // Refresh periods to update status in UI
+            // Refresh periods to update status UI
             const res = await api.get('/payroll/periods');
             setPeriods(res.data);
+            
+            setFeedbackModal({
+                type: 'success',
+                title: 'Period Locked',
+                message: 'The period has been successfully closed.',
+                onClose: () => setFeedbackModal(null)
+            });
         } catch (error) {
-            alert("Failed to lock period.");
+            setFeedbackModal({
+                type: 'error',
+                title: 'Lock Failed',
+                message: 'Could not lock the period. Please try again.',
+                onClose: () => setFeedbackModal(null)
+            });
         }
     };
 
@@ -239,6 +290,47 @@ function PayrollView() {
         }
     };
 
+    // B. GENERATE FUTURE PERIODS CONFIRMATION
+    const confirmGeneratePeriods = () => {
+        setFeedbackModal({
+            type: 'confirm', // Using confirm style (usually blue/info)
+            title: 'Generate Future Periods',
+            message: 'This will automatically generate payroll periods for the next 12 months.',
+            subMessage: "Based on the last recorded period date.",
+            confirmLabel: "Generate",
+            onConfirm: () => executeGeneratePeriods(),
+            onClose: () => setFeedbackModal(null)
+        });
+    };
+
+    const executeGeneratePeriods = async () => {
+        setLoading(true);
+        setFeedbackModal(null); // Close confirmation
+        try {
+            const res = await api.post('/payroll/periods/generate');
+            
+            // Refresh list
+            const refreshRes = await api.get('/payroll/periods');
+            setPeriods(refreshRes.data);
+
+            setFeedbackModal({
+                type: 'success',
+                title: 'Periods Generated',
+                message: res.data.message,
+                onClose: () => setFeedbackModal(null)
+            });
+        } catch (err) {
+            setFeedbackModal({
+                type: 'error',
+                title: 'Generation Failed',
+                message: 'Could not generate new periods.',
+                onClose: () => setFeedbackModal(null)
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const formatMoney = (val) => {
         return new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(val);
     };
@@ -250,7 +342,7 @@ function PayrollView() {
             <div className="payroll-header">                              
                 <div className="payroll-controls">
                   
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div className='filter-group-bordered'>
                     <label style={{ fontSize: 13, color: "#555", fontWeight: 600 }}>Select Period:</label>
                     <select 
                         className="period-select" 
@@ -264,8 +356,26 @@ function PayrollView() {
                             </option>
                         ))}
                     </select>
-                  </div>
+                    {/* ✅ NEW: Generate Periods Button */}
+                    <button 
+                        onClick={confirmGeneratePeriods}
+                        className='manage-rates-button'
+                        title="Auto-Generate Next Year's Periods"
+                    >Generate
+                    </button>
                     {/* 2. UPDATE: Harvest Button (Disable if Locked) */}
+                    {selectedPeriod && !isPeriodLocked() && (
+                        <button 
+                            className="btn-alert" 
+                            onClick={confirmLockPeriod}
+                            style={{background: '#7f8c8d', border: 'none', fontSize:'13px'}}
+                        >
+                            <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
+                            Lock Period
+                        </button>
+                    )}
+                  </div>
+                    
                     <button 
                       className="btn-generate" 
                       onClick={handleGenerate} 
@@ -279,16 +389,7 @@ function PayrollView() {
                       />
                     </button>   
                   {/* 3. NEW: Lock Button (Only show if Open) */}
-                    {selectedPeriod && !isPeriodLocked() && (
-                        <button 
-                            className="btn-alert" 
-                            onClick={handleLockPeriod}
-                            style={{background: '#7f8c8d', border: 'none', fontSize:'13px'}}
-                        >
-                            <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
-                            Lock Period
-                        </button>
-                    )}         
+                           
                 </div>
                 <div style={{display: "flex", gap: "10px"}}>
                     <button className="extract-btn" onClick={() => setShowExportModal(true)}>
@@ -458,6 +559,7 @@ function PayrollView() {
                 />
             </div>
             
+            {feedbackModal && <FeedbackModal {...feedbackModal} />}
 
             {showRatesManager && (
                 <RatesManager onClose={() => setShowRatesManager(false)} />

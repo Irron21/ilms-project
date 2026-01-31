@@ -33,6 +33,9 @@
 }
 
 .manage-rates-button {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
     background-color: #43B2DA;
     color: black;
     border: none;
