@@ -306,34 +306,69 @@ exports.createShipment = (req, res) => {
 
 exports.exportShipments = (req, res) => {
     const { startDate, endDate } = req.query;
-    // FIX 1: Define adminID (checking req.user from middleware, or default to 1)
+    
+    // 1. Parse Columns
+    let selectedColumns = [];
+    try {
+        selectedColumns = req.query.columns ? JSON.parse(req.query.columns) : [];
+    } catch (e) {
+        selectedColumns = [];
+    }
+
     const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
 
+    // 2. SQL QUERY (With Rate Fallback)
     const query = `
       SELECT 
-        s.shipmentID AS "Shipment ID",
-        s.destName AS "Destination Name",
-        s.destLocation AS "Destination Address",
-        s.loadingDate AS "Loading Date",    
-        s.deliveryDate AS "Delivery Date",  
-        v.plateNo AS "Truck Plate",
-        v.type AS "Truck Type",
-        s.currentStatus AS "Current Status",
+        s.shipmentID,
+        s.destName,
+        s.destLocation,
+        s.loadingDate,    
+        s.deliveryDate,  
+        v.plateNo,
+        v.type AS truckType,
+        s.currentStatus,
+        s.creationTimestamp,
         
-        GROUP_CONCAT(DISTINCT CONCAT(u.role, ': ', u.firstName, ' ', u.lastName) SEPARATOR ' | ') as "Assigned Crew",
+        -- Crew Names
+        MAX(uDriver.firstName) AS driverNameFirst,
+        MAX(uDriver.lastName) AS driverNameLast,
+        MAX(uHelper.firstName) AS helperNameFirst,
+        MAX(uHelper.lastName) AS helperNameLast,
 
-        DATE_FORMAT(s.creationTimestamp, '%Y-%m-%d %H:%i:%s') AS "Date Created",
-        DATE_FORMAT(MAX(CASE WHEN sLog.phaseName = 'Arrival' THEN sLog.timestamp END), '%Y-%m-%d %H:%i:%s') AS "Arrival Time",
-        DATE_FORMAT(MAX(CASE WHEN sLog.phaseName = 'Departure' THEN sLog.timestamp END), '%Y-%m-%d %H:%i:%s') AS "Departure Time",
-        DATE_FORMAT(MAX(CASE WHEN sLog.phaseName = 'Completed' THEN sLog.timestamp END), '%Y-%m-%d %H:%i:%s') AS "Completion Time"
+        -- FINANCIALS (Priority: Actual Payroll > Standard Rate Fallback)
+        COALESCE(MAX(spDriver.baseFee), MAX(pr.driverBaseFee)) AS driverFee,
+        COALESCE(MAX(spHelper.baseFee), MAX(pr.helperBaseFee)) AS helperFee,
+        COALESCE(MAX(spDriver.allowance), MAX(pr.foodAllowance)) AS allowance,
+
+        -- Timestamps
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Arrival' LIMIT 1) as arrival,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Handover Invoice' LIMIT 1) as handover,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Start Unload' LIMIT 1) as startUnload,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Finish Unload' LIMIT 1) as finishUnload,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Invoice Receive' LIMIT 1) as invoiceReceive,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Departure' LIMIT 1) as departure,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Completed' LIMIT 1) as completed
 
       FROM Shipments s
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
-      LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
-      LEFT JOIN Users u ON sc.userID = u.userID
-      LEFT JOIN ShipmentStatusLog sLog ON s.shipmentID = sLog.shipmentID
+      
+      -- Join Crew
+      LEFT JOIN ShipmentCrew scDriver ON s.shipmentID = scDriver.shipmentID 
+      LEFT JOIN Users uDriver ON scDriver.userID = uDriver.userID AND uDriver.role = 'Driver'
+      LEFT JOIN ShipmentCrew scHelper ON s.shipmentID = scHelper.shipmentID 
+      LEFT JOIN Users uHelper ON scHelper.userID = uHelper.userID AND uHelper.role = 'Helper'
+
+      -- Join Payroll (Actual Data)
+      LEFT JOIN ShipmentPayroll spDriver ON s.shipmentID = spDriver.shipmentID AND spDriver.crewID = uDriver.userID
+      LEFT JOIN ShipmentPayroll spHelper ON s.shipmentID = spHelper.shipmentID AND spHelper.crewID = uHelper.userID
+
+      -- Join Rates (Fallback Data)
+      -- logic: If destLocation contains the rate's routeCluster string
+      LEFT JOIN PayrollRates pr ON (s.destLocation LIKE CONCAT('%', pr.routeCluster, '%') AND v.type = pr.vehicleType)
       
       WHERE s.creationTimestamp BETWEEN ? AND ?
+      
       GROUP BY s.shipmentID
       ORDER BY s.creationTimestamp DESC
     `;
@@ -342,40 +377,72 @@ exports.exportShipments = (req, res) => {
     const end = `${endDate} 23:59:59`;
 
     db.query(query, [start, end], (err, rows) => {
-        if (err) return res.status(500).json({ message: "Database error during export" });
-        if (rows.length === 0) return res.status(404).json({ message: 'No records found' });
+        if (err) {
+            console.error("Export Query Error:", err);
+            if (!res.headersSent) return res.status(500).json({ message: "Database error" });
+            return;
+        }
+        if (rows.length === 0) {
+            if (!res.headersSent) return res.status(404).json({ message: 'No records found' });
+            return;
+        }
 
         try {
-            const workSheet = XLSX.utils.json_to_sheet(rows);
-            const wscols = Object.keys(rows[0]).map(key => ({ wch: 20 }));
-            workSheet['!cols'] = wscols;
+            // 3. Map Data Respecting User Order
+            const excelData = rows.map(row => {
+                const finalRow = {}; // This object preserves insertion order in modern JS
+                const fmtDate = (d) => d ? new Date(d).toLocaleString() : '-';
+                const fmtMoney = (m) => m ? Number(m).toFixed(2) : '0.00';
+
+                // Iterate through the ORDERED array from frontend
+                selectedColumns.forEach(colKey => {
+                    switch (colKey) {
+                        case 'shipmentID': finalRow['Shipment ID'] = row.shipmentID; break;
+                        case 'destName': finalRow['Destination Name'] = row.destName; break;
+                        case 'destLocation': finalRow['Destination Address'] = row.destLocation; break;
+                        case 'loadingDate': finalRow['Loading Date'] = row.loadingDate; break;
+                        case 'deliveryDate': finalRow['Delivery Date'] = row.deliveryDate; break;
+                        case 'plateNo': finalRow['Truck Plate'] = row.plateNo; break;
+                        case 'truckType': finalRow['Truck Type'] = row.truckType; break;
+                        case 'currentStatus': finalRow['Status'] = row.currentStatus; break;
+                        case 'driverName': finalRow['Driver'] = `${row.driverNameFirst || ''} ${row.driverNameLast || ''}`.trim(); break;
+                        case 'helperName': finalRow['Helper'] = `${row.helperNameFirst || ''} ${row.helperNameLast || ''}`.trim(); break;
+                        case 'driverFee': finalRow['Driver Fee'] = fmtMoney(row.driverFee); break;
+                        case 'helperFee': finalRow['Helper Fee'] = fmtMoney(row.helperFee); break;
+                        case 'allowance': finalRow['Allowance'] = fmtMoney(row.allowance); break;
+                        case 'dateCreated': finalRow['Date Created'] = fmtDate(row.creationTimestamp); break;
+                        case 'arrival': finalRow['Arrival Time'] = fmtDate(row.arrival); break;
+                        case 'handover': finalRow['Handover Invoice'] = fmtDate(row.handover); break;
+                        case 'startUnload': finalRow['Start Unload'] = fmtDate(row.startUnload); break;
+                        case 'finishUnload': finalRow['Finish Unload'] = fmtDate(row.finishUnload); break;
+                        case 'invoiceReceive': finalRow['Invoice Receive'] = fmtDate(row.invoiceReceive); break;
+                        case 'departure': finalRow['Departure'] = fmtDate(row.departure); break;
+                        case 'completed': finalRow['Completion Time'] = fmtDate(row.completed); break;
+                    }
+                });
+
+                return finalRow;
+            });
+
+            // 4. Generate & Send
+            const workSheet = XLSX.utils.json_to_sheet(excelData);
+            const colWidths = Object.keys(excelData[0] || {}).map(() => ({ wch: 20 }));
+            workSheet['!cols'] = colWidths;
 
             const workBook = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(workBook, workSheet, "Shipment Report");
             const excelBuffer = XLSX.write(workBook, { bookType: 'xlsx', type: 'buffer' });
 
-            // Set Headers for File Download
             res.setHeader('Content-Disposition', `attachment; filename=Shipments_${startDate}_to_${endDate}.xlsx`);
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
-            // FIX 2: Correct Log Activity Call
-            logActivity(
-                adminID, 
-                'EXPORT_DATA', 
-                `Exported Shipment Report (${startDate} to ${endDate})`, 
-                () => {
-                    // FIX 3: Send the file buffer INSIDE the callback
-                    // Do NOT use res.json() here, the browser expects the file stream.
-                    res.send(excelBuffer);
-                }
-            );
+            logActivity(adminID, 'EXPORT_DATA', `Exported Report (${startDate} to ${endDate})`, () => {
+                res.send(excelBuffer);
+            });
 
         } catch (error) {
-            console.error("Export Error:", error);
-            // Only send error json if headers haven't been sent yet
-            if (!res.headersSent) {
-                res.status(500).json({ message: "Error generating Excel file" });
-            }
+            console.error("Excel Gen Error:", error);
+            if (!res.headersSent) res.status(500).json({ message: "Error generating Excel file" });
         }
     });
 };

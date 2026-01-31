@@ -257,4 +257,14 @@ export const Icons = {
             <line x1="12" y1="16" x2="12.01" y2="16"></line>
         </svg>
     ),
+    GripIcon: () => (
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="2" cy="2" r="2" fill="currentColor"/>
+            <circle cx="2" cy="7" r="2" fill="currentColor"/>
+            <circle cx="2" cy="12" r="2" fill="currentColor"/>
+            <circle cx="10" cy="2" r="2" fill="currentColor"/>
+            <circle cx="10" cy="7" r="2" fill="currentColor"/>
+            <circle cx="10" cy="12" r="2" fill="currentColor"/>
+        </svg>
+    ),
 };

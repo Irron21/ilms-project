@@ -5,13 +5,41 @@ import './ShipmentView.css';
 import FeedbackModal from '../FeedbackModal'; 
 
 const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure'];
+const INITIAL_COLUMNS = [
+    { key: 'shipmentID', label: 'Shipment ID', checked: true },
+    { key: 'destName', label: 'Destination Name', checked: true },
+    { key: 'destLocation', label: 'Destination Address', checked: true },
+    { key: 'loadingDate', label: 'Loading Date', checked: true },
+    { key: 'deliveryDate', label: 'Delivery Date', checked: true },
+    { key: 'plateNo', label: 'Truck Plate', checked: true },
+    { key: 'truckType', label: 'Truck Type', checked: true },
+    { key: 'currentStatus', label: 'Current Status', checked: true },
+    // Crew Split
+    { key: 'driverName', label: 'Driver Name', checked: true },
+    { key: 'driverFee', label: 'Driver Base Fee', checked: false }, 
+    { key: 'helperName', label: 'Helper Name', checked: true },
+    { key: 'helperFee', label: 'Helper Base Fee', checked: false }, 
+    { key: 'allowance', label: 'Allowance (Per Person)', checked: false },
+    // Timestamps
+    { key: 'dateCreated', label: 'Date Created', checked: true },
+    { key: 'arrival', label: 'Time: Arrival', checked: false },
+    { key: 'handover', label: 'Time: Handover Invoice', checked: false },
+    { key: 'startUnload', label: 'Time: Start Unload', checked: false },
+    { key: 'finishUnload', label: 'Time: Finish Unload', checked: false },
+    { key: 'invoiceReceive', label: 'Time: Invoice Receive', checked: false },
+    { key: 'departure', label: 'Time: Departure', checked: false },
+    { key: 'completed', label: 'Time: Completed', checked: true },
+];
 
 function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [activeTab, setActiveTab] = useState('Active'); 
     const [statusFilter, setStatusFilter] = useState('All'); 
-    
+    const [selectedColumns, setSelectedColumns] = useState(
+        INITIAL_COLUMNS.filter(c => c.default).map(c => c.key)
+    );
+
     // Filters
     const [timeframe, setTimeframe] = useState('All');
     const [dateFilter, setDateFilter] = useState(''); 
@@ -27,7 +55,9 @@ function ShipmentView({ user, token, onLogout }) {
     const [activeLogs, setActiveLogs] = useState([]);
     const [flashingIds, setFlashingIds] = useState([]); 
     const prevShipmentsRef = useRef([]); 
-    
+    const dragItem = useRef();
+    const dragOverItem = useRef();
+
     // Modals & Data
     const [showModal, setShowModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
@@ -50,6 +80,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [filteredRoutes, setFilteredRoutes] = useState([]); 
     const [filteredVehicles, setFilteredVehicles] = useState([]); 
     const [isVehicleDisabled, setIsVehicleDisabled] = useState(true); 
+    const [columnConfig, setColumnConfig] = useState(INITIAL_COLUMNS);
 
     // --- DATE HELPERS ---
     const getTodayString = () => {
@@ -91,6 +122,42 @@ function ShipmentView({ user, token, onLogout }) {
         const [year, month] = monthStr.split('-');
         const d = new Date(year, month - 1);
         return d.toLocaleDateString('default', { month: 'long', year: 'numeric' }); 
+    };
+
+    // --- SMART DRAG HANDLERS ---
+    const dragStart = (e, position) => {
+        dragItem.current = position;
+        // Visual tweak: make the row look 'lifted' immediately
+        e.target.classList.add('dragging'); 
+    };
+
+    const dragEnter = (e, position) => {
+        // Prevent unnecessary updates
+        if (dragItem.current === null || dragItem.current === undefined) return;
+        
+        // If we hover over a different item, swap them!
+        if (dragItem.current !== position) {
+            const newList = [...columnConfig];
+            
+            // 1. Remove the item from its old position
+            const draggedItemContent = newList[dragItem.current];
+            newList.splice(dragItem.current, 1);
+            
+            // 2. Insert it into the new position
+            newList.splice(position, 0, draggedItemContent);
+            
+            // 3. Update Ref to track new position
+            dragItem.current = position;
+            
+            // 4. Update State (Triggers Re-render)
+            setColumnConfig(newList);
+        }
+    };
+
+    const dragEnd = (e) => {
+        e.target.classList.remove('dragging');
+        dragItem.current = null;
+        dragOverItem.current = null;
     };
 
     // --- LOAD DATA ---
@@ -254,6 +321,7 @@ function ShipmentView({ user, token, onLogout }) {
             fetchData(true); setFeedbackModal(null);
         }, onClose: () => setFeedbackModal(null)});
     };
+
     const initiateRestore = (id) => {
         setFeedbackModal({ type: 'restore', title: 'Restore?', message: `Restore Shipment #${id}?`, confirmLabel: "Restore", onConfirm: async () => {
             await api.put(`/shipments/${id}/restore`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
@@ -270,12 +338,28 @@ function ShipmentView({ user, token, onLogout }) {
         if (!hasData) { setShowNoDataModal(true); return; }
 
         try {
-            const config = { headers: { Authorization: `Bearer ${token}` }, params: { startDate: dateRange.start, endDate: dateRange.end }, responseType: 'blob' };
+            // Filter only checked columns and map to just their keys
+            // The ORDER of this array will match the visual order in the modal
+            const selectedKeys = columnConfig.filter(c => c.checked).map(c => c.key);
+
+            const params = { 
+                startDate: dateRange.start, 
+                endDate: dateRange.end,
+                columns: JSON.stringify(selectedKeys) // Pass ordered keys
+            };
+
+            const config = { 
+                headers: { Authorization: `Bearer ${token}` }, 
+                params: params, 
+                responseType: 'blob' 
+            };
+
             const response = await api.get('/shipments/export', config);
+            
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `Shipment_Report.xlsx`);
+            link.setAttribute('download', `Shipment_Report_${dateRange.start}.xlsx`);
             document.body.appendChild(link);
             link.click();
             link.parentNode.removeChild(link);
@@ -283,6 +367,34 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (error) {
             setFeedbackModal({ type: 'error', title: 'Export Failed', message: "Could not download file.", onClose: () => setFeedbackModal(null) });
         }
+    };
+
+    const moveColumn = (index, direction) => {
+        const newConfig = [...columnConfig];
+        const targetIndex = direction === 'up' ? index - 1 : index + 1;
+        
+        if (targetIndex >= 0 && targetIndex < newConfig.length) {
+            // Swap
+            [newConfig[index], newConfig[targetIndex]] = [newConfig[targetIndex], newConfig[index]];
+            setColumnConfig(newConfig);
+        }
+    };
+    
+    const toggleColumnCheck = (index) => {
+        const newConfig = [...columnConfig];
+        newConfig[index].checked = !newConfig[index].checked;
+        setColumnConfig(newConfig);
+    };
+
+    const toggleColumn = (key) => {
+        setSelectedColumns(prev => 
+            prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+        );
+    };
+
+    const selectAllColumns = (selectAll) => {
+        if (selectAll) setSelectedColumns(INITIAL_COLUMNS.map(c => c.key));
+        else setSelectedColumns([]);
     };
 
     const handleCrewClick = (e, crewString) => {
@@ -668,16 +780,62 @@ function ShipmentView({ user, token, onLogout }) {
             )}
             {showExportModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
-                    <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header"><h2>Extract Data</h2><button className="close-btn" onClick={() => setShowExportModal(false)}>×</button></div>
+                    <div className="modal-form-card" onClick={e => e.stopPropagation()} style={{width: '500px'}}>
+                        <div className="modal-header">
+                            <h2>Extract Data</h2>
+                            <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
+                        </div>
+                        
                         <div className="export-modal-body">
-                            <div className="form-row">
-                                <div className="form-group"><label>Start</label><input type="date" className="date-input" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} /></div>
-                                <div className="form-group"><label>End</label><input type="date" className="date-input" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} /></div>
+                            <div className="form-row" style={{marginBottom: '20px'}}>
+                                <div className="form-group">
+                                    <label>Start</label>
+                                    <input type="date" className="date-input" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} />
+                                </div>
+                                <div className="form-group">
+                                    <label>End</label>
+                                    <input type="date" className="date-input" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} />
+                                </div>
                             </div>
+
+                            <label className="export-options-label">Select & Arrange Columns (Drag to Reorder)</label>
+                            
+                            <div className="sortable-list">
+                                {columnConfig.map((col, index) => (
+                                    <div 
+                                        key={col.key} 
+                                        className="sortable-item"
+                                        draggable
+                                        onDragStart={(e) => dragStart(e, index)}
+                                        onDragEnter={(e) => dragEnter(e, index)}
+                                        onDragEnd={dragEnd}
+                                        onDragOver={(e) => e.preventDefault()} // Necessary for drop to work
+                                    >
+                                        {/* Grip Handle */}
+                                        <div className="drag-handle" title="Drag to reorder">
+                                            <Icons.GripIcon />
+                                        </div>
+
+                                        {/* Checkbox & Label */}
+                                        <label>
+                                            <input 
+                                                type="checkbox" 
+                                                checked={col.checked}
+                                                onChange={() => {
+                                                    const newConfig = [...columnConfig];
+                                                    newConfig[index].checked = !newConfig[index].checked;
+                                                    setColumnConfig(newConfig);
+                                                }}
+                                            />
+                                            {col.label}
+                                        </label>
+                                    </div>
+                                ))}
+                            </div>
+
                             <div className="modal-actions" style={{marginTop:'25px', display:'flex', gap:'10px'}}>
                                 <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download</button>
+                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download Report</button>
                             </div>
                         </div>
                     </div>
