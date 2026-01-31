@@ -113,7 +113,21 @@ function ShipmentView({ user, token, onLogout }) {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
+        
+        // --- SMART DATE LOGIC ---
+        if (name === 'loadingDate') {
+            setFormData(prev => ({ 
+                ...prev, 
+                loadingDate: value,
+                // If new loading date is AFTER current delivery date, reset delivery date
+                deliveryDate: (prev.deliveryDate && prev.deliveryDate < value) ? '' : prev.deliveryDate
+            }));
+            return; 
+        }
+
         setFormData(prev => ({ ...prev, [name]: value }));
+        
+        // --- ROUTE LOGIC ---
         if (name === 'destLocation') {
              const cleanInput = value.toLowerCase().trim();
              const allRouteNames = Object.keys(routeRules); 
@@ -197,18 +211,31 @@ function ShipmentView({ user, token, onLogout }) {
 
     const handleCreateShipment = async (e) => {
         e.preventDefault();
-        const todayStr = getTodayString();
-        if (formData.loadingDate < todayStr) {
-            setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Loading Date cannot be in the past.' }); return;
-        }
-        if (formData.deliveryDate < formData.loadingDate) {
-            setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Delivery Date cannot be before Loading Date.' }); return;
-        }
+
+        // 1. ROUTE VALIDATION (Frontend Check)
         const allRouteNames = Object.keys(routeRules);
         const routeExists = allRouteNames.some(r => r.toLowerCase() === formData.destLocation.trim().toLowerCase());
+        
         if (!routeExists) {
-            setFeedbackModal({ type: 'error', title: 'Invalid Route', message: 'Please select a valid route.' }); return;
+            setFeedbackModal({ 
+                type: 'error', 
+                title: 'Invalid Route', 
+                message: 'The entered route is not in the payroll list. Please select a valid route from the suggestion list.' 
+            }); 
+            return;
         }
+
+        // 2. DATE VALIDATION (Double Check)
+        // Even with smart inputs, we keep this just in case
+        if (formData.deliveryDate < formData.loadingDate) {
+            setFeedbackModal({ 
+                type: 'error', 
+                title: 'Date Error', 
+                message: 'Delivery Date cannot be before Loading Date.' 
+            }); 
+            return;
+        }
+
         try {
             await api.post('/shipments/create', { ...formData, userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
             setShowModal(false);
@@ -216,7 +243,9 @@ function ShipmentView({ user, token, onLogout }) {
             fetchData(true); 
             setIsVehicleDisabled(true);
             setFeedbackModal({ type: 'success', title: 'Scheduled!', message: 'Shipment created.', onClose: () => setFeedbackModal(null) });
-        } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: err.response?.data?.error || "Failed." }); }
+        } catch (err) { 
+            setFeedbackModal({ type: 'error', title: 'Error', message: err.response?.data?.error || "Failed." }); 
+        }
     };
 
     const initiateArchive = (id) => {
@@ -232,7 +261,6 @@ function ShipmentView({ user, token, onLogout }) {
         }, onClose: () => setFeedbackModal(null)});
     };
 
-    // ✅ FIXED: Restored Full Export Handler
     const handleExport = async () => {
         const hasData = shipments.some(s => {
             const shipDate = s.loadingDate ? s.loadingDate.substring(0, 10) : s.creationTimestamp.substring(0, 10);
@@ -257,7 +285,6 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // ✅ FIXED: Restored Full Crew Click Handler
     const handleCrewClick = (e, crewString) => {
         e.stopPropagation();
         if (!crewString) return;
@@ -268,7 +295,6 @@ function ShipmentView({ user, token, onLogout }) {
         setCrewPopup({ show: true, x: e.clientX - 100, y: e.clientY + 20, crewData: parsedCrew });
     };
 
-    // Global Click Listener to close popups
     useEffect(() => {
         const closePopup = () => setCrewPopup({ show: false, x: 0, y: 0, crewData: [] });
         if (crewPopup.show) window.addEventListener('click', closePopup);
@@ -298,7 +324,6 @@ function ShipmentView({ user, token, onLogout }) {
     };
     const tabFiltered = filterByTab(shipments);
 
-    // --- SMART FILTER OPTIONS ---
     const getFilterOptions = () => {
         if (activeTab === 'Completed') {
             const months = tabFiltered.map(s => s.loadingDate ? getMonthValue(s.loadingDate) : null).filter(Boolean);
@@ -321,7 +346,6 @@ function ShipmentView({ user, token, onLogout }) {
 
     const filterOptions = getFilterOptions();
 
-    // --- TIMEFRAME FILTER ---
     const filterByTimeframe = (items) => {
         if (activeTab === 'Active' || timeframe === 'All') return items;
         const now = new Date(); now.setHours(0,0,0,0);
@@ -568,10 +592,38 @@ function ShipmentView({ user, token, onLogout }) {
                                 <div className="form-group"><label>Shipment ID</label><input type="number" required value={formData.shipmentID} onChange={e => setFormData({...formData, shipmentID: e.target.value})} /></div>
                                 <div className="form-group"><label>Destination Name</label><input type="text" required value={formData.destName} onChange={e => setFormData({...formData, destName: e.target.value})} /></div>
                             </div>
+                            
+                            {/* --- UPDATED SMART DATES --- */}
                             <div className="form-row">
-                                <div className="form-group"><label>Loading Date</label><input type="date" required value={formData.loadingDate} onChange={e => setFormData({...formData, loadingDate: e.target.value})} /></div>
-                                <div className="form-group"><label>Delivery Date</label><input type="date" required value={formData.deliveryDate} onChange={e => setFormData({...formData, deliveryDate: e.target.value})} /></div>
+                                <div className="form-group">
+                                    <label>Loading Date</label>
+                                    <input 
+                                        type="date" 
+                                        required 
+                                        name="loadingDate"
+                                        min={getTodayString()} // 1. Prevent Past Dates
+                                        value={formData.loadingDate} 
+                                        onChange={handleChange} 
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label style={{color: !formData.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
+                                    <input 
+                                        type="date" 
+                                        required 
+                                        name="deliveryDate"
+                                        disabled={!formData.loadingDate} // 2. Disabled until loading chosen
+                                        min={formData.loadingDate}       // 3. Min date is loading date
+                                        value={formData.deliveryDate} 
+                                        onChange={handleChange}
+                                        style={{ 
+                                            backgroundColor: !formData.loadingDate ? '#f9f9f9' : 'white',
+                                            cursor: !formData.loadingDate ? 'not-allowed' : 'pointer'
+                                        }}
+                                    />
+                                </div>
                             </div>
+
                             <div className="form-group" style={{ marginBottom: '15px' }}>
                                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Route / Cluster</label>
                                 <input type="text" name="destLocation" value={formData.destLocation} onChange={handleChange} list={filteredRoutes.length > 0 ? "route-list" : ""} className="form-input" placeholder="Search..." autoComplete="off" required />

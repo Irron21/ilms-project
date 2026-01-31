@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import logoPng from '../../assets/k2mac_logo2.png'; 
 import { Icons } from '../Icons'; 
 import './DesktopApp.css'; 
@@ -10,16 +10,77 @@ import KPIView from './KPIView';
 import PayrollView from './PayrollView';  
 import UserManagement from './UserManagement'; 
 
+// CONFIGURATION
+const IDLE_TIMEOUT_MS = 30 * 60 * 1000; 
+
 function DesktopApp({ user, token, onLogout }) {
   // --- STATE ---
   const [view, setView] = useState('shipments'); 
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showProfile, setShowProfile] = useState(false);
-
-  // STATE FOR RESOURCE TAB (Users vs Trucks)
   const [resourceTab, setResourceTab] = useState('users'); 
 
-  // --- EFFECTS ---
+  // --- IDLE TIMER REFS ---
+  const lastActivityRef = useRef(Date.now());
+  const timerIdRef = useRef(null);
+
+  // --- LOGOUT HANDLER (Wrapped in useCallback for stability) ---
+  const handleLogoutClick = useCallback(async (reason = 'USER_INITIATED') => {
+    try {
+      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+      
+      // Determine log message based on reason
+      const details = reason === 'IDLE_TIMEOUT' 
+        ? 'System auto-logout due to inactivity' 
+        : 'User logged out via Desktop Portal';
+
+      await api.post('/logs', {
+        action: 'LOGOUT',
+        details: details,
+        timestamp: new Date().toISOString()
+      }, config);
+      
+      // OPTIONAL: If you need to clear the activeToken in the DB specifically
+      // await api.post('/auth/logout', { userId: user.id }, config);
+
+    } catch (error) {
+      console.error("Logout log failed:", error);
+    } finally {
+      onLogout(); // Clears client state
+    }
+  }, [token, onLogout]); // Dependencies
+
+  // --- IDLE TIMER LOGIC ---
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+
+    // 1. Function to update last activity time
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    // 2. Check for inactivity every 1 minute
+    const checkForInactivity = () => {
+      const now = Date.now();
+      if (now - lastActivityRef.current >= IDLE_TIMEOUT_MS) {
+        handleLogoutClick('IDLE_TIMEOUT');
+      }
+    };
+
+    // 3. Setup Listeners
+    events.forEach(event => window.addEventListener(event, resetTimer));
+    
+    // 4. Start the interval checker
+    timerIdRef.current = setInterval(checkForInactivity, 60000); // Check every 1 minute
+
+    // 5. Cleanup
+    return () => {
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+      if (timerIdRef.current) clearInterval(timerIdRef.current);
+    };
+  }, [handleLogoutClick]); // Re-run if logout handler changes
+
+  // --- CLOCK & MENU EFFECTS ---
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -30,26 +91,6 @@ function DesktopApp({ user, token, onLogout }) {
     if (showProfile) window.addEventListener('click', closeMenu);
     return () => window.removeEventListener('click', closeMenu);
   }, [showProfile]);
-
-  const handleLogoutClick = async () => {
-    try {
-      // Create config with the token (Crucial to prevent 401 Unauthorized)
-      const config = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
-
-      // Send the log request
-      await api.post('/logs', {
-        action: 'LOGOUT',
-        details: 'User logged out via Desktop Portal', 
-        timestamp: new Date().toISOString()
-      }, config);
-
-    } catch (error) {
-      console.error("Failed to log desktop logout:", error);
-    } finally {
-      // ✅ 4. Always logout, even if the log fails
-      onLogout();
-    }
-  };
 
   const getHeaderTitle = () => {
       switch(view) {
@@ -64,41 +105,35 @@ function DesktopApp({ user, token, onLogout }) {
   // --- RENDER ---
   return (
     <div className="desktop-layout">
-      {/* SIDEBAR */}
+      {/* ... (Rest of your JSX remains exactly the same) ... */}
+      
       <aside className="sidebar-rail">
         <div className="rail-logo"><img src={logoPng} alt="Logo" /></div>
         
-        {/* Navigation */}
         <nav className="rail-menu">
             <button 
                 className={`rail-btn ${view === 'shipments' ? 'active' : ''}`} 
                 onClick={() => setView('shipments')} 
-                title="Shipments"
             >
                 <Icons.Truck />
             </button>
             <button 
                 className={`rail-btn ${view === 'analytics' ? 'active' : ''}`} 
                 onClick={() => setView('analytics')} 
-                title="KPI Analytics"
             >
                 <Icons.Analytics />
             </button>
             {user.role === 'Admin' && (
                 <>
-                    {/* Payroll */}
                     <button 
                         className={`rail-btn ${view === 'payroll' ? 'active' : ''}`} 
                         onClick={() => setView('payroll')} 
-                        title="Payroll Suggestion"
                     >
                         <Icons.Wallet />
                     </button>
-                    {/* Resource Management (Users/Trucks) */}
                     <button 
                         className={`rail-btn ${view === 'users' ? 'active' : ''}`} 
                         onClick={() => setView('users')} 
-                        title="Resource Management"
                     >
                         <Icons.List />
                     </button>
@@ -106,7 +141,6 @@ function DesktopApp({ user, token, onLogout }) {
             )}
         </nav>
         
-        {/* PROFILE FOOTER */}
         <div className="rail-footer">
             <div 
                 className={`rail-profile ${showProfile ? 'active' : ''}`} 
@@ -118,7 +152,6 @@ function DesktopApp({ user, token, onLogout }) {
                 <Icons.Profile />
             </div>
 
-            {/* POPUP MENU */}
             {showProfile && (
                 <div className="profile-popup-menu" onClick={(e) => e.stopPropagation()}>
                     <div className="menu-header">
@@ -132,7 +165,7 @@ function DesktopApp({ user, token, onLogout }) {
                     </div>
                     
                     <div className="menu-divider"></div>
-                    <button className="menu-logout-btn" onClick={handleLogoutClick}>
+                    <button className="menu-logout-btn" onClick={() => handleLogoutClick('USER_INITIATED')}>
                         Log Out
                     </button>
                 </div>
@@ -141,17 +174,15 @@ function DesktopApp({ user, token, onLogout }) {
       </aside>
 
       <main className="main-content">
-        <header className="top-header">
+         {/* ... (Header and Content Body logic remains the same) ... */}
+         <header className="top-header">
             <div className="header-left">
                 <div style={{display: 'flex', alignItems: 'center', gap: '25px'}}>
                     <h1>{getHeaderTitle()}</h1>
 
-                    {/* ANIMATED SWITCH */}
                     {view === 'users' && (
                         <div className="resource-switch">
-                            {/* The sliding white background */}
                             <div className={`switch-bg ${resourceTab}`}></div>
-                            
                             <button 
                                 className={`switch-option ${resourceTab === 'users' ? 'active' : ''}`}
                                 onClick={() => setResourceTab('users')}
@@ -179,11 +210,7 @@ function DesktopApp({ user, token, onLogout }) {
         <div className="content-body">
             {view === 'shipments' && <ShipmentView user={user} token={token} onLogout={onLogout} />}
             {view === 'analytics' && <KPIView />}
-            
-            {/* ADMIN ONLY VIEWS */}
             {view === 'payroll' && user.role === 'Admin' && <PayrollView />}
-            
-            {/* activeTab prop so it switches between Users and Trucks */}
             {view === 'users' && user.role === 'Admin' && (
                 <UserManagement activeTab={resourceTab} />
             )}

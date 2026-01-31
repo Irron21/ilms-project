@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const logActivity = require('../utils/activityLogger');
 
 // Get List of Pay Periods
 exports.getPeriods = (req, res) => {
@@ -92,7 +93,7 @@ const formatDateLocal = (dateInput) => {
 // GENERATE PAYROLL (Awaits Carry-Over)
 exports.generatePayroll = (req, res) => {
     const { periodID } = req.body;
-
+    const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
     db.query("SELECT * FROM PayrollPeriods WHERE periodID = ?", [periodID], (err, periods) => {
         if (err || periods.length === 0) return res.status(500).json({ error: "Invalid Period" });
 
@@ -125,6 +126,13 @@ exports.generatePayroll = (req, res) => {
                 const finishGeneration = (rowsCreated = 0) => {
                     processCarryOverDebts(periodID, db)
                         .then(() => {
+                            
+                            logActivity(
+                                adminID, 
+                                'GENERATE_PAYROLL', 
+                                `Harvested/Generated payroll calculation for Period #${periodID}`
+                            );
+
                             res.json({ 
                                 message: "Payroll Generated & Balances Updated", 
                                 rowsCreated: rowsCreated 

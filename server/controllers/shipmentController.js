@@ -211,70 +211,103 @@ exports.createShipment = (req, res) => {
     // 1. Extract Data
     const { 
         shipmentID, vehicleID, destName, destLocation, 
-        loadingDate, deliveryDate, // ✅ NEW INPUTS
+        loadingDate, deliveryDate, 
         userID 
     } = req.body;
     
     const driverID = parseInt(req.body.driverID); 
     const helperID = parseInt(req.body.helperID); 
+    const loadDateObj = new Date(loadingDate);
+    const delDateObj = new Date(deliveryDate);
+    const today = new Date();
+    today.setHours(0,0,0,0);
 
-    // 2. Validation
-    if (!shipmentID) return res.status(400).json({ error: "Shipment ID is required." });
-    if (!driverID || !helperID) return res.status(400).json({ error: "Driver and Helper are required." });
-    if (!loadingDate || !deliveryDate) return res.status(400).json({ error: "Loading and Delivery dates are required." });
+    // CHECK 1: Loading Date Future
+    if (loadDateObj > new Date()) { 
+        const msg = `Attempted to create Shipment #${shipmentID} with a future Loading Date (${loadingDate}) which is invalid.`;
+        return logActivity(userID, 'SHIPMENT_VALIDATION_ERROR', msg, () => {
+            res.status(400).json({ error: "Loading Date cannot be in the future." });
+        });
+    }
+    
+    // CHECK 2: Delivery before Loading
+    if (delDateObj < loadDateObj) {
+        const msg = `Attempted to create Shipment #${shipmentID} where Delivery Date (${deliveryDate}) is before Loading Date (${loadingDate}).`;
+        return logActivity(userID, 'SHIPMENT_VALIDATION_ERROR', msg, () => {
+            res.status(400).json({ error: "Delivery Date cannot be before Loading Date." });
+        });
+    }
 
-    db.getConnection((err, connection) => {
-        if (err) return res.status(500).json({ error: "Database connection failed." });
+    // CHECK 3: Route Cluster Validation (RESTORED THIS LOGIC)
+    const checkRouteSql = "SELECT routeCluster FROM PayrollRates WHERE ? LIKE CONCAT('%', routeCluster, '%') LIMIT 1";
+    db.query(checkRouteSql, [destLocation], (err, results) => {
+        if (err) return res.status(500).json({ error: "Validation check failed." });
 
-        connection.beginTransaction((err) => {
-            if (err) {
-                connection.release();
-                return res.status(500).json({ error: "Transaction failed." });
-            }
+        if (results.length === 0) {
+            const msg = `User attempted to input route '${destLocation}' which does not match any known Route Cluster.`;
+            return logActivity(userID, 'SHIPMENT_VALIDATION_ERROR', msg, () => {
+                res.status(400).json({ error: `The location "${destLocation}" is not a recognized Route Cluster.` });
+            });
+        }
 
-            // ✅ INSERT loadingDate and deliveryDate
-            const sqlShipment = `
-                INSERT INTO Shipments (shipmentID, vehicleID, destName, destLocation, loadingDate, deliveryDate, userID, currentStatus) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending') 
-            `;
+        // 2. Validation
+        if (!shipmentID) return res.status(400).json({ error: "Shipment ID is required." });
+        if (!driverID || !helperID) return res.status(400).json({ error: "Driver and Helper are required." });
+        if (!loadingDate || !deliveryDate) return res.status(400).json({ error: "Loading and Delivery dates are required." });
 
-            connection.query(sqlShipment, [shipmentID, vehicleID, destName, destLocation, loadingDate, deliveryDate, userID], (err, result) => {
+        db.getConnection((err, connection) => {
+            if (err) return res.status(500).json({ error: "Database connection failed." });
+
+            connection.beginTransaction((err) => {
                 if (err) {
-                    return connection.rollback(() => {
-                        connection.release();
-                        if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Shipment ID already exists." });
-                        res.status(500).json({ error: "Failed to create shipment record: " + err.message });
-                    });
+                    connection.release();
+                    return res.status(500).json({ error: "Transaction failed." });
                 }
 
-                // ... (Crew Insertion Logic remains same) ...
-                const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID) VALUES ?";
-                const crewValues = [[shipmentID, driverID], [shipmentID, helperID]];
+                const sqlShipment = `
+                    INSERT INTO Shipments (shipmentID, vehicleID, destName, destLocation, loadingDate, deliveryDate, userID, currentStatus) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending') 
+                `;
 
-                connection.query(sqlCrew, [crewValues], (err) => {
+                connection.query(sqlShipment, [shipmentID, vehicleID, destName, destLocation, loadingDate, deliveryDate, userID], (err, result) => {
                     if (err) {
-                        return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Crew Fail" }); });
+                        return connection.rollback(() => {
+                            connection.release();
+                            if (err.code === 'ER_DUP_ENTRY') return res.status(400).json({ error: "Shipment ID already exists." });
+                            res.status(500).json({ error: "Failed to create shipment record: " + err.message });
+                        });
                     }
 
-                    const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
-                    connection.query(sqlLog, [shipmentID, userID], (err) => {
-                        if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Log fail" }); });
+                    const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID) VALUES ?";
+                    const crewValues = [[shipmentID, driverID], [shipmentID, helperID]];
 
-                        logActivity(userID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
-                            connection.commit((err) => {
-                                connection.release();
-                                res.json({ message: "Success", shipmentID });
+                    connection.query(sqlCrew, [crewValues], (err) => {
+                        if (err) {
+                            return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Crew Fail" }); });
+                        }
+
+                        const sqlLog = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')";
+                        connection.query(sqlLog, [shipmentID, userID], (err) => {
+                            if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Log fail" }); });
+
+                            logActivity(userID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
+                                connection.commit((err) => {
+                                    connection.release();
+                                    res.json({ message: "Success", shipmentID });
+                                });
                             });
                         });
                     });
                 });
             });
         });
-    });
+    }); // End Route Check
 };
 
 exports.exportShipments = (req, res) => {
     const { startDate, endDate } = req.query;
+    // FIX 1: Define adminID (checking req.user from middleware, or default to 1)
+    const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
 
     const query = `
       SELECT 
@@ -321,11 +354,28 @@ exports.exportShipments = (req, res) => {
             XLSX.utils.book_append_sheet(workBook, workSheet, "Shipment Report");
             const excelBuffer = XLSX.write(workBook, { bookType: 'xlsx', type: 'buffer' });
 
+            // Set Headers for File Download
             res.setHeader('Content-Disposition', `attachment; filename=Shipments_${startDate}_to_${endDate}.xlsx`);
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.send(excelBuffer);
+
+            // FIX 2: Correct Log Activity Call
+            logActivity(
+                adminID, 
+                'EXPORT_DATA', 
+                `Exported Shipment Report (${startDate} to ${endDate})`, 
+                () => {
+                    // FIX 3: Send the file buffer INSIDE the callback
+                    // Do NOT use res.json() here, the browser expects the file stream.
+                    res.send(excelBuffer);
+                }
+            );
+
         } catch (error) {
-            res.status(500).json({ message: "Error generating Excel file" });
+            console.error("Export Error:", error);
+            // Only send error json if headers haven't been sent yet
+            if (!res.headersSent) {
+                res.status(500).json({ message: "Error generating Excel file" });
+            }
         }
     });
 };
