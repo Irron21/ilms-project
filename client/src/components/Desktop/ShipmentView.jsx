@@ -9,6 +9,7 @@ const PHASE_ORDER = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unlo
 function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
+    const [activeTab, setActiveTab] = useState('Active'); 
     const [statusFilter, setStatusFilter] = useState('All'); 
     
     // Filters
@@ -27,59 +28,78 @@ function ShipmentView({ user, token, onLogout }) {
     const [flashingIds, setFlashingIds] = useState([]); 
     const prevShipmentsRef = useRef([]); 
     
-    // Modals
+    // Modals & Data
     const [showModal, setShowModal] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
     const [showNoDataModal, setShowNoDataModal] = useState(false);
     const [feedbackModal, setFeedbackModal] = useState(null); 
-
-    const [dateRange, setDateRange] = useState({
-        start: new Date().toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
-    });
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
     
     const [resources, setResources] = useState({ drivers: [], helpers: [], vehicles: [] });
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     
-    // FORM DATA
+    // Form Data
     const [formData, setFormData] = useState({ 
         shipmentID: '', destName: '', destLocation: '', 
         vehicleID: '', driverID: '', helperID: '',
         loadingDate: '', deliveryDate: '' 
     });
     
-    // DATA STATE
     const [routeRules, setRouteRules] = useState({}); 
     const [allVehicles, setAllVehicles] = useState([]); 
     const [filteredRoutes, setFilteredRoutes] = useState([]); 
     const [filteredVehicles, setFilteredVehicles] = useState([]); 
     const [isVehicleDisabled, setIsVehicleDisabled] = useState(true); 
 
-    // --- ✅ FIX: DATE FORMATTING (Timezone Aware) ---
-    // This converts the database UTC time back to PH Local Time for display
-    const formatDateDisplay = (dateStr) => {
-        if (!dateStr) return '-';
-        const d = new Date(dateStr);
-        return d.toLocaleDateString(); // Shows date in user's local timezone (PH)
-    };
-
-    // Helper to get local YYYY-MM-DD for filtering comparisons
-    const getDateValue = (dateStr) => {
-        if (!dateStr) return '';
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return '';
-        // Manually build local YYYY-MM-DD to avoid UTC shift
+    // --- DATE HELPERS ---
+    const getTodayString = () => {
+        const d = new Date();
         const year = d.getFullYear();
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
 
+    const getDateValue = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return ''; 
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    const formatDateDisplay = (dateStr) => {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        return d.toLocaleDateString(); 
+    };
+
+    // --- MONTH HELPERS ---
+    const getMonthValue = (dateStr) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return ''; 
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        return `${year}-${month}`; 
+    };
+
+    const formatMonthDisplay = (monthStr) => {
+        if (!monthStr) return '';
+        const [year, month] = monthStr.split('-');
+        const d = new Date(year, month - 1);
+        return d.toLocaleDateString('default', { month: 'long', year: 'numeric' }); 
+    };
+
     // --- LOAD DATA ---
     useEffect(() => {
+        const today = getTodayString();
+        setDateRange({ start: today, end: today }); 
+
         const loadData = async () => {
             try {
-                // Fetch Route Rules and Vehicles in parallel
                 const [routeRes, vehicleRes] = await Promise.all([
                     api.get('/shipments/payroll-routes'),
                     api.get('/vehicles')
@@ -94,36 +114,26 @@ function ShipmentView({ user, token, onLogout }) {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
-
         if (name === 'destLocation') {
-            const cleanInput = value.toLowerCase().trim();
-            const allRouteNames = Object.keys(routeRules); 
-
-            if (cleanInput.length > 0) {
-                const matches = allRouteNames.filter(r => r.toLowerCase().includes(cleanInput)).slice(0, 10);
-                setFilteredRoutes(matches);
-            } else {
-                setFilteredRoutes([]);
-            }
-
-            const matchedRouteKey = allRouteNames.find(r => r.toLowerCase() === cleanInput);
-
-            if (matchedRouteKey) {
-                const allowedTypes = routeRules[matchedRouteKey]; 
-                const validTrucks = allVehicles.filter(truck => allowedTypes.includes(truck.type));
-                setFilteredVehicles(validTrucks);
-                setIsVehicleDisabled(false); 
-            } else {
-                setFilteredVehicles([]);
-                setIsVehicleDisabled(true); 
-                if (formData.vehicleID) setFormData(prev => ({ ...prev, vehicleID: '' }));
-            }
+             const cleanInput = value.toLowerCase().trim();
+             const allRouteNames = Object.keys(routeRules); 
+             if (cleanInput.length > 0) {
+                 const matches = allRouteNames.filter(r => r.toLowerCase().includes(cleanInput)).slice(0, 10);
+                 setFilteredRoutes(matches);
+             } else setFilteredRoutes([]);
+             const matchedRouteKey = allRouteNames.find(r => r.toLowerCase() === cleanInput);
+             if (matchedRouteKey) {
+                 const allowedTypes = routeRules[matchedRouteKey]; 
+                 const validTrucks = allVehicles.filter(truck => allowedTypes.includes(truck.type));
+                 setFilteredVehicles(validTrucks);
+                 setIsVehicleDisabled(false); 
+             } else {
+                 setFilteredVehicles([]);
+                 setIsVehicleDisabled(true); 
+             }
         }
     };
-
-    const expandedIdRef = useRef(null);
-    useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
-
+    
     useEffect(() => {
         fetchData(true); 
         const interval = setInterval(() => {
@@ -157,6 +167,9 @@ function ShipmentView({ user, token, onLogout }) {
         } catch (err) { if (err.response?.status === 401) onLogout(); }
     };
 
+    const expandedIdRef = useRef(null);
+    useEffect(() => { expandedIdRef.current = expandedShipmentID; }, [expandedShipmentID]);
+    
     const refreshLogs = async (id) => {
         try {
             const res = await api.get(`/shipments/${id}/logs`, { headers: { Authorization: `Bearer ${token}` } });
@@ -174,7 +187,6 @@ function ShipmentView({ user, token, onLogout }) {
         setTimeout(() => { setFlashingIds(prev => prev.filter(id => !ids.includes(id))); }, 10000);
     };
 
-    // --- HANDLERS ---
     const handleOpenModal = async () => {
         try {
             const res = await api.get('/shipments/resources', { headers: { Authorization: `Bearer ${token}` } });
@@ -184,76 +196,43 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     const handleCreateShipment = async (e) => {
-            e.preventDefault();
-
-            // 1. DATE VALIDATION (Safe String Comparison)
-            const todayStr = new Date().toISOString().split('T')[0];
-            
-            if (formData.loadingDate < todayStr) {
-                setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Loading Date cannot be in the past.' });
-                return;
-            }
-            if (formData.deliveryDate < formData.loadingDate) {
-                setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Delivery Date cannot be before Loading Date.' });
-                return;
-            }
-
-            // 2. Route Validation
-            const allRouteNames = Object.keys(routeRules);
-            const routeExists = allRouteNames.some(r => r.toLowerCase() === formData.destLocation.trim().toLowerCase());
-
-            if (!routeExists) {
-                setFeedbackModal({ type: 'error', title: 'Invalid Route', message: 'Please select a valid route from the list to unlock vehicle assignment.' });
-                return;
-            }
-
-            try {
-                await api.post('/shipments/create', { ...formData, userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
-    
-                setShowModal(false);
-                setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '', loadingDate: '', deliveryDate: '' });
-                fetchData(true); 
-                setIsVehicleDisabled(true);
-
-                setFeedbackModal({ type: 'success', title: 'Scheduled!', message: 'The new shipment has been successfully scheduled.', onClose: () => setFeedbackModal(null) });
-    
-            } catch (err) { 
-                setFeedbackModal({ type: 'error', title: 'Creation Failed', message: err.response?.data?.error || "Failed.", onClose: () => setFeedbackModal(null) });
-            }
-        };
+        e.preventDefault();
+        const todayStr = getTodayString();
+        if (formData.loadingDate < todayStr) {
+            setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Loading Date cannot be in the past.' }); return;
+        }
+        if (formData.deliveryDate < formData.loadingDate) {
+            setFeedbackModal({ type: 'error', title: 'Invalid Date', message: 'Delivery Date cannot be before Loading Date.' }); return;
+        }
+        const allRouteNames = Object.keys(routeRules);
+        const routeExists = allRouteNames.some(r => r.toLowerCase() === formData.destLocation.trim().toLowerCase());
+        if (!routeExists) {
+            setFeedbackModal({ type: 'error', title: 'Invalid Route', message: 'Please select a valid route.' }); return;
+        }
+        try {
+            await api.post('/shipments/create', { ...formData, userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
+            setShowModal(false);
+            setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '', loadingDate: '', deliveryDate: '' });
+            fetchData(true); 
+            setIsVehicleDisabled(true);
+            setFeedbackModal({ type: 'success', title: 'Scheduled!', message: 'Shipment created.', onClose: () => setFeedbackModal(null) });
+        } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: err.response?.data?.error || "Failed." }); }
+    };
 
     const initiateArchive = (id) => {
-        setFeedbackModal({
-            type: 'warning', title: 'Archive Shipment?', message: `Are you sure you want to archive Shipment #${id}?`,
-            confirmLabel: "Yes, Archive",
-            onConfirm: async () => {
-                try {
-                    await api.put(`/shipments/${id}/archive`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
-                    fetchData(true);
-                    setFeedbackModal({ type: 'success', title: 'Archived!', message: `Shipment #${id} has been archived.`, onClose: () => setFeedbackModal(null) });
-                } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed to archive.', onClose: () => setFeedbackModal(null) }); }
-            },
-            onClose: () => setFeedbackModal(null)
-        });
+        setFeedbackModal({ type: 'warning', title: 'Archive?', message: `Archive Shipment #${id}?`, confirmLabel: "Yes", onConfirm: async () => {
+            await api.put(`/shipments/${id}/archive`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData(true); setFeedbackModal(null);
+        }, onClose: () => setFeedbackModal(null)});
     };
-
     const initiateRestore = (id) => {
-        setFeedbackModal({
-            type: 'restore', title: 'Restore Shipment?', message: `Restore Shipment #${id} to active list?`,
-            confirmLabel: "Restore",
-            onConfirm: async () => {
-                try {
-                    await api.put(`/shipments/${id}/restore`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
-                    fetchData(true);
-                    setFeedbackModal({ type: 'success', title: 'Restored!', message: `Shipment #${id} is active again.`, onClose: () => setFeedbackModal(null) });
-                } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed to restore.', onClose: () => setFeedbackModal(null) }); }
-            },
-            onClose: () => setFeedbackModal(null)
-        });
+        setFeedbackModal({ type: 'restore', title: 'Restore?', message: `Restore Shipment #${id}?`, confirmLabel: "Restore", onConfirm: async () => {
+            await api.put(`/shipments/${id}/restore`, { userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
+            fetchData(true); setFeedbackModal(null);
+        }, onClose: () => setFeedbackModal(null)});
     };
 
-    const getTodayString = () => new Date().toISOString().split('T')[0];
-
+    // ✅ FIXED: Restored Full Export Handler
     const handleExport = async () => {
         const hasData = shipments.some(s => {
             const shipDate = s.loadingDate ? s.loadingDate.substring(0, 10) : s.creationTimestamp.substring(0, 10);
@@ -278,6 +257,7 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
+    // ✅ FIXED: Restored Full Crew Click Handler
     const handleCrewClick = (e, crewString) => {
         e.stopPropagation();
         if (!crewString) return;
@@ -288,6 +268,7 @@ function ShipmentView({ user, token, onLogout }) {
         setCrewPopup({ show: true, x: e.clientX - 100, y: e.clientY + 20, crewData: parsedCrew });
     };
 
+    // Global Click Listener to close popups
     useEffect(() => {
         const closePopup = () => setCrewPopup({ show: false, x: 0, y: 0, crewData: [] });
         if (crewPopup.show) window.addEventListener('click', closePopup);
@@ -295,46 +276,69 @@ function ShipmentView({ user, token, onLogout }) {
     }, [crewPopup.show]);
 
     const toggleRow = (id) => {
-        if (expandedShipmentID === id) {
-            setClosingId(id); 
-            setTimeout(() => { setExpandedShipmentID(null); setClosingId(null); setActiveLogs([]); }, 300); 
+        if (expandedShipmentID === id) { setClosingId(id); setTimeout(() => { setExpandedShipmentID(null); setClosingId(null); setActiveLogs([]); }, 300); }
+        else { setExpandedShipmentID(id); setClosingId(null); refreshLogs(id); }
+    };
+
+    // --- TAB FILTERING ---
+    const filterByTab = (items) => {
+        const today = getTodayString();
+        return items.filter(s => {
+            const loadDate = getDateValue(s.loadingDate);
+            const delDate = getDateValue(s.deliveryDate);
+            const isCompleted = s.currentStatus === 'Completed';
+
+            switch (activeTab) {
+                case 'Completed': return isCompleted;
+                case 'Delayed': return !isCompleted && delDate && delDate < today;
+                case 'Upcoming': return !isCompleted && loadDate > today;
+                case 'Active': default: return !isCompleted && loadDate === today;
+            }
+        });
+    };
+    const tabFiltered = filterByTab(shipments);
+
+    // --- SMART FILTER OPTIONS ---
+    const getFilterOptions = () => {
+        if (activeTab === 'Completed') {
+            const months = tabFiltered.map(s => s.loadingDate ? getMonthValue(s.loadingDate) : null).filter(Boolean);
+            const uniqueMonths = [...new Set(months)].sort().reverse();
+            return uniqueMonths.map(m => ({
+                value: m,
+                label: formatMonthDisplay(m),
+                count: tabFiltered.filter(s => s.loadingDate && getMonthValue(s.loadingDate) === m).length
+            }));
         } else {
-            setExpandedShipmentID(id); setClosingId(null); refreshLogs(id); 
+            const dates = tabFiltered.map(s => s.loadingDate ? getDateValue(s.loadingDate) : null).filter(Boolean);
+            const uniqueDates = [...new Set(dates)].sort().reverse();
+            return uniqueDates.map(d => ({
+                value: d,
+                label: formatDateDisplay(d),
+                count: tabFiltered.filter(s => s.loadingDate && getDateValue(s.loadingDate) === d).length
+            }));
         }
     };
 
-    // --- FILTERS ---
-    const filterByTimeframe = (items) => {
-        if (timeframe === 'All') return items;
-        const now = new Date();
-        now.setHours(0,0,0,0);
+    const filterOptions = getFilterOptions();
 
+    // --- TIMEFRAME FILTER ---
+    const filterByTimeframe = (items) => {
+        if (activeTab === 'Active' || timeframe === 'All') return items;
+        const now = new Date(); now.setHours(0,0,0,0);
         return items.filter(s => {
             const dateStr = s.loadingDate || s.creationTimestamp;
-            const shipDate = new Date(dateStr);
-            shipDate.setHours(0,0,0,0);
-            
-            const diffDays = Math.ceil((now - shipDate) / (1000 * 60 * 60 * 24));
-
+            const d = new Date(dateStr); 
+            const diffDays = Math.ceil((now - d) / (1000 * 60 * 60 * 24));
             switch(timeframe) {
                 case 'Daily': return Math.abs(diffDays) <= 1;
                 case 'Weekly': return Math.abs(diffDays) <= 7;
                 case 'Bi-Weekly': return Math.abs(diffDays) <= 14;
-                case 'Monthly': return shipDate.getMonth() === now.getMonth() && shipDate.getFullYear() === now.getFullYear();
-                case 'Quarterly': return Math.floor(shipDate.getMonth() / 3) === Math.floor(now.getMonth() / 3) && shipDate.getFullYear() === now.getFullYear();
-                case 'Yearly': return shipDate.getFullYear() === now.getFullYear();
+                case 'Monthly': return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
                 default: return true;
             }
         });
     };
-
-    const timeframeFiltered = filterByTimeframe(shipments);
-
-    const getAvailableDates = () => {
-        // ✅ FIX: Use local date value for grouping/dropdown
-        const dates = shipments.map(s => s.loadingDate ? getDateValue(s.loadingDate) : null).filter(Boolean); 
-        return [...new Set(dates)].sort().reverse();
-    };
+    const timeframeFiltered = filterByTimeframe(tabFiltered);
 
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
@@ -347,12 +351,12 @@ function ShipmentView({ user, token, onLogout }) {
 
     const finalFiltered = timeframeFiltered.filter(s => {
         const visibleStatus = getDisplayStatus(s.currentStatus);
-        const matchesStatus = statusFilter === 'All' || visibleStatus === statusFilter;
+        const matchesStatus = (activeTab !== 'Active') ? true : (statusFilter === 'All' || visibleStatus === statusFilter);
+        
         let matchesDate = true;
-        if (dateFilter) {
-            // ✅ FIX: Use local date value for comparison
-            const sDate = s.loadingDate ? getDateValue(s.loadingDate) : '';
-            matchesDate = sDate === dateFilter;
+        if (activeTab !== 'Active' && dateFilter) {
+            const val = s.loadingDate ? (activeTab === 'Completed' ? getMonthValue(s.loadingDate) : getDateValue(s.loadingDate)) : '';
+            matchesDate = val === dateFilter;
         }
         return matchesStatus && matchesDate;
     });
@@ -362,11 +366,6 @@ function ShipmentView({ user, token, onLogout }) {
         const displayStatus = getDisplayStatus(dbStatus);
         if (displayStatus === 'Completed') return '#27AE60'; 
         return '#F2C94C'; 
-    };
-
-    const getPhaseTime = (phase) => {
-        const log = activeLogs.find(l => l.phaseName === phase);
-        return log ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
     };
 
     const getTimelineNodeState = (phase, dbStatus) => {
@@ -379,64 +378,96 @@ function ShipmentView({ user, token, onLogout }) {
         if (phaseIndex === currentIndex + 1) return 'active'; 
         return 'pending'; 
     };
+    const getPhaseTime = (phase) => {
+        const log = activeLogs.find(l => l.phaseName === phase);
+        return log ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+    };
 
-    // Pagination
     const totalPages = Math.ceil(finalFiltered.length / rowsPerPage);
     const paginatedShipments = finalFiltered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+    const getCount = (tabName) => {
+        const today = getTodayString();
+        return shipments.filter(s => {
+            const loadDate = getDateValue(s.loadingDate);
+            const delDate = getDateValue(s.deliveryDate);
+            const isCompleted = s.currentStatus === 'Completed';
+            
+            if (tabName === 'Completed') return isCompleted;
+            if (tabName === 'Delayed') return !isCompleted && delDate && delDate < today;
+            if (tabName === 'Upcoming') return !isCompleted && loadDate > today;
+            if (tabName === 'Active') return !isCompleted && loadDate === today;
+            return false;
+        }).length;
+    };
 
     return (
         <div className="shipment-view-layout">
             <div className="shipment-fixed-header">
+                <div className="tabs-container">
+                    {['Active', 'Upcoming', 'Completed', 'Delayed'].map(tab => (
+                        <div 
+                            key={tab} 
+                            className={`desktop-tab tab-type-${tab.toLowerCase()} ${activeTab === tab ? 'selected' : ''}`}
+                            onClick={() => { setActiveTab(tab); setCurrentPage(1); setStatusFilter('All'); setDateFilter(''); }}
+                        >
+                            {tab}
+                            <span className="tab-badge">{getCount(tab)}</span>
+                        </div>
+                    ))}
+                </div>
+
                 <div className="table-controls">
                     <div className="filters-left">
+                        {activeTab === 'Active' && (
+                            <div className="filter-group">
+                                <label>Phase:</label>
+                                <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="status-select">
+                                    <option value="All">All Phases</option>
+                                    <option value="Arrival">Arrival (Pending)</option>
+                                    {PHASE_ORDER.slice(1).map(p => <option key={p} value={p}>{p}</option>)}
+                                </select>
+                            </div>
+                        )}
+
+                        {activeTab !== 'Active' && (
+                            <>
+                                <div className="filter-group">
+                                    <label>Timeframe:</label>
+                                    <select className="status-select" value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setCurrentPage(1); }}>
+                                        <option value="All">All Time</option>
+                                        <option value="Daily">Daily</option>
+                                        <option value="Weekly">Weekly</option>
+                                        <option value="Monthly">Monthly</option>
+                                    </select>
+                                </div>
+                                <div className="filter-group">
+                                    <label>{activeTab === 'Completed' ? 'Month:' : 'Date:'}</label>
+                                    <select 
+                                        className="status-select" 
+                                        value={dateFilter} 
+                                        onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }} 
+                                        style={{ minWidth: '160px' }}
+                                    >
+                                        <option value="">{activeTab === 'Completed' ? 'All Months' : 'All Dates'}</option>
+                                        {filterOptions.map(opt => (
+                                            <option key={opt.value} value={opt.value}>
+                                                {opt.label} ({opt.count})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </>
+                        )}
+
                         <div className="filter-group">
-                            <label>Status:</label>
-                            <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="status-select">
-                                <option value="All">All Statuses</option>
-                                <option value="Arrival">Arrival (Pending)</option>
-                                {PHASE_ORDER.slice(1).map(p => <option key={p} value={p}>{p}</option>)}
-                                <option value="Completed">Completed</option>
-                            </select>
-                        </div>
-                        <div className="filter-group">
-                            <label>Timeframe:</label>
-                            <select className="status-select" value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setCurrentPage(1); }}>
-                                <option value="All">All Time</option>
-                                <option value="Daily">Daily</option>
-                                <option value="Weekly">Weekly</option>
-                                <option value="Bi-Weekly">Bi-Weekly</option>
-                                <option value="Monthly">Monthly</option>
-                                <option value="Quarterly">Quarterly</option>
-                                <option value="Yearly">Yearly</option>
-                            </select>
-                        </div>
-                        <div className="filter-group">
-                            <label>Date:</label>
-                            <select 
-                                className="status-select" 
-                                value={dateFilter} 
-                                onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }}
-                                style={{ minWidth: '160px' }} 
-                            >
-                                <option value="">All Dates</option>
-                                {getAvailableDates().map(date => {
-                                    // Count logic: Check exact local date match
-                                    const count = shipments.filter(s => (s.loadingDate && getDateValue(s.loadingDate) === date)).length;
-                                    return (
-                                        <option key={date} value={date}>
-                                            {formatDateDisplay(date)} ({count})
-                                        </option>
-                                    );
-                                })}
-                            </select>
                             <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}>
                                 {showArchived ? '← Back to Active' : 'View Archived'}
                             </button>
-                            <div className="count-badge">{finalFiltered.length} Results</div>
                         </div>
                     </div>
                     <div className="controls-right" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                        <button className="extract-btn" onClick={() => setShowExportModal(true)}><Icons.Upload />Extract to .xlsx</button>
+                        <button className="extract-btn" onClick={() => setShowExportModal(true)}><Icons.Upload />Extract .xlsx</button>
                         <button className="new-shipment-btn" onClick={handleOpenModal}>+ New Shipment</button>
                     </div>
                 </div>
@@ -447,7 +478,7 @@ function ShipmentView({ user, token, onLogout }) {
                     <thead>
                         <tr>
                             <th>ID</th><th>Status</th><th>Destination</th><th>Route</th>
-                            <th>Loading Date</th><th>Delivery Date</th>
+                            <th>Loading</th><th>Delivery</th>
                             <th>Plate</th><th>Crew</th><th>Action</th><th></th>
                         </tr>
                     </thead>
@@ -458,22 +489,23 @@ function ShipmentView({ user, token, onLogout }) {
                             const displayStatus = getDisplayStatus(s.currentStatus);
                             const displayColor = getDisplayColor(s.currentStatus);
                             const isFlashing = flashingIds.includes(s.shipmentID);
+                            const isDelayedRow = activeTab === 'Delayed';
 
                             return (
                             <React.Fragment key={s.shipmentID}>
                                 <tr className={isOpen ? 'row-active' : ''}>
                                     <td>{s.shipmentID}</td>
                                     <td>
-                                        <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: displayColor}}></span>
-                                        {displayStatus}
+                                        <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
+                                        {isDelayedRow ? <span style={{color: '#c0392b', fontWeight: 'bold'}}>Delayed</span> : displayStatus}
                                     </td>
                                     <td>{s.destName}</td>
                                     <td>{s.destLocation}</td>
-                                    
-                                    {/* ✅ FIX: Use local date helper here too */}
                                     <td style={{fontWeight:'600', color:'#2c3e50'}}>{formatDateDisplay(s.loadingDate)}</td>
-                                    <td style={{color:'#7f8c8d'}}>{formatDateDisplay(s.deliveryDate)}</td>
-
+                                    <td style={{color: isDelayedRow ? '#c0392b' : '#7f8c8d', fontWeight: isDelayedRow ? '700' : '400'}}>
+                                        {formatDateDisplay(s.deliveryDate)}
+                                        {isDelayedRow && ' ⚠️'}
+                                    </td>
                                     <td>{s.plateNo || '-'}</td>
                                     <td>
                                         <div className="crew-avatars" onClick={(e) => handleCrewClick(e, s.crewDetails)}>
@@ -513,12 +545,10 @@ function ShipmentView({ user, token, onLogout }) {
                                     </td></tr>
                                 )}
                             </React.Fragment>
-                        )}) : (<tr><td colSpan="10" className="empty-state">No shipments found.</td></tr>)}
+                        )}) : (<tr><td colSpan="10" className="empty-state">No shipments found in {activeTab}.</td></tr>)}
                     </tbody>
                 </table>
             </div>
-
-            {/* Pagination & Modals (Export, Crew, Create, NoData) - Keep as is */}
             {totalPages > 1 && (
                 <div className="pagination-footer">
                     <button disabled={currentPage === 1} onClick={() => setCurrentPage(prev => prev - 1)}>Prev</button>
@@ -529,7 +559,6 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
             
-            {/* ... Modal Rendering ... */}
             {showModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowModal(false)}>
                     <div className="modal-form-card" onClick={e => e.stopPropagation()}>
@@ -556,7 +585,6 @@ function ShipmentView({ user, token, onLogout }) {
                                 </select>
                             </div>
                             <div className="form-row">
-                                {/* ✅ RESTORED LAST NAMES HERE */}
                                 <div className="form-group"><label>Driver</label><select required value={formData.driverID} onChange={e => setFormData({...formData, driverID: e.target.value})}><option value="">--</option>{resources.drivers.map(d => <option key={d.userID} value={d.userID}>{d.firstName} {d.lastName}</option>)}</select></div>
                                 <div className="form-group"><label>Helper</label><select required value={formData.helperID} onChange={e => setFormData({...formData, helperID: e.target.value})}><option value="">--</option>{resources.helpers.map(h => <option key={h.userID} value={h.userID} >{h.firstName} {h.lastName}</option>)}</select></div>
                             </div>

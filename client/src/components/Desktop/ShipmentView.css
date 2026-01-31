@@ -359,3 +359,81 @@
     height: 18px;
     stroke-width: 2;
 }
+
+/* --- TABS CONTAINER --- */
+.tabs-container {
+    display: flex;
+    gap: 8px; /* Distinct separation between tabs */
+    background: white;
+    padding: 10px 20px 0 20px; /* Reduced vertical padding */
+    border-bottom: 1px solid #E0E0E0;
+    flex-shrink: 0;
+}
+
+.desktop-tab {
+    padding: 10px 16px; /* Compact padding */
+    font-size: 12px;
+    font-weight: 600;
+    color: #7f8c8d;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    transition: all 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 4px 4px 0 0; /* Subtle tab shape */
+    user-select: none; /* Prevents text selection on click */
+}
+
+/* Hover Effect - Makes it feel clickable */
+.desktop-tab:hover {
+    color: #2c3e50;
+    background-color: #f1f2f6; 
+}
+
+/* --- SELECTED STATES (Renamed from .active) --- */
+.desktop-tab.selected {
+    color: #e67e22; /* Brand Orange */
+    border-bottom: 3px solid #e67e22;
+    background-color: transparent; 
+}
+
+/* Context Colors for Specific Tabs */
+.desktop-tab.tab-type-delayed.selected {
+    color: #c0392b;
+    border-bottom-color: #c0392b;
+}
+
+.desktop-tab.tab-type-completed.selected {
+    color: #27ae60;
+    border-bottom-color: #27ae60;
+}
+
+/* --- BADGES --- */
+.tab-badge {
+    background: #f1f2f6;
+    color: #95a5a6;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    min-width: 20px;
+    text-align: center;
+    transition: all 0.2s;
+}
+
+/* Highlight badge when tab is selected */
+.desktop-tab.selected .tab-badge {
+    background: #e67e22;
+    color: white;
+}
+.desktop-tab.tab-type-delayed.selected .tab-badge { background: #c0392b; }
+.desktop-tab.tab-type-completed.selected .tab-badge { background: #27ae60; }
+
+/* Keep controls below tidy */
+.shipment-fixed-header {
+    display: flex;
+    flex-direction: column;
+}
