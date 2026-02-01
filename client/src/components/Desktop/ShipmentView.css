@@ -91,6 +91,7 @@
     background-color: white; 
     z-index: 10;           
     box-shadow: inset 0 -2px 0 #EEE; 
+    vertical-align: middle;
 }
 
 .custom-table th:nth-child(1) { width: 8%; }  /* ID */
@@ -655,4 +656,46 @@
     border: none;
     cursor: pointer;
     margin-left: 10px;
+}
+.th-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sort-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #CCC; /* Default: Gray/Inactive */
+    transition: all 0.2s ease;
+    background-color: transparent;
+}
+
+.sort-icon-btn:hover {
+    background-color: #F0F0F0;
+    color: #888;
+}
+
+/* Active State (Sorted) */
+.sort-icon-btn.active {
+    color: var(--primary-orange); /* Active Brand Color */
+    background-color: #F0F0F0;
+}
+
+/* Rotation Animation */
+.sort-icon-btn svg {
+    transition: transform 0.3s ease;
+    width: 14px;
+    height: 14px;
+    stroke-width: 3px;
+}
+
+/* Descending (Arrow Down) - Default state in SVG is up, so rotate */
+.sort-icon-btn.desc svg {
+    transform: rotate(180deg);
 }

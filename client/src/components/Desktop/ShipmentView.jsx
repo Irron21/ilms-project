@@ -74,7 +74,8 @@ function ShipmentView({ user, token, onLogout }) {
     // Filters
     const [dateFilter, setDateFilter] = useState(''); 
     const [showArchived, setShowArchived] = useState(false); 
-    
+    const [sortConfig, setSortConfig] = useState({ key: 'loadingDate', direction: 'desc' });
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const rowsPerPage = 9;
@@ -612,31 +613,64 @@ function ShipmentView({ user, token, onLogout }) {
         return 'Active';
     };
 
-    // 3. Apply Filters
-    const finalFiltered = shipments.filter(s => {
-        // 1. Filter by Tab Category
-        if (getShipmentCategory(s) !== activeTab) return false;
+    const handleSort = (key) => {
+        let direction = 'desc'; // Default to Arrow Down (Arrival -> Departure)
+        if (sortConfig.key === key && sortConfig.direction === 'desc') {
+            direction = 'asc';
+        }
+        setSortConfig({ key, direction });
+    };
 
-        // 2. Filter by Year (ONLY if NOT Active Tab)
-        // Active tab always shows "Today" regardless of the Year dropdown
+    const finalFiltered = shipments.filter(s => {
+        if (getShipmentCategory(s) !== activeTab) return false;
         if (activeTab !== 'Active') {
             const sYear = new Date(s.loadingDate).getFullYear().toString();
             if (sYear !== filterYear) return false;
+            if (filterMonth !== 'All') {
+                const sMonth = new Date(s.loadingDate).getMonth();
+                if (sMonth !== parseInt(filterMonth)) return false;
+            }
         }
-
-        // 3. Filter by Month (ONLY if NOT Active Tab)
-        if (activeTab !== 'Active' && filterMonth !== 'All') {
-            const sMonth = new Date(s.loadingDate).getMonth(); 
-            if (sMonth !== parseInt(filterMonth)) return false;
-        }
-
-        // 4. Filter by Phase (Active Tab Only)
         if (activeTab === 'Active' && statusFilter !== 'All') {
             const displayStatus = getDisplayStatus(s.currentStatus);
             if (displayStatus !== statusFilter) return false;
         }
-
         return true;
+    });
+
+    const sortedShipments = [...finalFiltered].sort((a, b) => {
+        const { key, direction } = sortConfig;
+
+        // 1. STATUS SORTING
+        if (key === 'currentStatus') {
+            const getPhaseIndex = (status) => {
+                if (status === 'Pending') return 0;
+                if (status === 'Completed') return 99;
+                const idx = PHASE_ORDER.indexOf(status);
+                return idx === -1 ? 99 : idx; 
+            };
+
+            const indexA = getPhaseIndex(a.currentStatus);
+            const indexB = getPhaseIndex(b.currentStatus);
+
+            // Arrow Down ('desc') = Arrival (0) -> Departure (99)
+            if (direction === 'desc') return indexA - indexB;
+            // Arrow Up ('asc') = Departure (99) -> Arrival (0)
+            return indexB - indexA;
+        }
+
+        // 2. DATE SORTING
+        if (key === 'loadingDate' || key === 'deliveryDate') {
+            const dateA = new Date(a[key] || '1970-01-01');
+            const dateB = new Date(b[key] || '1970-01-01');
+            
+            // Arrow Down ('desc') = Oldest -> Newest (Standard Chronological)
+            if (direction === 'desc') return dateA - dateB;
+            // Arrow Up ('asc') = Newest -> Oldest
+            return dateB - dateA;
+        }
+
+        return 0;
     });
 
     const getDisplayColor = (dbStatus) => {
@@ -661,7 +695,7 @@ function ShipmentView({ user, token, onLogout }) {
         return log ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
     };
 
-    const paginatedShipments = finalFiltered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+    const paginatedShipments = sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
     const getCount = (tabName) => {
         return shipments.filter(s => {
@@ -682,6 +716,24 @@ function ShipmentView({ user, token, onLogout }) {
 
             return true;
         }).length;
+    };
+
+    const renderSortArrow = (columnKey) => {
+        const isActive = sortConfig.key === columnKey;
+        const isDesc = isActive && sortConfig.direction === 'desc';
+        
+        return (
+            <span 
+                className={`sort-icon-btn ${isActive ? 'active' : ''} ${isDesc ? 'desc' : ''}`} 
+                onClick={(e) => { e.stopPropagation(); handleSort(columnKey); }}
+                title="Sort"
+            >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 19V5" />
+                    <path d="M5 12l7-7 7 7" />
+                </svg>
+            </span>
+        );
     };
 
     return (
@@ -765,9 +817,31 @@ function ShipmentView({ user, token, onLogout }) {
                 <table className="custom-table">
                     <thead>
                         <tr>
-                            <th>ID</th><th>Status</th><th>Destination</th><th>Route</th>
-                            <th>Loading</th><th>Delivery</th>
-                            <th>Plate</th><th>Crew</th><th>Action</th><th></th>
+                            <th>ID</th>
+                            <th>
+                                <div className="th-content">
+                                    Status 
+                                    {renderSortArrow('currentStatus')}
+                                </div>
+                            </th>
+                            <th>Destination</th>
+                            <th>Route</th>
+                            <th>
+                                <div className="th-content">
+                                    Loading
+                                    {renderSortArrow('loadingDate')}
+                                </div>
+                            </th>
+                            <th>
+                                <div className="th-content">
+                                    Delivery 
+                                    {renderSortArrow('deliveryDate')}
+                                </div>
+                            </th>
+                            <th>Plate</th>
+                            <th>Crew</th>
+                            <th>Action</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
