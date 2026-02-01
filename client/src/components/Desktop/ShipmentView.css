@@ -218,7 +218,7 @@
     animation: slideUpFade 0.3s ease-out;
 }
 @keyframes slideUpFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; width: 100%}
 .modal-header h2 { margin: 0; font-size: 20px; font-weight: 700; }
 .close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: #999; }
 .shipment-form { display: flex; flex-direction: column; gap: 15px; }

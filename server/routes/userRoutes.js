@@ -7,5 +7,6 @@ router.post('/create', userController.createUser);
 router.put('/:id', userController.updateUser);
 router.delete('/:id', userController.deleteUser);
 router.put('/:id/restore', userController.restoreUser);
+router.put('/:id/reset-password', userController.resetPassword);
 
 module.exports = router;
