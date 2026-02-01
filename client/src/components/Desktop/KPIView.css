@@ -37,7 +37,7 @@
 .filter-group-bordered {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 15px;
     background: #F8F9FA;
     padding: 5px 10px;
     border-radius: 8px;

@@ -75,6 +75,23 @@ function PayrollView() {
     const [currentPage, setCurrentPage] = useState(1);
     const rowsPerPage = 8;
     const [feedbackModal, setFeedbackModal] = useState(null);
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+
+    const getAvailableYears = () => {
+        const years = periods.map(p => {
+            const parts = p.periodName.split(', '); // Split "January 1-15, 2026"
+            return parts[1] || ''; // Get "2026"
+        }).filter(y => y); // Remove empties
+        return [...new Set(years)].sort().reverse(); // Unique & Descending
+    };
+
+    // --- 2. HELPER: FILTER PERIODS ---
+    const getFilteredPeriods = () => {
+        return periods.filter(p => p.periodName.includes(selectedYear));
+    };
+
+    const availableYears = getAvailableYears();
+    const filteredPeriods = getFilteredPeriods();
 
     const getPeriodName = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
@@ -342,20 +359,47 @@ function PayrollView() {
             <div className="payroll-header">                              
                 <div className="payroll-controls">
                   
-                  <div className='filter-group-bordered'>
-                    <label style={{ fontSize: 13, color: "#555", fontWeight: 600 }}>Select Period:</label>
-                    <select 
-                        className="period-select" 
-                        style={{ minWidth: '200px' }} 
-                        value={selectedPeriod}
-                        onChange={(e) => setSelectedPeriod(e.target.value)}
-                    >
-                        {periods.map(p => (
-                            <option key={p.periodID} value={p.periodID}>
-                                {p.periodName} ({p.status})
-                            </option>
-                        ))}
-                    </select>
+                    <div className="filter-group-bordered">
+                        <div style={{display:'flex', flexDirection:'column'}}>
+                        <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Year:</label>
+                            <select 
+                                className="period-select" 
+                                style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}}
+                                value={selectedYear}
+                                onChange={(e) => {
+                                    setSelectedYear(e.target.value);
+                                    // Optional: Auto-select the first period of the new year to avoid dead state
+                                    const firstInYear = periods.find(p => p.periodName.includes(e.target.value));
+                                    if (firstInYear) setSelectedPeriod(firstInYear.periodID);
+                                }}
+                            >
+                                {availableYears.map(year => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+                        <div style={{display:'flex', flexDirection:'column'}}>
+                            <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Select Period:</label>
+                            <select 
+                                className="period-select" 
+                                style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}} 
+                                value={selectedPeriod}
+                                onChange={(e) => setSelectedPeriod(e.target.value)}
+                            >
+                                {filteredPeriods.length > 0 ? (
+                                    filteredPeriods.map(p => (
+                                        <option key={p.periodID} value={p.periodID}>
+                                            {p.periodName} ({p.status})
+                                        </option>
+                                    ))
+                                ) : (
+                                    <option disabled>No periods for {selectedYear}</option>
+                                )}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
                     {/* ✅ NEW: Generate Periods Button */}
                     <button 
                         onClick={confirmGeneratePeriods}
@@ -368,13 +412,12 @@ function PayrollView() {
                         <button 
                             className="btn-alert" 
                             onClick={confirmLockPeriod}
-                            style={{background: '#7f8c8d', border: 'none', fontSize:'13px'}}
+                            style={{background: '#bec0c0ff', border: '2px solid #b7bdbdff', fontSize:'13px'}}
                         >
                             <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
                             Lock Period
                         </button>
                     )}
-                  </div>
                     
                     <button 
                       className="btn-generate" 

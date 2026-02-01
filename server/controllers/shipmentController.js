@@ -214,6 +214,110 @@ exports.getShipmentLogs = (req, res) => {
     });
 };
 
+exports.createBatchShipments = async (req, res) => {
+    const shipments = req.body; 
+    // Ensure we have a valid User ID, defaulting to 1 (System/Admin) if auth fails
+    const userID = (req.user && req.user.userID) ? req.user.userID : 1;
+
+    console.log("Batch Payload Received:", JSON.stringify(shipments, null, 2)); // 🔍 Debug Log
+
+    if (!Array.isArray(shipments) || shipments.length === 0) {
+        return res.status(400).json({ error: "No shipment data provided." });
+    }
+
+    db.getConnection((err, connection) => {
+        if (err) return res.status(500).json({ error: "Database connection failed." });
+
+        connection.beginTransaction(async (err) => {
+            if (err) { connection.release(); return res.status(500).json({ error: "Transaction start failed." }); }
+
+            try {
+                for (let i = 0; i < shipments.length; i++) {
+                    const s = shipments[i];
+                    const itemNum = i + 1;
+
+                    // 🔍 DETAILED VALIDATION CHECKS
+                    if (!s.shipmentID) throw new Error(`Item ${itemNum}: Missing 'Shipment ID'`);
+                    if (!s.driverID)   throw new Error(`Item ${itemNum}: Missing 'Driver'`);
+                    if (!s.helperID)   throw new Error(`Item ${itemNum}: Missing 'Helper'`);
+                    if (!s.vehicleID)  throw new Error(`Item ${itemNum}: Missing 'Vehicle'`);
+                    if (!s.loadingDate) throw new Error(`Item ${itemNum}: Missing 'Loading Date'`);
+                    if (!s.deliveryDate) throw new Error(`Item ${itemNum}: Missing 'Delivery Date'`);
+
+                    // Parse Integers
+                    const shipmentID = parseInt(s.shipmentID);
+                    const vehicleID = parseInt(s.vehicleID);
+                    const driverID = parseInt(s.driverID);
+                    const helperID = parseInt(s.helperID);
+
+                    // Date Logic
+                    const loadDateObj = new Date(s.loadingDate);
+                    const delDateObj = new Date(s.deliveryDate);
+                    
+                    if (isNaN(loadDateObj.getTime())) throw new Error(`Item ${itemNum}: Invalid Loading Date format.`);
+                    if (isNaN(delDateObj.getTime())) throw new Error(`Item ${itemNum}: Invalid Delivery Date format.`);
+                    
+                    if (delDateObj < loadDateObj) {
+                        throw new Error(`Item ${itemNum} (ID ${shipmentID}): Delivery date cannot be before Loading date.`);
+                    }
+
+                    // Route Check
+                    const routeCheck = await new Promise((resolve, reject) => {
+                        connection.query(
+                            "SELECT routeCluster FROM PayrollRates WHERE ? LIKE CONCAT('%', routeCluster, '%') LIMIT 1",
+                            [s.destLocation],
+                            (err, res) => err ? reject(err) : resolve(res)
+                        );
+                    });
+
+                    if (routeCheck.length === 0) {
+                        throw new Error(`Item ${itemNum} (ID ${shipmentID}): Location '${s.destLocation}' is not a recognized Route.`);
+                    }
+
+                    // Insert Shipment
+                    await new Promise((resolve, reject) => {
+                        const sqlShip = `INSERT INTO Shipments (shipmentID, vehicleID, destName, destLocation, loadingDate, deliveryDate, userID, currentStatus) VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')`;
+                        connection.query(sqlShip, [shipmentID, vehicleID, s.destName, s.destLocation, s.loadingDate, s.deliveryDate, userID], (err) => {
+                            if (err) {
+                                if (err.code === 'ER_DUP_ENTRY') reject(new Error(`Item ${itemNum}: Shipment ID ${shipmentID} already exists.`));
+                                else reject(err);
+                            } else resolve();
+                        });
+                    });
+
+                    // Insert Crew
+                    const crewValues = [
+                        [shipmentID, driverID, 'Driver'],
+                        [shipmentID, helperID, 'Helper']
+                    ];
+                    await new Promise((resolve, reject) => {
+                        connection.query("INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES ?", [crewValues], (err) => err ? reject(err) : resolve());
+                    });
+
+                    // Insert Log
+                    await new Promise((resolve, reject) => {
+                        connection.query("INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, 'Creation', 'Created')", [shipmentID, userID], (err) => err ? reject(err) : resolve());
+                    });
+                }
+
+                connection.commit((err) => {
+                    if (err) {
+                        connection.rollback(() => connection.release());
+                        return res.status(500).json({ error: "Commit failed." });
+                    }
+                    connection.release();
+                    logActivity(userID, 'BATCH_CREATE', `Created ${shipments.length} shipments in batch.`);
+                    res.json({ message: "Batch created successfully", count: shipments.length });
+                });
+
+            } catch (error) {
+                connection.rollback(() => connection.release());
+                return res.status(400).json({ error: error.message });
+            }
+        });
+    });
+};
+
 exports.createShipment = (req, res) => {
     // 1. Extract Data
     const { 

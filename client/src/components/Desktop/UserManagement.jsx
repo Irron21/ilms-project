@@ -4,15 +4,18 @@ import './UserManagement.css';
 import FeedbackModal from '../FeedbackModal';
 import { Icons } from '../Icons';
 
+// --- CONSTANTS ---
+const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
 // --- REUSABLE PAGINATION COMPONENT ---
 const PaginationControls = ({ currentPage, totalItems, rowsPerPage, onPageChange }) => {
     const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
-    
-    // Sliding Window Logic (Show 5 pages at a time)
     const currentBlock = Math.ceil(currentPage / 5);
     const startPage = (currentBlock - 1) * 5 + 1;
     const endPage = Math.min(startPage + 4, totalPages);
-
     const pageNumbers = [];
     for (let i = startPage; i <= endPage; i++) pageNumbers.push(i);
 
@@ -20,38 +23,20 @@ const PaginationControls = ({ currentPage, totalItems, rowsPerPage, onPageChange
 
     return (
         <div className="pagination-footer">
-            <button 
-                disabled={currentPage === 1} 
-                onClick={() => onPageChange(currentPage - 1)}
-            >
-                Prev
-            </button>
+            <button disabled={currentPage === 1} onClick={() => onPageChange(currentPage - 1)}>Prev</button>
             {pageNumbers.map(num => (
-                <button 
-                    key={num} 
-                    className={currentPage === num ? 'active' : ''} 
-                    onClick={() => onPageChange(num)}
-                >
-                    {num}
-                </button>
+                <button key={num} className={currentPage === num ? 'active' : ''} onClick={() => onPageChange(num)}>{num}</button>
             ))}
-            <button 
-                disabled={currentPage === totalPages} 
-                onClick={() => onPageChange(currentPage + 1)}
-            >
-                Next
-            </button>
+            <button disabled={currentPage === totalPages} onClick={() => onPageChange(currentPage + 1)}>Next</button>
         </div>
     );
 };
 
 function UserManagement({ activeTab = "users" }) { 
-  
   const token = localStorage.getItem('token'); 
   const rowsPerPage = 10;
 
-  // --- INDEPENDENT PAGINATION STATE ---
-  // This prevents "Page 23" from leaking into the Users tab
+  // Pagination
   const [userPage, setUserPage] = useState(1);
   const [truckPage, setTruckPage] = useState(1);
   const [logPage, setLogPage] = useState(1);
@@ -60,53 +45,57 @@ function UserManagement({ activeTab = "users" }) {
   const [users, setUsers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [logs, setLogs] = useState([]);
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [resetData, setResetData] = useState({ userID: null, name: '', newPassword: '' });
-
-  // Counts (Required for server-side pagination)
   const [totalLogItems, setTotalLogItems] = useState(0); 
 
   // Filters
   const [roleFilter, setRoleFilter] = useState('All');
   const [truckFilter, setTruckFilter] = useState('All');
   
-  // LOGS FILTERS
-  const [logFilter, setLogFilter] = useState('All');      
-  const [logTimeframe, setLogTimeframe] = useState('All'); 
+  // LOGS FILTERS (Updated)
+  const [logFilter, setLogFilter] = useState('All'); // Action Type
   const [logRoleFilter, setLogRoleFilter] = useState('All'); 
+  const [logYear, setLogYear] = useState(new Date().getFullYear().toString());
+  const [logMonth, setLogMonth] = useState('All');
+  
   const [dynamicActionTypes, setDynamicActionTypes] = useState([]);
 
+  // UI States
   const [showArchived, setShowArchived] = useState(false);
   const [loadingLogs, setLoadingLogs] = useState(false); 
+  const fetchRequestId = useRef(0);
 
-  // Modal Visibility & Forms
+  // Modals & Forms
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTruckModal, setShowTruckModal] = useState(false);
   const [showEditTruckModal, setShowEditTruckModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false); // Reset Password
   const [feedbackModal, setFeedbackModal] = useState(null); 
   const [currentUser, setCurrentUser] = useState(null);
   const [currentVehicle, setCurrentVehicle] = useState(null);
   
   const [userForm, setUserForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' });
   const [truckForm, setTruckForm] = useState({ plateNo: '', type: '6-Wheeler', status: 'Working' });
+  const [resetData, setResetData] = useState({ userID: null, name: '', newPassword: '' });
+
+  // Generate Year Options (Current Year back 5 years)
+  const getYearOptions = () => {
+      const currentYear = new Date().getFullYear();
+      return Array.from({ length: 5 }, (_, i) => (currentYear - i).toString());
+  };
 
   // --- DATA LOADING ---
-
-  // 1. Initial Load based on Tab
   useEffect(() => {
     if (activeTab === 'users') fetchUsers();
     else if (activeTab === 'trucks') fetchVehicles();
     else if (activeTab === 'logs') {
-        fetchLogs(); // Initial fetch
         if (dynamicActionTypes.length === 0) fetchActionTypes();
     }
   }, [activeTab, showArchived]);
 
-  // 2. Fetch Logs when Page OR Filters Change
   useEffect(() => {
     if (activeTab === 'logs') fetchLogs();
-  }, [activeTab, logPage, logFilter, logRoleFilter, logTimeframe]);
+  }, [activeTab, logPage, logFilter, logRoleFilter, logYear, logMonth]); // Added Year/Month dependencies
 
   const fetchUsers = async () => {
     try {
@@ -129,78 +118,49 @@ function UserManagement({ activeTab = "users" }) {
       } catch (err) { console.error(err); }
   };
 
-  // ✅ UPDATED: Robust Log Fetching
   const fetchLogs = async () => {
-    if (loadingLogs) return;
+      const currentRequestId = ++fetchRequestId.current;
       setLoadingLogs(true);
+      
       try {
-        await new Promise(resolve => setTimeout(resolve, 600));
+          await new Promise(resolve => setTimeout(resolve, 600));
+          if (currentRequestId !== fetchRequestId.current) return;
+
           const params = new URLSearchParams({
-              page: logPage, // Use independent state
+              page: logPage, 
               limit: rowsPerPage,
               action: logFilter,
               role: logRoleFilter,
-              timeframe: logTimeframe
+              year: logYear,
+              // Convert Month Index (0-11) to SQL Month (1-12) if not 'All'
+              month: logMonth === 'All' ? 'All' : (parseInt(logMonth) + 1)
           });
 
           const res = await api.get(`/logs/history?${params.toString()}`, { 
               headers: { Authorization: `Bearer ${token}` } 
           });
           
-          setLogs(res.data.data); 
-          setTotalLogItems(res.data.pagination.totalItems); 
+          if (currentRequestId === fetchRequestId.current) {
+              setLogs(res.data.data); 
+              setTotalLogItems(res.data.pagination.totalItems); 
+              setLoadingLogs(false); 
+          }
       } catch (err) { 
-          console.error("Log fetch error", err); 
-      } finally {
-          setLoadingLogs(false);
+          if (currentRequestId === fetchRequestId.current) {
+              console.error("Log fetch error", err); 
+              setLoadingLogs(false);
+          }
       }
   };
 
   // --- HANDLERS ---
-
-  const initiateResetPassword = (user) => {
-      setResetData({ userID: user.userID, name: `${user.firstName} ${user.lastName}`, newPassword: '' });
-      setShowResetModal(true);
-  };
-
-  // ✅ NEW: Handle Reset Submit
-  const handleResetSubmit = async (e) => {
-      e.preventDefault();
-      try {
-          await api.put(`/users/${resetData.userID}/reset-password`, { newPassword: resetData.newPassword }, { headers: { Authorization: `Bearer ${token}` } });
-          setShowResetModal(false);
-          setFeedbackModal({ 
-              type: 'success', 
-              title: 'Password Reset', 
-              message: `Password for ${resetData.name} has been updated successfully.`,
-              onClose: () => setFeedbackModal(null)
-          });
-      } catch (err) {
-          setFeedbackModal({ 
-              type: 'error', 
-              title: 'Reset Failed', 
-              message: err.response?.data?.error || "Could not reset password.",
-              onClose: () => setFeedbackModal(null)
-          });
-      }
-  };
-
-  // Helper to handle filter changes safely
   const handleLogFilterChange = (setter, value) => {
       setter(value);
-      setLogPage(1); // Always reset to page 1 on filter change
+      setLogPage(1); 
   };
 
-  const handleUserInputChange = (e) => {
-    const { name, value } = e.target;
-    e.target.setCustomValidity(''); 
-    if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return;
-    setUserForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  // ... (Keep Submit/Update/Delete/Restore Logic Identical to before) ...
-  // [Paste handleCreateSubmit, handleUpdateSubmit, handleTruckSubmit, etc. here]
-  // Assuming these standard CRUD functions are unchanged.
+  // ... (Keep existing User/Truck Handlers: handleCreateSubmit, handleUpdateSubmit, initiateDelete, etc.) ...
+  const handleUserInputChange = (e) => { const { name, value } = e.target; e.target.setCustomValidity(''); if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return; setUserForm(prev => ({ ...prev, [name]: value })); };
   const handleCreateSubmit = async (e) => { e.preventDefault(); try { await api.post('/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowCreateModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'User Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed', onClose: () => setFeedbackModal(null) }); } };
   const handleUpdateSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
   const handleTruckSubmit = async (e) => { e.preventDefault(); try { await api.post('/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } }); setShowTruckModal(false); fetchVehicles(); setFeedbackModal({ type: 'success', title: 'Vehicle Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
@@ -209,6 +169,10 @@ function UserManagement({ activeTab = "users" }) {
   const performDelete = async (type, id) => { try { await api.delete(type === 'user' ? `/users/${id}` : `/vehicles/${id}`, { headers: { Authorization: `Bearer ${token}` } }); if(type==='user') fetchUsers(); else fetchVehicles(); setFeedbackModal({type:'success', title:'Deleted', onClose:()=>setFeedbackModal(null)}); } catch(err) { setFeedbackModal({type:'error', title:'Error', message:'Active shipment conflict', onClose:()=>setFeedbackModal(null)}); } };
   const initiateRestore = (type, id) => { setFeedbackModal({ type: 'restore', title: 'Restore?', confirmLabel: 'Restore', onConfirm: async () => { await api.put(type==='user'?`/users/${id}/restore`:`/vehicles/${id}/restore`, {}, {headers:{Authorization:`Bearer ${token}`}}); if(type==='user') fetchUsers(); else fetchVehicles(); setFeedbackModal({type:'success', title:'Restored', onClose:()=>setFeedbackModal(null)}); } }); };
   const toggleTruckStatus = async (v) => { try { await api.put(`/vehicles/${v.vehicleID}/status`, {status: v.status==='Working'?'Maintenance':'Working'}, {headers:{Authorization:`Bearer ${token}`}}); fetchVehicles(); } catch(err) { setFeedbackModal({type:'error', title:'Error', message:'Vehicle busy', onClose:()=>setFeedbackModal(null)}); } };
+  
+  // Password Reset Handlers
+  const initiateResetPassword = (user) => { setResetData({ userID: user.userID, name: `${user.firstName} ${user.lastName}`, newPassword: '' }); setShowResetModal(true); };
+  const handleResetSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${resetData.userID}/reset-password`, { newPassword: resetData.newPassword }, { headers: { Authorization: `Bearer ${token}` } }); setShowResetModal(false); setFeedbackModal({ type: 'success', title: 'Password Reset', message: `Password for ${resetData.name} updated.`, onClose: () => setFeedbackModal(null) }); } catch (err) { setFeedbackModal({ type: 'error', title: 'Reset Failed', message: err.response?.data?.error || "Error", onClose: () => setFeedbackModal(null) }); } };
 
   // --- RENDER HELPERS ---
   const renderGhostRows = (currentCount, colSpan) => {
@@ -217,10 +181,9 @@ function UserManagement({ activeTab = "users" }) {
       return Array.from({ length: ghostsNeeded }).map((_, idx) => ( <tr key={`ghost-${idx}`} className="ghost-row"><td colSpan={colSpan}>&nbsp;</td></tr> ));
   };
 
-  const renderTruckView = () => {
+  const renderTruckView = () => { /* ... Keep Existing ... */ 
       const filteredVehicles = vehicles.filter(v => truckFilter === 'All' || v.status === truckFilter);
       const paginatedTrucks = filteredVehicles.slice((truckPage - 1) * rowsPerPage, truckPage * rowsPerPage);
-      
       return (
         <div className="user-mgmt-container">
           <div className="header-actions">
@@ -255,18 +218,12 @@ function UserManagement({ activeTab = "users" }) {
               </tbody>
             </table>
           </div>
-          {/* ✅ Independent Pagination for Trucks */}
-          <PaginationControls 
-              currentPage={truckPage} 
-              totalItems={filteredVehicles.length} 
-              rowsPerPage={rowsPerPage} 
-              onPageChange={setTruckPage} 
-          />
+          <PaginationControls currentPage={truckPage} totalItems={filteredVehicles.length} rowsPerPage={rowsPerPage} onPageChange={setTruckPage} />
         </div>
       );
   };
 
-  const renderUserView = () => {
+  const renderUserView = () => { /* ... Keep Existing ... */ 
     const filteredUsers = users.filter(user => roleFilter === 'All' || user.role.toLowerCase() === roleFilter.toLowerCase());
     const paginatedUsers = filteredUsers.slice((userPage - 1) * rowsPerPage, userPage * rowsPerPage);
     return (
@@ -290,21 +247,11 @@ function UserManagement({ activeTab = "users" }) {
             <tbody>
               {paginatedUsers.length > 0 ? paginatedUsers.map(u => (
                 <tr key={u.userID}>
-                  <td>{u.employeeID || 'N/A'}</td><td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
+                  <td style={{fontWeight:'700', color:'#555'}}>{u.employeeID || 'N/A'}</td>
+                  <td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                   <td className="action-cells">
-                  {showArchived ? (
-                      <button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>
-                   ) : (
-                       <>
-                         {/* ✅ NEW: Reset Password Button */}
-                         <button className="icon-btn" onClick={() => initiateResetPassword(u)} title="Reset Password">
-                            <Icons.Key size={18} />
-                         </button>
-                         
-                         <button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button>
-                         <button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button>
-                        </>
-                      )}
+                  {showArchived ? (<button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>) : 
+                  (<><button className="icon-btn" onClick={() => initiateResetPassword(u)} title="Reset Password"><Icons.Key size={18} /></button><button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button><button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button></>)}
                   </td>
                 </tr>
               )) : <tr><td colSpan="7" className="empty-state">No users found</td></tr>}
@@ -312,27 +259,46 @@ function UserManagement({ activeTab = "users" }) {
             </tbody>
           </table>
         </div>
-        {/* ✅ Independent Pagination for Users */}
-        <PaginationControls 
-            currentPage={userPage} 
-            totalItems={filteredUsers.length} 
-            rowsPerPage={rowsPerPage} 
-            onPageChange={setUserPage} 
-        />
+        <PaginationControls currentPage={userPage} totalItems={filteredUsers.length} rowsPerPage={rowsPerPage} onPageChange={setUserPage} />
       </div>
     );
   };
 
   const renderLogsView = () => {
-      // NOTE: Logs are server-paginated, so 'logs' IS the current page data.
       return (
         <div className="user-mgmt-container">
           <div className="header-actions">
+              
+              {/* ✅ NEW: Combined Filter Group (Year/Month/Role/Action) */}
               <div className="filter-group-inline" style={{gap: '12px'}}>
-                  <label>Timeframe:</label>
-                  <select value={logTimeframe} onChange={e => handleLogFilterChange(setLogTimeframe, e.target.value)} className="log-filter-select">
-                      <option value="All">All Time</option><option value="Today">Today</option><option value="Week">Last 7 Days</option><option value="Month">This Month</option>
-                  </select>
+                  
+                  {/* Year/Month Group */}
+                  <div className="filter-group-bordered">
+                      <div style={{display:'flex', flexDirection:'column'}}>
+                          <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Year</label>
+                          <select 
+                              value={logYear} 
+                              onChange={e => handleLogFilterChange(setLogYear, e.target.value)}
+                              style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}}
+                          >
+                              {getYearOptions().map(y => <option key={y} value={y}>{y}</option>)}
+                          </select>
+                      </div>
+                      <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+                      <div style={{display:'flex', flexDirection:'column'}}>
+                          <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Month</label>
+                          <select 
+                              value={logMonth} 
+                              onChange={e => handleLogFilterChange(setLogMonth, e.target.value)}
+                              style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer', minWidth:'100px'}}
+                          >
+                              <option value="All">All Months</option>
+                              {MONTH_NAMES.map((m, i) => <option key={i} value={i}>{m}</option>)}
+                          </select>
+                      </div>
+                  </div>
+
+                  <div style={{width:'1px', height:'35px', background:'#eee'}}></div>
 
                   <label>Role:</label>
                   <select value={logRoleFilter} onChange={e => handleLogFilterChange(setLogRoleFilter, e.target.value)} className="log-filter-select">
@@ -346,12 +312,8 @@ function UserManagement({ activeTab = "users" }) {
 
                   <div className="count-badge">{totalLogItems} Events</div>
               </div>
-              <button 
-                  className="btn-generate" 
-                  onClick={fetchLogs} 
-                  disabled={loadingLogs}
-                  title="Refresh Logs"
-              >
+              
+              <button className="btn-generate" onClick={fetchLogs} disabled={loadingLogs} title="Refresh Logs">
                   <Icons.Refresh size={18} className={loadingLogs ? "icon-spin" : ""} />
               </button>
           </div>
@@ -367,19 +329,13 @@ function UserManagement({ activeTab = "users" }) {
                     <td><span className="role-tag" style={{background: '#F3F4F6', color: '#374151', border: '1px solid #E5E7EB'}}>{log.actionType}</span></td>
                     <td style={{color: '#333'}}>{log.details}</td>
                   </tr>
-                )) : <tr><td colSpan="4" className="empty-state">No logs found.</td></tr>}
+                )) : <tr><td colSpan="4" className="empty-state">No logs found for selected period.</td></tr>}
                 {renderGhostRows(logs.length, 4)}
               </tbody>
             </table>
           </div>
           
-          {/* ✅ Independent Pagination for Logs */}
-          <PaginationControls 
-              currentPage={logPage} 
-              totalItems={totalLogItems} 
-              rowsPerPage={rowsPerPage} 
-              onPageChange={setLogPage} 
-          />
+          <PaginationControls currentPage={logPage} totalItems={totalLogItems} rowsPerPage={rowsPerPage} onPageChange={setLogPage} />
         </div>
       );
   };
@@ -387,47 +343,14 @@ function UserManagement({ activeTab = "users" }) {
   return (
     <>
       {activeTab === 'trucks' ? renderTruckView() : activeTab === 'logs' ? renderLogsView() : renderUserView()}
-      {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
       
-      {/* (MODALS - Keeping same JSX structure for modals as before) */}
-      {showCreateModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleCreateSubmit}><h3>Create User</h3><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver (Can also act as Helper)</option>
-        <option value="Helper">Helper (Helper duties only)</option></select></div><div className="form-group"><label>Password</label><input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Confirm</label><input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} required /></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowCreateModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
-      {/* (Add Edit/Truck modals similarly or keep existing code) */}
-      {showEditModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateSubmit}><h3>Edit User</h3><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver (Can also act as Helper)</option>
-        <option value="Helper">Helper (Helper duties only)</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
+      {/* --- MODALS (Keep existing) --- */}
+      {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
+      {showCreateModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleCreateSubmit}><h3>Create User</h3><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div><div className="form-group"><label>Password</label><input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Confirm</label><input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} required /></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowCreateModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
+      {showEditModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateSubmit}><h3>Edit User</h3><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
       {showTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleTruckSubmit}><h3>Add Vehicle</h3><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6WH">6-Wheeler</option><option value="10WH">10-Wheeler</option><option value="4WH">4-Wheeler</option><option value="AUV">AUV</option><option value="FWD">Forward</option><option value="H100">H100</option></select><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
       {showEditTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateTruck}><h3>Edit Vehicle</h3><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="L300">L300</option></select><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
-      {showResetModal && (
-        <div className="modal-backdrop">
-          <form className="modal-card" onSubmit={handleResetSubmit} style={{width:'400px'}}>
-            <div className="modal-header" style={{marginBottom:'15px'}}>
-                <h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3>
-                <button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button>
-            </div>
-            
-            <p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>
-                Enter a new password for <strong>{resetData.name}</strong>.
-            </p>
-
-            <div className="form-group">
-                <label>New Password</label>
-                <input 
-                    type="text" 
-                    value={resetData.newPassword} 
-                    onChange={e => setResetData({...resetData, newPassword: e.target.value})} 
-                    placeholder="Enter new password..." 
-                    required 
-                    autoFocus
-                />
-            </div>
-
-            <div className="modal-footer">
-                <button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button>
-                <button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button>
-            </div>
-          </form>
-        </div>
-      )}
+      {showResetModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleResetSubmit} style={{width:'400px'}}><div className="modal-header" style={{marginBottom:'15px'}}><h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3><button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button></div><p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>Enter a new password for <strong>{resetData.name}</strong>.</p><div className="form-group"><label>New Password</label><input type="text" value={resetData.newPassword} onChange={e => setResetData({...resetData, newPassword: e.target.value})} placeholder="Enter new password..." required autoFocus /></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button><button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button></div></form></div>)}
     </>
   );
 }

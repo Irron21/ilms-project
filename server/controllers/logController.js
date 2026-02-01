@@ -10,14 +10,14 @@ exports.getLogActions = (req, res) => {
     });
 };
 
-// ✅ UPDATED: Fetch Logs with Server-Side Filtering
+// ✅ UPDATED: Fetch Logs with Year/Month Filtering
 exports.getActivityLogs = (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    // Extract Filters
-    const { action, role, timeframe } = req.query;
+    // Extract Filters (Replaced 'timeframe' with 'year' and 'month')
+    const { action, role, year, month } = req.query;
 
     // 1. Build Dynamic WHERE Clause
     let whereClauses = [];
@@ -32,7 +32,6 @@ exports.getActivityLogs = (req, res) => {
     // Filter by Role
     if (role && role !== 'All') {
         if (role === 'System') {
-            // System logs usually have NULL user or specific ID (adjust based on your logic)
             whereClauses.push("u.role IS NULL");
         } else {
             whereClauses.push("u.role = ?");
@@ -40,22 +39,21 @@ exports.getActivityLogs = (req, res) => {
         }
     }
 
-    // Filter by Timeframe
-    if (timeframe && timeframe !== 'All') {
-        if (timeframe === 'Today') {
-            whereClauses.push("DATE(l.timestamp) = CURDATE()");
-        } else if (timeframe === 'Week') {
-            whereClauses.push("l.timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)");
-        } else if (timeframe === 'Month') {
-            whereClauses.push("MONTH(l.timestamp) = MONTH(NOW()) AND YEAR(l.timestamp) = YEAR(NOW())");
-        }
+    // ✅ NEW: Filter by Year
+    if (year && year !== 'All') {
+        whereClauses.push("YEAR(l.timestamp) = ?");
+        queryParams.push(year);
     }
 
-    // Combine Clauses
-    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : "";
+    // ✅ NEW: Filter by Month (Expects 1-12)
+    if (month && month !== 'All') {
+        whereClauses.push("MONTH(l.timestamp) = ?");
+        queryParams.push(month);
+    }
 
-    // 2. Get Total Count (With Filters)
-    // We join Users table here too because we might be filtering by Role
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    // 2. Get Total Count
     const countSql = `
         SELECT COUNT(*) as total 
         FROM UserActivityLog l
@@ -69,7 +67,7 @@ exports.getActivityLogs = (req, res) => {
         const totalItems = countResult[0].total;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // 3. Get Actual Data (With Filters + Pagination)
+        // 3. Get Actual Data
         const sql = `
             SELECT 
                 l.logID, 
@@ -86,7 +84,6 @@ exports.getActivityLogs = (req, res) => {
             LIMIT ? OFFSET ?
         `;
 
-        // Add limit/offset to params
         const finalParams = [...queryParams, limit, offset];
 
         db.query(sql, finalParams, (err, results) => {

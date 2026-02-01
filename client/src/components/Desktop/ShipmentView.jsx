@@ -31,6 +31,11 @@ const INITIAL_COLUMNS = [
     { key: 'completed', label: 'Time: Completed', checked: true },
 ];
 
+const MONTH_NAMES = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+];
+
 const PaginationControls = ({ currentPage, totalItems, rowsPerPage, onPageChange }) => {
     const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
     
@@ -63,9 +68,10 @@ function ShipmentView({ user, token, onLogout }) {
     const [selectedColumns, setSelectedColumns] = useState(
         INITIAL_COLUMNS.filter(c => c.default).map(c => c.key)
     );
+    const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
+    const [filterMonth, setFilterMonth] = useState('All');
 
     // Filters
-    const [timeframe, setTimeframe] = useState('All');
     const [dateFilter, setDateFilter] = useState(''); 
     const [showArchived, setShowArchived] = useState(false); 
     
@@ -92,10 +98,15 @@ function ShipmentView({ user, token, onLogout }) {
     const [crewPopup, setCrewPopup] = useState({ show: false, x: 0, y: 0, crewData: [] });
     
     // Form Data
-    const [formData, setFormData] = useState({ 
-        shipmentID: '', destName: '', destLocation: '', 
-        vehicleID: '', driverID: '', helperID: '',
-        loadingDate: '', deliveryDate: '' 
+    const getBlankShipment = () => ({
+        shipmentID: '', 
+        destName: '', 
+        destLocation: '', 
+        vehicleID: '', 
+        driverID: '', 
+        helperID: '', 
+        loadingDate: getTodayString(), 
+        deliveryDate: '' 
     });
     
     const [routeRules, setRouteRules] = useState({}); 
@@ -104,6 +115,10 @@ function ShipmentView({ user, token, onLogout }) {
     const [filteredVehicles, setFilteredVehicles] = useState([]); 
     const [isVehicleDisabled, setIsVehicleDisabled] = useState(true); 
     const [columnConfig, setColumnConfig] = useState(INITIAL_COLUMNS);
+
+    const [batchData, setBatchData] = useState([]); 
+    const [batchIndex, setBatchIndex] = useState(0); 
+    const [loadingBatch, setLoadingBatch] = useState(false);
 
     // --- DATE HELPERS ---
     const getTodayString = () => {
@@ -147,6 +162,107 @@ function ShipmentView({ user, token, onLogout }) {
         return d.toLocaleDateString('default', { month: 'long', year: 'numeric' }); 
     };
 
+    const handleBatchChange = (e) => {
+        const { name, value } = e.target;
+        const updatedBatch = [...batchData];
+        updatedBatch[batchIndex] = { ...updatedBatch[batchIndex], [name]: value };
+        
+        if (name === 'destLocation') {
+             const allRoutes = Object.keys(routeRules);
+             
+             if (!value || value.length === 0) {
+                 setFilteredRoutes([]); 
+                 setIsVehicleDisabled(true);
+             } else {
+                 // 1. Find all matches (Partial & Exact)
+                 const matches = allRoutes.filter(r => r.toLowerCase().includes(value.toLowerCase()));
+                 
+                 // 2. Check for Exact Match
+                 const exactMatchKey = allRoutes.find(r => r.toLowerCase() === value.toLowerCase());
+                 
+                 // 3. UX LOGIC: Hide list ONLY if we have an exact match AND it's the only result.
+                 // This ensures we don't hide "Bulacan" if "Bulacan North" is also a valid option.
+                 if (exactMatchKey && matches.length === 1) {
+                     setFilteredRoutes([]); // Hide list (Clean look)
+                 } else {
+                     setFilteredRoutes(matches); // Keep list open for selection
+                 }
+                 
+                 // 4. Vehicle Logic
+                 if (exactMatchKey && routeRules[exactMatchKey]) {
+                     const allowedTypes = routeRules[exactMatchKey];
+                     const validVehicles = allVehicles.filter(v => allowedTypes.includes(v.type) && v.status === 'Working');
+                     setFilteredVehicles(validVehicles);
+                     setIsVehicleDisabled(false);
+                 } else {
+                     setIsVehicleDisabled(true);
+                     setFilteredVehicles([]);
+                 }
+             }
+        } else if (name === 'vehicleID') {
+            // Optional: Auto-assign driver if vehicle has a default driver?
+        }
+
+        setBatchData(updatedBatch);
+    };
+
+    const addNewToBatch = () => {
+        const current = batchData[batchIndex];
+        
+        // ✅ FIX: Safety check to prevent the "undefined" error
+        if (!current) {
+            setBatchData([...batchData, getBlankShipment()]);
+            return;
+        }
+
+        const newItem = {
+            ...getBlankShipment(),
+            // Copy dates for convenience, safely
+            loadingDate: current.loadingDate || getTodayString(),
+            deliveryDate: current.deliveryDate || ''
+        };
+        
+        const updated = [...batchData, newItem];
+        setBatchData(updated);
+        setBatchIndex(updated.length - 1); // Jump to new
+        setIsVehicleDisabled(true); // Reset vehicle for new entry
+    };
+
+    const removeCurrentFromBatch = () => {
+        if (batchData.length <= 1) return; 
+        const updated = batchData.filter((_, idx) => idx !== batchIndex);
+        setBatchData(updated);
+        if (batchIndex >= updated.length) setBatchIndex(updated.length - 1);
+    };
+
+    const handleBatchSubmit = async (e) => {
+        e.preventDefault();
+        setLoadingBatch(true);
+        try {
+            await api.post('/shipments/create-batch', batchData, { headers: { Authorization: `Bearer ${token}` } });
+            setShowModal(false);
+            fetchData(); 
+            setFeedbackModal({
+                type: 'success',
+                title: 'Batch Created!',
+                message: `Successfully created ${batchData.length} shipment(s).`,
+                onClose: () => setFeedbackModal(null)
+            });
+        } catch (err) {
+            setFeedbackModal({
+                type: 'error',
+                title: 'Batch Failed',
+                message: err.response?.data?.error || "Error creating shipments.",
+                subMessage: "Please check IDs and Dates.",
+                onClose: () => setFeedbackModal(null)
+            });
+        } finally {
+            setLoadingBatch(false);
+        }
+    };
+
+    // Helper for rendering form (looks at current index)
+    const currentForm = batchData[batchIndex] || getBlankShipment();
     // --- SMART DRAG HANDLERS ---
     const dragStart = (e, position) => {
         dragItem.current = position;
@@ -295,47 +411,15 @@ function ShipmentView({ user, token, onLogout }) {
         try {
             const res = await api.get('/shipments/resources', { headers: { Authorization: `Bearer ${token}` } });
             setResources(res.data);
+            
+            // ✅ FIX: Reset the route suggestions to show ALL options when opening
+            setFilteredRoutes([]);
+            
+            setBatchData([getBlankShipment()]);
+            setBatchIndex(0);
+            setIsVehicleDisabled(true); 
             setShowModal(true);
         } catch (err) { alert("Could not load resources."); }
-    };
-
-    const handleCreateShipment = async (e) => {
-        e.preventDefault();
-
-        // 1. ROUTE VALIDATION (Frontend Check)
-        const allRouteNames = Object.keys(routeRules);
-        const routeExists = allRouteNames.some(r => r.toLowerCase() === formData.destLocation.trim().toLowerCase());
-        
-        if (!routeExists) {
-            setFeedbackModal({ 
-                type: 'error', 
-                title: 'Invalid Route', 
-                message: 'The entered route is not in the payroll list. Please select a valid route from the suggestion list.' 
-            }); 
-            return;
-        }
-
-        // 2. DATE VALIDATION (Double Check)
-        // Even with smart inputs, we keep this just in case
-        if (formData.deliveryDate < formData.loadingDate) {
-            setFeedbackModal({ 
-                type: 'error', 
-                title: 'Date Error', 
-                message: 'Delivery Date cannot be before Loading Date.' 
-            }); 
-            return;
-        }
-
-        try {
-            await api.post('/shipments/create', { ...formData, userID: user.userID }, { headers: { Authorization: `Bearer ${token}` } });
-            setShowModal(false);
-            setFormData({ shipmentID: '', destName: '', destLocation: '', vehicleID: '', driverID: '', helperID: '', loadingDate: '', deliveryDate: '' });
-            fetchData(true); 
-            setIsVehicleDisabled(true);
-            setFeedbackModal({ type: 'success', title: 'Scheduled!', message: 'Shipment created.', onClose: () => setFeedbackModal(null) });
-        } catch (err) { 
-            setFeedbackModal({ type: 'error', title: 'Error', message: err.response?.data?.error || "Failed." }); 
-        }
     };
 
     const initiateArchive = (id) => {
@@ -481,24 +565,6 @@ function ShipmentView({ user, token, onLogout }) {
 
     const filterOptions = getFilterOptions();
 
-    const filterByTimeframe = (items) => {
-        if (activeTab === 'Active' || timeframe === 'All') return items;
-        const now = new Date(); now.setHours(0,0,0,0);
-        return items.filter(s => {
-            const dateStr = s.loadingDate || s.creationTimestamp;
-            const d = new Date(dateStr); 
-            const diffDays = Math.ceil((now - d) / (1000 * 60 * 60 * 24));
-            switch(timeframe) {
-                case 'Daily': return Math.abs(diffDays) <= 1;
-                case 'Weekly': return Math.abs(diffDays) <= 7;
-                case 'Bi-Weekly': return Math.abs(diffDays) <= 14;
-                case 'Monthly': return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                default: return true;
-            }
-        });
-    };
-    const timeframeFiltered = filterByTimeframe(tabFiltered);
-
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
         if (dbStatus === 'Completed') return 'Completed';
@@ -508,16 +574,69 @@ function ShipmentView({ user, token, onLogout }) {
         return dbStatus; 
     };
 
-    const finalFiltered = timeframeFiltered.filter(s => {
-        const visibleStatus = getDisplayStatus(s.currentStatus);
-        const matchesStatus = (activeTab !== 'Active') ? true : (statusFilter === 'All' || visibleStatus === statusFilter);
+    // 1. Get Years from Data
+    const availableYears = [...new Set(shipments.map(s => new Date(s.loadingDate).getFullYear().toString()))].sort().reverse();
+    // Ensure current year is always an option even if no data yet
+    if (!availableYears.includes(new Date().getFullYear().toString())) {
+        availableYears.unshift(new Date().getFullYear().toString());
+    }
+
+    // 2. Get Months based on Selected Year
+    const availableMonths = [...new Set(shipments
+        .filter(s => new Date(s.loadingDate).getFullYear().toString() === filterYear)
+        .map(s => new Date(s.loadingDate).getMonth())
+    )].sort((a,b) => a - b);
+
+    const getShipmentCategory = (s) => {
+        const today = getTodayString();
+        const loadDate = getDateValue(s.loadingDate);
+        const delDate = getDateValue(s.deliveryDate);
+        const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
+
+        // 1. Completed Tab
+        if (isCompleted) return 'Completed';
         
-        let matchesDate = true;
-        if (activeTab !== 'Active' && dateFilter) {
-            const val = s.loadingDate ? (activeTab === 'Completed' ? getMonthValue(s.loadingDate) : getDateValue(s.loadingDate)) : '';
-            matchesDate = val === dateFilter;
+        // 2. Delayed Tab Logic
+        // A. Delivery Date has passed
+        if (delDate && delDate < today) return 'Delayed';
+        
+        // B. (FIX) Loading Date has passed, but status is still 'Pending' (Late Start)
+        // This moves "Yesterday's unstarted shipments" from Active to Delayed
+        if (loadDate && loadDate < today && s.currentStatus === 'Pending') return 'Delayed';
+
+        // 3. Upcoming Tab
+        if (loadDate && loadDate > today) return 'Upcoming';
+        
+        // 4. Active Tab (Fallback)
+        // Includes: Today's shipments, plus any multi-day trips currently in transit
+        return 'Active';
+    };
+
+    // 3. Apply Filters
+    const finalFiltered = shipments.filter(s => {
+        // 1. Filter by Tab Category
+        if (getShipmentCategory(s) !== activeTab) return false;
+
+        // 2. Filter by Year (ONLY if NOT Active Tab)
+        // Active tab always shows "Today" regardless of the Year dropdown
+        if (activeTab !== 'Active') {
+            const sYear = new Date(s.loadingDate).getFullYear().toString();
+            if (sYear !== filterYear) return false;
         }
-        return matchesStatus && matchesDate;
+
+        // 3. Filter by Month (ONLY if NOT Active Tab)
+        if (activeTab !== 'Active' && filterMonth !== 'All') {
+            const sMonth = new Date(s.loadingDate).getMonth(); 
+            if (sMonth !== parseInt(filterMonth)) return false;
+        }
+
+        // 4. Filter by Phase (Active Tab Only)
+        if (activeTab === 'Active' && statusFilter !== 'All') {
+            const displayStatus = getDisplayStatus(s.currentStatus);
+            if (displayStatus !== statusFilter) return false;
+        }
+
+        return true;
     });
 
     const getDisplayColor = (dbStatus) => {
@@ -545,17 +664,23 @@ function ShipmentView({ user, token, onLogout }) {
     const paginatedShipments = finalFiltered.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
 
     const getCount = (tabName) => {
-        const today = getTodayString();
         return shipments.filter(s => {
-            const loadDate = getDateValue(s.loadingDate);
-            const delDate = getDateValue(s.deliveryDate);
-            const isCompleted = s.currentStatus === 'Completed';
-            
-            if (tabName === 'Completed') return isCompleted;
-            if (tabName === 'Delayed') return !isCompleted && delDate && delDate < today;
-            if (tabName === 'Upcoming') return !isCompleted && loadDate > today;
-            if (tabName === 'Active') return !isCompleted && loadDate === today;
-            return false;
+            // 1. Match Category
+            if (getShipmentCategory(s) !== tabName) return false;
+
+            // 2. Apply Filters ONLY for History Tabs
+            // "Active" count should never change based on the Year/Month dropdowns
+            if (tabName !== 'Active') {
+                const sYear = new Date(s.loadingDate).getFullYear().toString();
+                if (sYear !== filterYear) return false;
+
+                if (filterMonth !== 'All') {
+                    const sMonth = new Date(s.loadingDate).getMonth();
+                    if (sMonth !== parseInt(filterMonth)) return false;
+                }
+            }
+
+            return true;
         }).length;
     };
 
@@ -590,31 +715,36 @@ function ShipmentView({ user, token, onLogout }) {
 
                         {activeTab !== 'Active' && (
                             <>
-                                <div className="filter-group">
-                                    <label>Timeframe:</label>
-                                    <select className="status-select" value={timeframe} onChange={(e) => { setTimeframe(e.target.value); setCurrentPage(1); }}>
-                                        <option value="All">All Time</option>
-                                        <option value="Daily">Daily</option>
-                                        <option value="Weekly">Weekly</option>
-                                        <option value="Monthly">Monthly</option>
-                                    </select>
-                                </div>
-                                <div className="filter-group">
-                                    <label>{activeTab === 'Completed' ? 'Month:' : 'Date:'}</label>
-                                    <select 
-                                        className="status-select" 
-                                        value={dateFilter} 
-                                        onChange={(e) => { setDateFilter(e.target.value); setCurrentPage(1); }} 
-                                        style={{ minWidth: '160px' }}
-                                    >
-                                        <option value="">{activeTab === 'Completed' ? 'All Months' : 'All Dates'}</option>
-                                        {filterOptions.map(opt => (
-                                            <option key={opt.value} value={opt.value}>
-                                                {opt.label} ({opt.count})
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                            <div className="filter-group-bordered">
+                            <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Year</label>
+                                <select 
+                                    value={filterYear} 
+                                    onChange={(e) => { setFilterYear(e.target.value); setFilterMonth('All'); setCurrentPage(1); }}
+                                    style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}}
+                                >
+                                    {availableYears.map(y => <option key={y} value={y}>{y}</option>)}
+                                </select>
+                            </div>
+                            
+                            <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+
+                            <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Month</label>
+                                <select 
+                                    value={filterMonth} 
+                                    onChange={(e) => { setFilterMonth(e.target.value); setCurrentPage(1); }}
+                                    style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer', minWidth:'100px'}}
+                                >
+                                    <option value="All">All Months</option>
+                                    {availableMonths.map(mIndex => (
+                                        <option key={mIndex} value={mIndex}>{MONTH_NAMES[mIndex]}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                        </div>   
+                        <div style={{width:'1px', height:'35px', background:'#eee'}}></div>            
                             </>
                         )}
 
@@ -711,91 +841,168 @@ function ShipmentView({ user, token, onLogout }) {
             {showModal && (
                 <div className="modal-overlay-desktop" onClick={() => setShowModal(false)}>
                     <div className="modal-form-card" onClick={e => e.stopPropagation()}>
-                        <div className="modal-header"><h2>Create New Shipment</h2><button className="close-btn" onClick={() => setShowModal(false)}>×</button></div>
-                        <form onSubmit={handleCreateShipment} className="shipment-form">
-                            <div className="form-row">
-                                <div className="form-group"><label>Shipment ID</label><input type="number" required value={formData.shipmentID} onChange={e => setFormData({...formData, shipmentID: e.target.value})} /></div>
-                                <div className="form-group"><label>Destination Name</label><input type="text" required value={formData.destName} onChange={e => setFormData({...formData, destName: e.target.value})} /></div>
+                        
+                        {/* 1. NEW BATCH NAVIGATION HEADER */}
+                        <div className="batch-nav-header">
+                            <div className="batch-indicators">
+                                <span className="batch-pill">Shipment {batchIndex + 1} of {batchData.length}</span>
+                                {batchData.length > 1 && (
+                                    <button type="button" className="remove-item-btn" onClick={removeCurrentFromBatch}>
+                                        Remove this entry
+                                    </button>
+                                )}
                             </div>
-                            
-                            {/* --- UPDATED SMART DATES --- */}
+                            <div className="batch-controls">
+                                <button 
+                                    type="button" 
+                                    className="nav-arrow-btn"
+                                    disabled={batchIndex === 0}
+                                    onClick={() => setBatchIndex(prev => prev - 1)}
+                                    title="Previous"
+                                >
+                                    ‹
+                                </button>
+                                <button 
+                                    type="button" 
+                                    className="nav-arrow-btn"
+                                    disabled={batchIndex === batchData.length - 1}
+                                    onClick={() => setBatchIndex(prev => prev + 1)}
+                                    title="Next"
+                                >
+                                    ›
+                                </button>
+                                <div style={{width:'10px'}}></div>
+                                <button type="button" className="add-another-btn" onClick={addNewToBatch}>
+                                    <Icons.Plus size={12}/> Add Another
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="modal-header" style={{marginTop:0}}>
+                            <h2>Create Shipment</h2>
+                            <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+                        </div>
+
+                        {/* 2. FORM (Bound to currentForm) */}
+                        <form onSubmit={handleBatchSubmit} className="shipment-form">
+                            <div className="form-row">
+                                <div className="form-group">
+                                    <label>Shipment ID</label>
+                                    <input 
+                                        type="number" 
+                                        name="shipmentID"
+                                        required 
+                                        value={currentForm.shipmentID} 
+                                        onChange={handleBatchChange} 
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Destination Name</label>
+                                    <input 
+                                        type="text" 
+                                        name="destName"
+                                        required 
+                                        value={currentForm.destName} 
+                                        onChange={handleBatchChange} 
+                                    />
+                                </div>
+                            </div>
+
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Loading Date</label>
                                     <input 
                                         type="date" 
+                                        name="loadingDate" 
                                         required 
-                                        name="loadingDate"
-                                        min={getTodayString()} // 1. Prevent Past Dates
-                                        value={formData.loadingDate} 
-                                        onChange={handleChange} 
+                                        min={getTodayString()} 
+                                        value={currentForm.loadingDate} 
+                                        onChange={handleBatchChange} 
                                     />
                                 </div>
                                 <div className="form-group">
-                                    <label style={{color: !formData.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
+                                    <label style={{color: !currentForm.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
                                     <input 
                                         type="date" 
-                                        required 
                                         name="deliveryDate"
-                                        disabled={!formData.loadingDate} // 2. Disabled until loading chosen
-                                        min={formData.loadingDate}       // 3. Min date is loading date
-                                        value={formData.deliveryDate} 
-                                        onChange={handleChange}
-                                        style={{ 
-                                            backgroundColor: !formData.loadingDate ? '#f9f9f9' : 'white',
-                                            cursor: !formData.loadingDate ? 'not-allowed' : 'pointer'
-                                        }}
+                                        required 
+                                        disabled={!currentForm.loadingDate} 
+                                        min={currentForm.loadingDate} 
+                                        value={currentForm.deliveryDate} 
+                                        onChange={handleBatchChange}
+                                        style={{ backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
                                     />
                                 </div>
                             </div>
 
                             <div className="form-group" style={{ marginBottom: '15px' }}>
                                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Route / Cluster</label>
-                                <input type="text" name="destLocation" value={formData.destLocation} onChange={handleChange} list={filteredRoutes.length > 0 ? "route-list" : ""} className="form-input" placeholder="Search..." autoComplete="off" required />
-                                <datalist id="route-list">{filteredRoutes.map((r, i) => <option key={i} value={r} />)}</datalist>
+                                <input 
+                                    type="text" 
+                                    name="destLocation" 
+                                    value={currentForm.destLocation} 
+                                    onChange={handleBatchChange} 
+                                    list={filteredRoutes.length > 0 ? "route-list" : ""} 
+                                    className="form-input" 
+                                    placeholder="Search..." 
+                                    autoComplete="off" 
+                                    required 
+                                />
+                                <datalist id="route-list">
+                                    {filteredRoutes.map((r, i) => <option key={i} value={r} />)}
+                                </datalist>
                             </div>
+
                             <div className="form-group" style={{marginBottom: '15px'}}>
                                 <label style={{fontWeight: 'bold', color: isVehicleDisabled ? '#999' : 'black'}}>Vehicle Assignment</label>
-                                <select name="vehicleID" value={formData.vehicleID} onChange={handleChange} className="form-input" required disabled={isVehicleDisabled} style={{ backgroundColor: isVehicleDisabled ? '#f0f0f0' : 'white' }}>
+                                <select 
+                                    name="vehicleID" 
+                                    value={currentForm.vehicleID} 
+                                    onChange={handleBatchChange} 
+                                    className="form-input" 
+                                    required 
+                                    disabled={isVehicleDisabled} 
+                                    style={{ backgroundColor: isVehicleDisabled ? '#f0f0f0' : 'white' }}
+                                >
                                     <option value="">{isVehicleDisabled ? "Select route first..." : "-- Select Vehicle --"}</option>
-                                    {filteredVehicles.map(v => <option key={v.vehicleID} value={v.vehicleID}>{v.plateNo} ({v.type})</option>)}
+                                    {filteredVehicles.map(v => (
+                                        <option key={v.vehicleID} value={v.vehicleID}>{v.plateNo} ({v.type})</option>
+                                    ))}
                                 </select>
                             </div>
+
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Driver</label>
                                     <select 
+                                        name="driverID"
                                         required 
-                                        value={formData.driverID} 
-                                        onChange={e => setFormData({...formData, driverID: e.target.value})}
+                                        value={currentForm.driverID} 
+                                        onChange={handleBatchChange}
                                     >
                                         <option value="">-- Select Driver --</option>
                                         {resources.drivers
-                                            // Prevent selecting the person currently selected as Helper
-                                            .filter(d => String(d.userID) !== String(formData.helperID)) 
+                                            .filter(d => String(d.userID) !== String(currentForm.helperID)) 
                                             .map(d => (
-                                                <option key={d.userID} value={d.userID}>
-                                                    {d.firstName} {d.lastName}
-                                                </option>
+                                                <option key={d.userID} value={d.userID}>{d.firstName} {d.lastName}</option>
                                             ))
                                         }
                                     </select>
                                 </div>
-
                                 <div className="form-group">
                                     <label>Helper</label>
                                     <select 
+                                        name="helperID"
                                         required 
-                                        value={formData.helperID} 
-                                        onChange={e => setFormData({...formData, helperID: e.target.value})}
+                                        value={currentForm.helperID} 
+                                        onChange={handleBatchChange}
                                     >
                                         <option value="">-- Select Helper --</option>
                                         {resources.helpers
-                                            // Prevent selecting the person currently selected as Driver
-                                            .filter(h => String(h.userID) !== String(formData.driverID)) 
+                                            .filter(h => String(h.userID) !== String(currentForm.driverID)) 
                                             .map(h => (
                                                 <option key={h.userID} value={h.userID}>
-                                                    {/* Visual hint if a Driver is acting as a Helper */}
                                                     {h.firstName} {h.lastName} {h.role === 'Driver' ? '(Driver)' : ''}
                                                 </option>
                                             ))
@@ -803,7 +1010,12 @@ function ShipmentView({ user, token, onLogout }) {
                                     </select>
                                 </div>
                             </div>
-                            <button type="submit" className="submit-btn">Confirm Shipment</button>
+
+                            <div style={{marginTop:'20px'}}>
+                                <button type="submit" className="submit-btn" disabled={loadingBatch} style={{width:'100%'}}>
+                                    {loadingBatch ? 'Creating...' : `Confirm ${batchData.length} Shipment${batchData.length > 1 ? 's' : ''}`}
+                                </button>
+                            </div>
                         </form>
                     </div>
                 </div>

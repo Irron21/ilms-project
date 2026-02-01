@@ -269,6 +269,7 @@ function KPIView() {
                 </div>
                 <div className="actions-right">
                     <div className="filter-group-bordered">
+                        <div style={{display: "flex", flexDirection: "row", gap: 5, alignItems: "center"}}>
                         <span className="filter-label">Viewing:</span>
                         <select className="month-select" value={currentFilter} onChange={handleFilterChange}>
                             <option value="">Latest Upload</option>
@@ -276,6 +277,7 @@ function KPIView() {
                                 <option key={idx} value={m.value}>{m.label}</option>
                             ))}
                         </select>
+                        </div>
                     </div>
                     <button className="manage-btn" onClick={() => setShowManageModal(true)}>⚙ Manage</button>
                     <input type="file" id="fileUpload" accept='.xlsx, .xls' style={{display:'none'}} onChange={handleFileUpload} />
