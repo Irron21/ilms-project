@@ -762,8 +762,46 @@ function ShipmentView({ user, token, onLogout }) {
                                 </select>
                             </div>
                             <div className="form-row">
-                                <div className="form-group"><label>Driver</label><select required value={formData.driverID} onChange={e => setFormData({...formData, driverID: e.target.value})}><option value="">--</option>{resources.drivers.map(d => <option key={d.userID} value={d.userID}>{d.firstName} {d.lastName}</option>)}</select></div>
-                                <div className="form-group"><label>Helper</label><select required value={formData.helperID} onChange={e => setFormData({...formData, helperID: e.target.value})}><option value="">--</option>{resources.helpers.map(h => <option key={h.userID} value={h.userID} >{h.firstName} {h.lastName}</option>)}</select></div>
+                                <div className="form-group">
+                                    <label>Driver</label>
+                                    <select 
+                                        required 
+                                        value={formData.driverID} 
+                                        onChange={e => setFormData({...formData, driverID: e.target.value})}
+                                    >
+                                        <option value="">-- Select Driver --</option>
+                                        {resources.drivers
+                                            // Prevent selecting the person currently selected as Helper
+                                            .filter(d => String(d.userID) !== String(formData.helperID)) 
+                                            .map(d => (
+                                                <option key={d.userID} value={d.userID}>
+                                                    {d.firstName} {d.lastName}
+                                                </option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+
+                                <div className="form-group">
+                                    <label>Helper</label>
+                                    <select 
+                                        required 
+                                        value={formData.helperID} 
+                                        onChange={e => setFormData({...formData, helperID: e.target.value})}
+                                    >
+                                        <option value="">-- Select Helper --</option>
+                                        {resources.helpers
+                                            // Prevent selecting the person currently selected as Driver
+                                            .filter(h => String(h.userID) !== String(formData.driverID)) 
+                                            .map(h => (
+                                                <option key={h.userID} value={h.userID}>
+                                                    {/* Visual hint if a Driver is acting as a Helper */}
+                                                    {h.firstName} {h.lastName} {h.role === 'Driver' ? '(Driver)' : ''}
+                                                </option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
                             </div>
                             <button type="submit" className="submit-btn">Confirm Shipment</button>
                         </form>

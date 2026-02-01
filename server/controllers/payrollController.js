@@ -121,7 +121,7 @@ exports.generatePayroll = (req, res) => {
                     SELECT 
                         s.shipmentID, s.destLocation, s.deliveryDate,
                         v.type as vehicleType,
-                        sc.userID as crewID, u.role,
+                        sc.userID as crewID, sc.role,
                         (SELECT COUNT(*) FROM ShipmentCrew WHERE shipmentID = s.shipmentID) as crewCount
                     FROM Shipments s
                     JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID

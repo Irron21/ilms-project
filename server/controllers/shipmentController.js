@@ -3,12 +3,12 @@ const XLSX = require('xlsx');
 const logActivity = require('../utils/activityLogger');
 
 // 1. Get Shipments (Updated for Archive Support)
+// 1. Get Shipments (Updated to use Assigned Role from ShipmentCrew)
 exports.getActiveShipments = (req, res) => {
     const currentUserID = req.query.userID;
     const showArchived = req.query.archived === 'true';
     const isArchivedVal = showArchived ? 1 : 0; 
 
-    // Define columns clearly
     const columns = `
         s.shipmentID, s.destName, s.destLocation, 
         s.loadingDate, s.deliveryDate,
@@ -33,9 +33,10 @@ exports.getActiveShipments = (req, res) => {
         params = [currentUserID];
     } else {
         // ADMIN MODE
+        // ✅ FIX: Use sc.role instead of u.role to show their assigned job
         sql = `
             SELECT ${columns},
-                GROUP_CONCAT(CONCAT(u.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
+                GROUP_CONCAT(CONCAT(sc.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
             FROM Shipments s
             JOIN Vehicles v ON s.vehicleID = v.vehicleID
             LEFT JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
@@ -56,11 +57,42 @@ exports.getActiveShipments = (req, res) => {
     });
 };
 
+exports.getShipmentResources = (req, res) => {
+    // 1. Fetch Working Vehicles
+    const sqlVehicles = "SELECT vehicleID, plateNo, type FROM Vehicles WHERE status = 'Working' AND isArchived = 0";
+    
+    // 2. Fetch Active Users (Drivers & Helpers)
+    const sqlUsers = "SELECT userID, firstName, lastName, role FROM Users WHERE role IN ('Driver', 'Helper') AND isArchived = 0 ORDER BY lastName ASC";
+
+    db.query(sqlVehicles, (err, vehicles) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        db.query(sqlUsers, (err, users) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            // LOGIC:
+            // Drivers List: Only users with role 'Driver'
+            const drivers = users.filter(u => u.role === 'Driver');
+            
+            // Helpers List: Users with role 'Helper' OR 'Driver' (Drivers can act as helpers)
+            const helpers = users.filter(u => u.role === 'Helper' || u.role === 'Driver');
+
+            res.json({
+                vehicles,
+                drivers,
+                helpers
+            });
+        });
+    });
+};
+
 const calculatePayroll = (shipmentID) => {
+    // ✅ FIX: Select 'sc.role' explicitly as 'assignedRole'
+    // This tells us what job they were doing on THIS specific shipment
     const getCrewSQL = `
         SELECT 
             sc.userID as crewID, 
-            u.role,          
+            sc.role as assignedRole,          
             s.destLocation, 
             v.type as vehicleType
         FROM ShipmentCrew sc
@@ -93,7 +125,6 @@ const calculatePayroll = (shipmentID) => {
             const standardHelperPay = rateData ? rateData.helperBaseFee : 400.00;
             
             // 3. CALCULATE SPLIT ALLOWANCE
-            // Example: 350 Total / 2 Crew = 175 Each
             const totalAllowance = rateData ? rateData.foodAllowance : 350.00;
             const crewCount = crewMembers.length;
             const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
@@ -102,16 +133,14 @@ const calculatePayroll = (shipmentID) => {
             crewMembers.forEach(member => {
                 let payAmount = 0;
 
-                // Determine Salary based on Role
-                if (member.role === 'Driver') {
+                // ✅ CRITICAL FIX: Pay based on ASSIGNED ROLE, not Registered Role
+                if (member.assignedRole === 'Driver') {
                     payAmount = standardDriverPay;
                 } else {
                     payAmount = standardHelperPay; 
                 }
 
                 // 5. Insert Record
-                // NOTE: We save 'allowancePerPerson' so Admin can see it, 
-                // but the Database SQL we just ran ensures it is NOT added to the Total Payout.
                 const insertPayrollSQL = `
                     INSERT INTO ShipmentPayroll 
                     (shipmentID, crewID, baseFee, allowance, status, payoutDate) 
@@ -123,7 +152,7 @@ const calculatePayroll = (shipmentID) => {
                     if (err) {
                         console.error(`Payroll Failed for User ${member.crewID}:`, err.message);
                     } else {
-                        console.log(`Logged User ${member.crewID}: Salary ${payAmount}, Allowance Received ${allowancePerPerson}`);
+                        console.log(`Logged User ${member.crewID} as ${member.assignedRole}: Salary ${payAmount}`);
                     }
                 });
             });
@@ -184,28 +213,6 @@ exports.getShipmentLogs = (req, res) => {
         res.json(results);
     });
 };
-
-exports.getFormResources = (req, res) => {
-    const sqlDrivers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Driver' AND isArchived = 0";
-    const sqlHelpers = "SELECT userID, firstName, lastName FROM Users WHERE role = 'Helper' AND isArchived = 0";
-    const sqlVehicles = "SELECT vehicleID, plateNo, type FROM Vehicles WHERE isArchived = 0";
-
-    // Run queries in parallel
-    db.query(sqlDrivers, (err, drivers) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        db.query(sqlHelpers, (err, helpers) => {
-            if (err) return res.status(500).json({ error: err.message });
-
-            db.query(sqlVehicles, (err, vehicles) => {
-                if (err) return res.status(500).json({ error: err.message });
-                
-                res.json({ drivers, helpers, vehicles });
-            });
-        });
-    });
-};
-
 
 exports.createShipment = (req, res) => {
     // 1. Extract Data
@@ -278,8 +285,11 @@ exports.createShipment = (req, res) => {
                         });
                     }
 
-                    const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID) VALUES ?";
-                    const crewValues = [[shipmentID, driverID], [shipmentID, helperID]];
+                    const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES ?";
+                    const crewValues = [
+                        [shipmentID, driverID, 'Driver'], 
+                        [shipmentID, helperID, 'Helper']
+                    ];
 
                     connection.query(sqlCrew, [crewValues], (err) => {
                         if (err) {
@@ -320,23 +330,14 @@ exports.exportShipments = (req, res) => {
     // 2. SQL QUERY (With Rate Fallback)
     const query = `
       SELECT 
-        s.shipmentID,
-        s.destName,
-        s.destLocation,
-        s.loadingDate,    
-        s.deliveryDate,  
-        v.plateNo,
-        v.type AS truckType,
-        s.currentStatus,
-        s.creationTimestamp,
+        s.shipmentID, s.destName, s.destLocation, s.loadingDate, s.deliveryDate,  
+        v.plateNo, v.type AS truckType, s.currentStatus, s.creationTimestamp,
         
-        -- Crew Names
-        MAX(uDriver.firstName) AS driverNameFirst,
-        MAX(uDriver.lastName) AS driverNameLast,
-        MAX(uHelper.firstName) AS helperNameFirst,
-        MAX(uHelper.lastName) AS helperNameLast,
+        -- Crew Names (Fetched by Shipment Role)
+        MAX(uDriver.firstName) AS driverNameFirst, MAX(uDriver.lastName) AS driverNameLast,
+        MAX(uHelper.firstName) AS helperNameFirst, MAX(uHelper.lastName) AS helperNameLast,
 
-        -- FINANCIALS (Priority: Actual Payroll > Standard Rate Fallback)
+        -- FINANCIALS
         COALESCE(MAX(spDriver.baseFee), MAX(pr.driverBaseFee)) AS driverFee,
         COALESCE(MAX(spHelper.baseFee), MAX(pr.helperBaseFee)) AS helperFee,
         COALESCE(MAX(spDriver.allowance), MAX(pr.foodAllowance)) AS allowance,
@@ -353,18 +354,19 @@ exports.exportShipments = (req, res) => {
       FROM Shipments s
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
       
-      -- Join Crew
-      LEFT JOIN ShipmentCrew scDriver ON s.shipmentID = scDriver.shipmentID 
-      LEFT JOIN Users uDriver ON scDriver.userID = uDriver.userID AND uDriver.role = 'Driver'
-      LEFT JOIN ShipmentCrew scHelper ON s.shipmentID = scHelper.shipmentID 
-      LEFT JOIN Users uHelper ON scHelper.userID = uHelper.userID AND uHelper.role = 'Helper'
+      -- ✅ JOIN 1: Find the person assigned as 'Driver'
+      LEFT JOIN ShipmentCrew scDriver ON s.shipmentID = scDriver.shipmentID AND scDriver.role = 'Driver'
+      LEFT JOIN Users uDriver ON scDriver.userID = uDriver.userID
+      
+      -- ✅ JOIN 2: Find the person assigned as 'Helper' (Even if they are actually a Driver)
+      LEFT JOIN ShipmentCrew scHelper ON s.shipmentID = scHelper.shipmentID AND scHelper.role = 'Helper'
+      LEFT JOIN Users uHelper ON scHelper.userID = uHelper.userID
 
-      -- Join Payroll (Actual Data)
+      -- Join Payroll
       LEFT JOIN ShipmentPayroll spDriver ON s.shipmentID = spDriver.shipmentID AND spDriver.crewID = uDriver.userID
       LEFT JOIN ShipmentPayroll spHelper ON s.shipmentID = spHelper.shipmentID AND spHelper.crewID = uHelper.userID
 
-      -- Join Rates (Fallback Data)
-      -- logic: If destLocation contains the rate's routeCluster string
+      -- Join Rates
       LEFT JOIN PayrollRates pr ON (s.destLocation LIKE CONCAT('%', pr.routeCluster, '%') AND v.type = pr.vehicleType)
       
       WHERE s.creationTimestamp BETWEEN ? AND ?
