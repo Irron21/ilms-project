@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const logActivity = require('../utils/activityLogger'); 
 const logController = require('../controllers/logController');
-
 const  verifyToken  = require('../middleware/authMiddleware'); 
 
 router.get('/actions', logController.getLogActions);

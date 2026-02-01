@@ -90,7 +90,7 @@ exports.createUser = async (req, res) => {
                 
                 const newUserID = result.insertId;
                 
-                // ✅ CHANGED: Auto-generate ID if not provided, using Role Prefix
+                // Auto-generate ID if not provided, using Role Prefix
                 const finalEmployeeID = employeeID || generateEmployeeID(role);
                 
                 const loginSql = "INSERT INTO UserLogins (userID, employeeID, hashedPassword) VALUES (?, ?, ?)";
@@ -128,7 +128,7 @@ exports.updateUser = (req, res) => {
     });
 };
 
-// ✅ NEW: RESET PASSWORD
+// RESET PASSWORD
 exports.resetPassword = async (req, res) => {
     const { id } = req.params;
     const { newPassword } = req.body;

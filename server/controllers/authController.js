@@ -34,8 +34,7 @@ exports.login = (req, res) => {
 
         const user = results[0];
 
-        // 3. CHECK STATUS (⛔ BLOCK ARCHIVED USERS HERE)
-        // We check this BEFORE verifying the password.
+        // 3. CHECK STATUS 
         if (user.isActive === 0) {
             return res.status(403).json({ 
                 error: "Unauthorized: This account has been deactivated." 

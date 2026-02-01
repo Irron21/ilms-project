@@ -1,6 +1,6 @@
 const db = require('../config/db');
 
-// ✅ NEW: Fetch distinct action types for the dropdown
+// Fetch distinct action types for the dropdown
 exports.getLogActions = (req, res) => {
     const sql = "SELECT DISTINCT actionType FROM UserActivityLog ORDER BY actionType ASC";
     db.query(sql, (err, results) => {
@@ -10,7 +10,7 @@ exports.getLogActions = (req, res) => {
     });
 };
 
-// ✅ UPDATED: Fetch Logs with Year/Month Filtering
+// Fetch Logs with Year/Month Filtering
 exports.getActivityLogs = (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;

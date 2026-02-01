@@ -18,67 +18,93 @@ exports.uploadKPIReport = (req, res) => {
     try {
         const workbook = xlsx.readFile(req.file.path);
         
+        // 1. Sheet Detection (Try 'K2MAC', then 'KPI', then first sheet)
         let summarySheet = workbook.Sheets['K2MAC'];
-        if (!summarySheet) {
-            const firstSheetName = workbook.SheetNames[0];
-            summarySheet = workbook.Sheets[firstSheetName];
-        }
+        if (!summarySheet) summarySheet = workbook.Sheets['KPI'];
+        if (!summarySheet) summarySheet = workbook.Sheets[workbook.SheetNames[0]];
 
         if (!summarySheet) {
             cleanup(); 
-            const msg = "Upload Failed - No valid sheet found";
-            return logActivity(adminID, 'UPLOAD_KPI_FAILED', `${msg}: ${req.file.originalname}`, () => {
-                res.status(400).json({ error: "No valid sheet found. Please use the correct template." });
-            });
+            return res.status(400).json({ error: "No valid sheet found. Please check your Excel file." });
         }
 
         const data = xlsx.utils.sheet_to_json(summarySheet, { header: 1 });
         const fileName = req.file.originalname.toUpperCase();
 
-        // 2. STRICT Date Detection
+        // 2. ROBUST Date Detection
+        // List of months for matching
+        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+        
         let detectedMonth = null;
         let detectedYear = null; 
-        
-        const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
 
+        // A. Try Filename first
         months.forEach(m => { if (fileName.includes(m)) detectedMonth = m; });
-        const yearMatch = fileName.match(/202[0-9]/);
-        if (yearMatch) detectedYear = parseInt(yearMatch[0]);
+        const yearMatchFilename = fileName.match(/202[0-9]/);
+        if (yearMatchFilename) detectedYear = parseInt(yearMatchFilename[0]);
 
-        // Try Inside Excel (Cell A1 or similar)
-        if (!detectedMonth) {
-            data.forEach(row => {
-                if (row[0] && months.includes(row[0].toString().toUpperCase())) {
-                    detectedMonth = row[0].toString().toUpperCase();
+        // B. Try Content scan (First 20 rows) if missing
+        if (!detectedMonth || !detectedYear) {
+            for (let i = 0; i < Math.min(data.length, 20); i++) {
+                const rowStr = (data[i] || []).join(" ").toUpperCase();
+                
+                // Find Month
+                if (!detectedMonth) {
+                    months.forEach(m => { 
+                        // Check if row starts with Month OR contains "Month: AUGUST" pattern
+                        if (rowStr.includes(m)) detectedMonth = m; 
+                    });
                 }
-            });
+
+                // Find Year (Look for 2023, 2024, etc.)
+                if (!detectedYear) {
+                    const yearMatchContent = rowStr.match(/202[0-9]/);
+                    if (yearMatchContent) detectedYear = parseInt(yearMatchContent[0]);
+                }
+            }
         }
 
         if (!detectedMonth || !detectedYear) {
             cleanup();
-            const msg = `Upload Failed - Could not detect date (Month: ${detectedMonth}, Year: ${detectedYear})`;
-            return logActivity(adminID, 'UPLOAD_KPI_FAILED', msg, () => {
-                res.status(400).json({ error: "Could not detect Month or Year in file. Please ensure filename includes e.g., 'January 2025'." });
-            });
+            const msg = `Upload Failed. Found Month: ${detectedMonth || 'None'}, Year: ${detectedYear || 'None'}`;
+            return res.status(400).json({ error: "Date Detection Failed. Please ensure the Month and Year (e.g., 2025) are visible in the filename or the top rows of the sheet." });
         }
 
-        // Score Parsing 
-        let targetRowIndex = -1;
-        data.forEach((row, index) => {
-            if (row[0] && months.includes(row[0].toString().toUpperCase())) targetRowIndex = index;
-        });
-        if (targetRowIndex !== -1 && isNaN(parseFloat(data[targetRowIndex][3]))) targetRowIndex++;
-        if (targetRowIndex === -1) targetRowIndex = 4;
+        // 3. ROBUST Score Parsing
+        // Instead of relying on fixed rows, search for the specific label "Total no of shipments"
+        let scoreRow = null;
+        
+        // Find the row that starts with "Total no of shipments"
+        const dataRowIndex = data.findIndex(row => 
+            row[0] && row[0].toString().toLowerCase().includes("total no") && row[0].toString().toLowerCase().includes("shipments")
+        );
 
-        const scoreRow = data[targetRowIndex] || [];
+        if (dataRowIndex !== -1) {
+            scoreRow = data[dataRowIndex];
+        } else {
+            // Fallback: Try to find a row below the Month Name row
+            const monthRowIndex = data.findIndex(row => row[0] && row[0].toString().toUpperCase() === detectedMonth);
+            if (monthRowIndex !== -1 && data[monthRowIndex + 1]) {
+                scoreRow = data[monthRowIndex + 1];
+            }
+        }
+
+        if (!scoreRow) {
+            cleanup();
+            return res.status(400).json({ error: "Could not locate the 'Total no of shipments' data row." });
+        }
+
         const parseScore = (val) => {
             if (!val) return 0.00;
             let num = parseFloat(val);
             if (isNaN(num)) return 0.00;
-            let final = num <= 1 ? num * 100 : num;
+            // Handle percentages (0.9 vs 90)
+            let final = num <= 1.0 ? num * 100 : num;
             return parseFloat((Math.round(final * 100) / 100).toFixed(2));
         };
 
+        // Based on the CSV provided:
+        // Col 3: Booking, Col 6: Truck, Col 9: CallTime, Col 12: DOT, Col 15: Delivery, Col 18: POD
         const metrics = {
             booking:  parseScore(scoreRow[3]),
             truck:    parseScore(scoreRow[6]),
@@ -88,20 +114,11 @@ exports.uploadKPIReport = (req, res) => {
             pod:      parseScore(scoreRow[18])
         };
 
-        const totalScore = Object.values(metrics).reduce((a, b) => a + b, 0);
-        if (totalScore === 0) {
-            cleanup();
-            return logActivity(adminID, 'UPLOAD_KPI_FAILED', "Upload Failed - All scores detected as 0", () => {
-                res.status(400).json({ error: "No valid scores detected. Check the excel format." });
-            });
-        }
-
-        // Failure Reasons Extraction 
-        let reasonStartRowIndex = -1;
-        data.forEach((row, index) => {
-            const rowStr = row.join(" ").toUpperCase();
-            if (rowStr.includes('REASON OF DELAY')) reasonStartRowIndex = index;
-        });
+        // 4. Failure Reasons Extraction 
+        // Search for "REASON OF DELAY" header
+        let reasonStartRowIndex = data.findIndex(row => 
+            row.join(" ").toUpperCase().includes('REASON OF DELAY')
+        );
 
         const failureReasons = [];
         if (reasonStartRowIndex !== -1) {
@@ -113,18 +130,25 @@ exports.uploadKPIReport = (req, res) => {
                 { category: 'Delivery', start: 12, end: 14 },
                 { category: 'POD', start: 15, end: 19 }
             ];
+            
+            // Scan rows below "Reason of Delay" until "Action Taken" or end
             for (let i = reasonStartRowIndex + 1; i < data.length; i++) {
                 const row = data[i];
                 if (!row) continue;
                 const firstCell = row[0] ? row[0].toString().toLowerCase() : "";
                 if (firstCell.includes('action') || firstCell.includes('recommendation')) break;
+
                 ranges.forEach(range => {
                     for (let col = range.start; col <= range.end; col++) {
                         if (row[col]) {
                             let text = row[col].toString().trim();
+                            // Clean up "1. ", "2. ", etc.
                             const cleanText = text.replace(/^[\d\.\-\•]+\s*/, ''); 
+                            
+                            // Filter out "Reason of delay" repetitions or empty/short strings
                             if (cleanText.length > 3 && isNaN(parseFloat(cleanText)) && !cleanText.toUpperCase().includes('REASON')) {
                                 failureReasons.push({ category: range.category, reason: cleanText });
+                                // Only extract one reason per category per row to avoid duplicates if merged
                                 break; 
                             }
                         }
@@ -133,8 +157,10 @@ exports.uploadKPIReport = (req, res) => {
             }
         }
 
-        // 3. Database Operation
+        // 5. Database Operation
         const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); 
+        
+        // Delete existing report for this Month/Year (Overwrite)
         const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
 
         db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], () => {
@@ -153,14 +179,11 @@ exports.uploadKPIReport = (req, res) => {
                 
                 if (err) {
                     console.error("DB Error:", err);
-                    return logActivity(adminID, 'UPLOAD_KPI_FAILED', `Database Error: ${err.message}`, () => {
-                        res.status(500).json({ error: "Database error: " + err.message });
-                    });
+                    return res.status(500).json({ error: "Database error: " + err.message });
                 }
                 
                 const logDetails = `Uploaded KPI Report - ${detectedMonth} ${detectedYear} [ID: ${result.insertId}]`;
                 logActivity(adminID, 'UPLOAD_KPI_REPORT', logDetails, () => {
-                    console.log(`Saved ${detectedMonth} ${detectedYear}`);
                     res.json({ message: "Success", scores: metrics });
                 });
             });
@@ -169,9 +192,7 @@ exports.uploadKPIReport = (req, res) => {
     } catch (e) {
         cleanup(); 
         console.error("Upload Error:", e);
-        logActivity(adminID, 'UPLOAD_KPI_FAILED', `Processing Error: ${e.message}`, () => {
-            res.status(500).json({ error: e.message });
-        });
+        res.status(500).json({ error: "Processing Error: " + e.message });
     }
 };
 
@@ -193,24 +214,28 @@ exports.getAvailableMonths = (req, res) => {
 
 // 3. GET DASHBOARD DATA (Filtered)
 exports.getDashboardData = (req, res) => {
-    const { month } = req.query;
+    const { month, year } = req.query; 
 
-    let latestSql = "SELECT * FROM KPI_Monthly_Reports ORDER BY reportMonth DESC LIMIT 1";
-    let params = [];
+    // Get the "Anchor" Report (Score Cards) 
+    let anchorSql = "SELECT * FROM KPI_Monthly_Reports ORDER BY reportMonth DESC LIMIT 1";
+    let anchorParams = [];
 
     if (month) {
-        latestSql = "SELECT * FROM KPI_Monthly_Reports WHERE reportMonth = ? LIMIT 1";
-        params = [new Date(month)]; 
+        anchorSql = "SELECT * FROM KPI_Monthly_Reports WHERE reportMonth = ? LIMIT 1";
+        anchorParams = [new Date(month)]; 
     }
 
-    const trendSql = "SELECT * FROM KPI_Monthly_Reports ORDER BY reportMonth ASC LIMIT 6";
-
-    db.query(latestSql, params, (err, latestResults) => {
+    db.query(anchorSql, anchorParams, (err, anchorResults) => {
         if (err) return res.status(500).json({ error: err.message });
         
-        const row = latestResults.length > 0 ? latestResults[0] : null;
+        const anchorReport = anchorResults.length > 0 ? anchorResults[0] : null;
 
-        db.query(trendSql, (err2, trendResults) => {
+        // Get Trend Data (Filtered by Selected Year)
+        const targetYear = year || new Date().getFullYear();
+        
+        const trendSql = "SELECT * FROM KPI_Monthly_Reports WHERE YEAR(reportMonth) = ? ORDER BY reportMonth ASC";
+
+        db.query(trendSql, [targetYear], (err2, trendResults) => {
              if (err2) return res.status(500).json({ error: err2.message });
 
              const formattedTrend = trendResults.map(t => {
@@ -237,16 +262,16 @@ exports.getDashboardData = (req, res) => {
              const formatScore = (val) => Number(val || 0).toFixed(2);
 
              res.json({
-                latestScores: row ? [
-                    { title: 'Booking', score: formatScore(row.scoreBooking), status: getStatus(row.scoreBooking) },
-                    { title: 'Truck Availability', score: formatScore(row.scoreTruck), status: getStatus(row.scoreTruck) },
-                    { title: 'Call Time', score: formatScore(row.scoreCalltime), status: getStatus(row.scoreCalltime) },
-                    { title: 'DOT Compliance', score: formatScore(row.scoreDOT), status: getStatus(row.scoreDOT) },
-                    { title: 'Delivery', score: formatScore(row.scoreDelivery), status: getStatus(row.scoreDelivery) },
-                    { title: 'POD Submission', score: formatScore(row.scorePOD), status: getStatus(row.scorePOD) },
+                latestScores: anchorReport ? [
+                    { title: 'Booking', score: formatScore(anchorReport.scoreBooking), status: getStatus(anchorReport.scoreBooking) },
+                    { title: 'Truck Availability', score: formatScore(anchorReport.scoreTruck), status: getStatus(anchorReport.scoreTruck) },
+                    { title: 'Call Time', score: formatScore(anchorReport.scoreCalltime), status: getStatus(anchorReport.scoreCalltime) },
+                    { title: 'DOT Compliance', score: formatScore(anchorReport.scoreDOT), status: getStatus(anchorReport.scoreDOT) },
+                    { title: 'Delivery', score: formatScore(anchorReport.scoreDelivery), status: getStatus(anchorReport.scoreDelivery) },
+                    { title: 'POD Submission', score: formatScore(anchorReport.scorePOD), status: getStatus(anchorReport.scorePOD) },
                 ] : [],
-                selectedMonthLabel: row ? new Date(row.reportMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "No Data",
-                trendData: formattedTrend
+                selectedMonthLabel: anchorReport ? new Date(anchorReport.reportMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : "No Data",
+                trendData: formattedTrend 
              });
         });
     });

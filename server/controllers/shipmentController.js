@@ -2,8 +2,7 @@ const db = require('../config/db');
 const XLSX = require('xlsx');
 const logActivity = require('../utils/activityLogger');
 
-// 1. Get Shipments (Updated for Archive Support)
-// 1. Get Shipments (Updated to use Assigned Role from ShipmentCrew)
+/** Fetches shipments filtered by user role (Driver/Helper see assigned only) or archived state */
 exports.getActiveShipments = (req, res) => {
     const currentUserID = req.query.userID;
     const showArchived = req.query.archived === 'true';
@@ -32,8 +31,7 @@ exports.getActiveShipments = (req, res) => {
         `;
         params = [currentUserID];
     } else {
-        // ADMIN MODE
-        // ✅ FIX: Use sc.role instead of u.role to show their assigned job
+        /* Admin mode: use assigned role from ShipmentCrew */
         sql = `
             SELECT ${columns},
                 GROUP_CONCAT(CONCAT(sc.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
@@ -86,13 +84,11 @@ exports.getShipmentResources = (req, res) => {
     });
 };
 
-const calculatePayroll = (shipmentID) => {
-    // ✅ FIX: Select 'sc.role' explicitly as 'assignedRole'
-    // This tells us what job they were doing on THIS specific shipment
+    const calculatePayroll = (shipmentID) => {
     const getCrewSQL = `
         SELECT 
             sc.userID as crewID, 
-            sc.role as assignedRole,          
+            sc.role as assignedRole, /* Job on this shipment, not user's default role */          
             s.destLocation, 
             v.type as vehicleType
         FROM ShipmentCrew sc
@@ -133,7 +129,7 @@ const calculatePayroll = (shipmentID) => {
             crewMembers.forEach(member => {
                 let payAmount = 0;
 
-                // ✅ CRITICAL FIX: Pay based on ASSIGNED ROLE, not Registered Role
+                /* Pay based on assigned role on this shipment */
                 if (member.assignedRole === 'Driver') {
                     payAmount = standardDriverPay;
                 } else {
@@ -219,8 +215,6 @@ exports.createBatchShipments = async (req, res) => {
     // Ensure we have a valid User ID, defaulting to 1 (System/Admin) if auth fails
     const userID = (req.user && req.user.userID) ? req.user.userID : 1;
 
-    console.log("Batch Payload Received:", JSON.stringify(shipments, null, 2)); // 🔍 Debug Log
-
     if (!Array.isArray(shipments) || shipments.length === 0) {
         return res.status(400).json({ error: "No shipment data provided." });
     }
@@ -236,7 +230,7 @@ exports.createBatchShipments = async (req, res) => {
                     const s = shipments[i];
                     const itemNum = i + 1;
 
-                    // 🔍 DETAILED VALIDATION CHECKS
+                    /* Validation */
                     if (!s.shipmentID) throw new Error(`Item ${itemNum}: Missing 'Shipment ID'`);
                     if (!s.driverID)   throw new Error(`Item ${itemNum}: Missing 'Driver'`);
                     if (!s.helperID)   throw new Error(`Item ${itemNum}: Missing 'Helper'`);

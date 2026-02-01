@@ -29,7 +29,7 @@ app.use(cors({
     }
     return callback(null, true);
   },
-  credentials: true, // <--- This MUST be true
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
@@ -37,10 +37,6 @@ app.use(cors({
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
 
-app.use((req, res, next) => {
-    if (req.method === 'POST') console.log("Data sent:", req.body);
-    next();
-});
 
 
 app.get('/', (req, res) => { res.send('K2Mac ILMS Backend is Running'); });

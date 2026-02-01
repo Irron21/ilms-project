@@ -1,0 +1,24 @@
+:root {
+  /* Brand Colors */
+  --primary-orange: #E97512;
+  --bg-gray: #F5F5F5;
+  
+  /* Typography */
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  
+  /* Status Colors */
+  --success: #27AE60;
+  --error: #EB5757;
+  --warning: #F2994A;
+  --info: #2D9CDB;
+  
+  /* Neutral */
+  --text-primary: #333;
+  --text-secondary: #666;
+  --text-muted: #999;
+  --border-color: #E0E0E0;
+  --bg-white: #FFFFFF;
+  --bg-light: #F9FAFB;
+}
