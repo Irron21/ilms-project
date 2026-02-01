@@ -60,7 +60,9 @@ function UserManagement({ activeTab = "users" }) {
   const [users, setUsers] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [logs, setLogs] = useState([]);
-  
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetData, setResetData] = useState({ userID: null, name: '', newPassword: '' });
+
   // Counts (Required for server-side pagination)
   const [totalLogItems, setTotalLogItems] = useState(0); 
 
@@ -155,6 +157,33 @@ function UserManagement({ activeTab = "users" }) {
   };
 
   // --- HANDLERS ---
+
+  const initiateResetPassword = (user) => {
+      setResetData({ userID: user.userID, name: `${user.firstName} ${user.lastName}`, newPassword: '' });
+      setShowResetModal(true);
+  };
+
+  // ✅ NEW: Handle Reset Submit
+  const handleResetSubmit = async (e) => {
+      e.preventDefault();
+      try {
+          await api.put(`/users/${resetData.userID}/reset-password`, { newPassword: resetData.newPassword }, { headers: { Authorization: `Bearer ${token}` } });
+          setShowResetModal(false);
+          setFeedbackModal({ 
+              type: 'success', 
+              title: 'Password Reset', 
+              message: `Password for ${resetData.name} has been updated successfully.`,
+              onClose: () => setFeedbackModal(null)
+          });
+      } catch (err) {
+          setFeedbackModal({ 
+              type: 'error', 
+              title: 'Reset Failed', 
+              message: err.response?.data?.error || "Could not reset password.",
+              onClose: () => setFeedbackModal(null)
+          });
+      }
+  };
 
   // Helper to handle filter changes safely
   const handleLogFilterChange = (setter, value) => {
@@ -263,8 +292,19 @@ function UserManagement({ activeTab = "users" }) {
                 <tr key={u.userID}>
                   <td>{u.employeeID || 'N/A'}</td><td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                   <td className="action-cells">
-                  {showArchived ? (<button className="icon-btn" onClick={() => initiateRestore('user', u.userID)}><Icons.Restore/></button>) : 
-                  (<><button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button><button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button></>)}
+                  {showArchived ? (
+                      <button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>
+                   ) : (
+                       <>
+                         {/* ✅ NEW: Reset Password Button */}
+                         <button className="icon-btn" onClick={() => initiateResetPassword(u)} title="Reset Password">
+                            <Icons.Key size={18} />
+                         </button>
+                         
+                         <button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button>
+                         <button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button>
+                        </>
+                      )}
                   </td>
                 </tr>
               )) : <tr><td colSpan="7" className="empty-state">No users found</td></tr>}
@@ -357,6 +397,37 @@ function UserManagement({ activeTab = "users" }) {
         <option value="Helper">Helper (Helper duties only)</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
       {showTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleTruckSubmit}><h3>Add Vehicle</h3><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6WH">6-Wheeler</option><option value="10WH">10-Wheeler</option><option value="4WH">4-Wheeler</option><option value="AUV">AUV</option><option value="FWD">Forward</option><option value="H100">H100</option></select><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
       {showEditTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateTruck}><h3>Edit Vehicle</h3><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="L300">L300</option></select><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
+      {showResetModal && (
+        <div className="modal-backdrop">
+          <form className="modal-card" onSubmit={handleResetSubmit} style={{width:'400px'}}>
+            <div className="modal-header" style={{marginBottom:'15px'}}>
+                <h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3>
+                <button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button>
+            </div>
+            
+            <p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>
+                Enter a new password for <strong>{resetData.name}</strong>.
+            </p>
+
+            <div className="form-group">
+                <label>New Password</label>
+                <input 
+                    type="text" 
+                    value={resetData.newPassword} 
+                    onChange={e => setResetData({...resetData, newPassword: e.target.value})} 
+                    placeholder="Enter new password..." 
+                    required 
+                    autoFocus
+                />
+            </div>
+
+            <div className="modal-footer">
+                <button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button>
+                <button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button>
+            </div>
+          </form>
+        </div>
+      )}
     </>
   );
 }
