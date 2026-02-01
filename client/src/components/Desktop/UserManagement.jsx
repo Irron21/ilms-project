@@ -56,7 +56,7 @@ function UserManagement({ activeTab = "users" }) {
   const [logRoleFilter, setLogRoleFilter] = useState('All'); 
   const [logYear, setLogYear] = useState(new Date().getFullYear().toString());
   const [logMonth, setLogMonth] = useState('All');
-  
+  const [sortConfig, setSortConfig] = useState({ key: 'date', direction: 'desc' });
   const [dynamicActionTypes, setDynamicActionTypes] = useState([]);
 
   // UI States
@@ -133,7 +133,8 @@ function UserManagement({ activeTab = "users" }) {
               role: logRoleFilter,
               year: logYear,
               // Convert Month Index (0-11) to SQL Month (1-12) if not 'All'
-              month: logMonth === 'All' ? 'All' : (parseInt(logMonth) + 1)
+              month: logMonth === 'All' ? 'All' : (parseInt(logMonth) + 1),
+              order: sortConfig.direction
           });
 
           const res = await api.get(`/logs/history?${params.toString()}`, { 
@@ -153,13 +154,37 @@ function UserManagement({ activeTab = "users" }) {
       }
   };
 
+  const handleSort = (key) => {
+      let direction = 'desc'; 
+      // Toggle if same column clicked
+      if (sortConfig.key === key && sortConfig.direction === 'desc') {
+          direction = 'asc';
+      }
+      setSortConfig({ key, direction });
+  };
+
+  const renderSortArrow = () => {
+      const isDesc = sortConfig.direction === 'desc';
+      return (
+          <span 
+              className={`sort-icon-btn active ${isDesc ? 'desc' : ''}`} 
+              style={{marginLeft: '5px'}}
+              title="Sort"
+          >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 19V5" />
+                  <path d="M5 12l7-7 7 7" />
+              </svg>
+          </span>
+      );
+  };
+
   // --- HANDLERS ---
   const handleLogFilterChange = (setter, value) => {
       setter(value);
       setLogPage(1); 
   };
 
-  // ... (Keep existing User/Truck Handlers: handleCreateSubmit, handleUpdateSubmit, initiateDelete, etc.) ...
   const handleUserInputChange = (e) => { const { name, value } = e.target; e.target.setCustomValidity(''); if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return; setUserForm(prev => ({ ...prev, [name]: value })); };
   const handleCreateSubmit = async (e) => { e.preventDefault(); try { await api.post('/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowCreateModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'User Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed', onClose: () => setFeedbackModal(null) }); } };
   const handleUpdateSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
@@ -181,9 +206,15 @@ function UserManagement({ activeTab = "users" }) {
       return Array.from({ length: ghostsNeeded }).map((_, idx) => ( <tr key={`ghost-${idx}`} className="ghost-row"><td colSpan={colSpan}>&nbsp;</td></tr> ));
   };
 
-  const renderTruckView = () => { /* ... Keep Existing ... */ 
+  const renderTruckView = () => { 
+    
       const filteredVehicles = vehicles.filter(v => truckFilter === 'All' || v.status === truckFilter);
-      const paginatedTrucks = filteredVehicles.slice((truckPage - 1) * rowsPerPage, truckPage * rowsPerPage);
+      const sortedVehicles = [...filteredVehicles].sort((a, b) => {
+          const dateA = new Date(a.dateCreated || 0);
+          const dateB = new Date(b.dateCreated || 0);
+          return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+      });
+      const paginatedTrucks = sortedVehicles.slice((truckPage - 1) * rowsPerPage, truckPage * rowsPerPage);
       return (
         <div className="user-mgmt-container">
           <div className="header-actions">
@@ -201,7 +232,11 @@ function UserManagement({ activeTab = "users" }) {
           </div>
           <div className="table-wrapper">
             <table className="user-table">
-              <thead><tr><th>Plate Number</th><th>Type</th><th>Status</th><th>Date Added</th><th style={{textAlign:'center'}}>Actions</th></tr></thead>
+              <thead><tr><th>Plate Number</th><th>Type</th><th>Status</th>
+              <th className="sortable-header">
+                  <div onClick={() => handleSort('date')} className="th-content">Date Added {renderSortArrow()}</div>
+              </th>
+                      <th style={{textAlign:'center'}}>Actions</th></tr></thead>
               <tbody>
                 {paginatedTrucks.map(v => (
                   <tr key={v.vehicleID}>
@@ -225,7 +260,13 @@ function UserManagement({ activeTab = "users" }) {
 
   const renderUserView = () => { /* ... Keep Existing ... */ 
     const filteredUsers = users.filter(user => roleFilter === 'All' || user.role.toLowerCase() === roleFilter.toLowerCase());
-    const paginatedUsers = filteredUsers.slice((userPage - 1) * rowsPerPage, userPage * rowsPerPage);
+    const sortedUsers = [...filteredUsers].sort((a, b) => {
+        const dateA = new Date(a.dateCreated || 0);
+        const dateB = new Date(b.dateCreated || 0);
+        return sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+    });
+
+    const paginatedUsers = sortedUsers.slice((userPage - 1) * rowsPerPage, userPage * rowsPerPage);
     return (
       <div className="user-mgmt-container">
         <div className="header-actions">
@@ -243,7 +284,11 @@ function UserManagement({ activeTab = "users" }) {
         </div>
         <div className="table-wrapper">
           <table className="user-table">
-            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Date</th><th style={{textAlign: 'center'}}>Actions</th></tr></thead>
+            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Role</th>
+            <th className="sortable-header">
+                <div onClick={() => handleSort('date')} className="th-content">Date Added {renderSortArrow()}</div>
+            </th>
+            <th style={{textAlign: 'center'}}>Actions</th></tr></thead>
             <tbody>
               {paginatedUsers.length > 0 ? paginatedUsers.map(u => (
                 <tr key={u.userID}>
@@ -320,7 +365,11 @@ function UserManagement({ activeTab = "users" }) {
           
           <div className="table-wrapper">
             <table className="user-table">
-              <thead><tr><th style={{width:'180px'}}>Date & Time</th><th style={{width:'150px'}}>User</th><th style={{width:'180px'}}>Action Type</th><th>Details</th></tr></thead>
+              <thead><tr>
+              <th className="sortable-header" style={{width:'180px'}}>
+                  <div onClick={() => handleSort('date')} className="th-content">Date & Time {renderSortArrow()}</div>
+              </th>
+              <th style={{width:'150px'}}>User</th><th style={{width:'180px'}}>Action Type</th><th>Details</th></tr></thead>
               <tbody>
                 {logs.length > 0 ? logs.map(log => (
                   <tr key={log.logID}>

@@ -16,20 +16,21 @@ exports.getActivityLogs = (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
 
-    // Extract Filters (Replaced 'timeframe' with 'year' and 'month')
-    const { action, role, year, month } = req.query;
+    // Extract Filters & Sort
+    const { action, role, year, month, order } = req.query;
+
+    // Determine Sort Direction (Default to DESC / Newest First)
+    const sortDirection = (order && order.toLowerCase() === 'asc') ? 'ASC' : 'DESC';
 
     // 1. Build Dynamic WHERE Clause
     let whereClauses = [];
     let queryParams = [];
 
-    // Filter by Action
     if (action && action !== 'All') {
         whereClauses.push("l.actionType = ?");
         queryParams.push(action);
     }
 
-    // Filter by Role
     if (role && role !== 'All') {
         if (role === 'System') {
             whereClauses.push("u.role IS NULL");
@@ -39,13 +40,11 @@ exports.getActivityLogs = (req, res) => {
         }
     }
 
-    // ✅ NEW: Filter by Year
     if (year && year !== 'All') {
         whereClauses.push("YEAR(l.timestamp) = ?");
         queryParams.push(year);
     }
 
-    // ✅ NEW: Filter by Month (Expects 1-12)
     if (month && month !== 'All') {
         whereClauses.push("MONTH(l.timestamp) = ?");
         queryParams.push(month);
@@ -67,7 +66,7 @@ exports.getActivityLogs = (req, res) => {
         const totalItems = countResult[0].total;
         const totalPages = Math.ceil(totalItems / limit);
 
-        // 3. Get Actual Data
+        // 3. Get Actual Data with DYNAMIC SORT
         const sql = `
             SELECT 
                 l.logID, 
@@ -80,7 +79,7 @@ exports.getActivityLogs = (req, res) => {
             FROM UserActivityLog l
             LEFT JOIN Users u ON l.userID = u.userID
             ${whereSql}
-            ORDER BY l.timestamp DESC
+            ORDER BY l.timestamp ${sortDirection}
             LIMIT ? OFFSET ?
         `;
 
