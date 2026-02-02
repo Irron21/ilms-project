@@ -630,11 +630,54 @@ INSERT INTO PayrollRates (routeCluster, vehicleType, driverBaseFee, helperBaseFe
 
 -- 5. Periods
 
-INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES
+INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES 
+-- JANUARY
+('January 1-15, 2026',  '2026-01-01', '2026-01-15', 'CLOSED'),
+('January 16-31, 2026', '2026-01-16', '2026-01-31', 'CLOSED'),
 
-('January A 2026', '2026-01-01', '2026-01-15', 'CLOSED'),
+-- FEBRUARY (Current Month - Set to OPEN)
+('February 1-15, 2026',  '2026-02-01', '2026-02-15', 'OPEN'),
+('February 16-28, 2026', '2026-02-16', '2026-02-28', 'OPEN'),
 
-('January B 2026', '2026-01-16', '2026-01-31', 'OPEN');
+-- MARCH
+('March 1-15, 2026',  '2026-03-01', '2026-03-15', 'OPEN'),
+('March 16-31, 2026', '2026-03-16', '2026-03-31', 'OPEN'),
+
+-- APRIL
+('April 1-15, 2026',  '2026-04-01', '2026-04-15', 'OPEN'),
+('April 16-30, 2026', '2026-04-16', '2026-04-30', 'OPEN'),
+
+-- MAY
+('May 1-15, 2026',  '2026-05-01', '2026-05-15', 'OPEN'),
+('May 16-31, 2026', '2026-05-16', '2026-05-31', 'OPEN'),
+
+-- JUNE
+('June 1-15, 2026',  '2026-06-01', '2026-06-15', 'OPEN'),
+('June 16-30, 2026', '2026-06-16', '2026-06-30', 'OPEN'),
+
+-- JULY
+('July 1-15, 2026',  '2026-07-01', '2026-07-15', 'OPEN'),
+('July 16-31, 2026', '2026-07-16', '2026-07-31', 'OPEN'),
+
+-- AUGUST
+('August 1-15, 2026',  '2026-08-01', '2026-08-15', 'OPEN'),
+('August 16-31, 2026', '2026-08-16', '2026-08-31', 'OPEN'),
+
+-- SEPTEMBER
+('September 1-15, 2026',  '2026-09-01', '2026-09-15', 'OPEN'),
+('September 16-30, 2026', '2026-09-16', '2026-09-30', 'OPEN'),
+
+-- OCTOBER
+('October 1-15, 2026',  '2026-10-01', '2026-10-15', 'OPEN'),
+('October 16-31, 2026', '2026-10-16', '2026-10-31', 'OPEN'),
+
+-- NOVEMBER
+('November 1-15, 2026',  '2026-11-01', '2026-11-15', 'OPEN'),
+('November 16-30, 2026', '2026-11-16', '2026-11-30', 'OPEN'),
+
+-- DECEMBER
+('December 1-15, 2026',  '2026-12-01', '2026-12-15', 'OPEN'),
+('December 16-31, 2026', '2026-12-16', '2026-12-31', 'OPEN');
 
 
 
