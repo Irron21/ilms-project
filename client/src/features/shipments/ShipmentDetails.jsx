@@ -144,7 +144,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
   const executeStepUpdate = (dbStatus) => {
       const isFinishing = dbStatus === 'Departure';
       const finalStatus = isFinishing ? 'Completed' : dbStatus;
-      const now = new Date().toISOString(); 
+      const now = Date.now(); 
 
       setLocalStatus(finalStatus);
 
@@ -232,7 +232,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         <h2 className="shipment-title-inline">DELIVERY #{shipment.shipmentID}</h2>
       </div>
 
-      <div className="info-card">
+      <div className="info-card-mob">
         {/* 1. Destination */}
         <div className="info-item">
           <div className="info-icon-box">
@@ -273,7 +273,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
           </div>
           <div className="info-content">
              <span className="info-label">Loading Date</span>
-             <span className="info-value" style={{color:'#2980b9'}}>{formatDate(shipment.loadingDate)}</span>
+             <span className="info-value" style={{color:'#2980b9', fontWeight: 700}}>{formatDate(shipment.loadingDate)}</span>
           </div>
         </div>
 
@@ -287,7 +287,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
           </div>
           <div className="info-content">
              <span className="info-label">Delivery Date</span>
-             <span className="info-value" style={{color:'#d35400'}}>{formatDate(shipment.deliveryDate)}</span>
+             <span className="info-value" style={{color:'#d35400', fontWeight: 700}}>{formatDate(shipment.deliveryDate)}</span>
           </div>
         </div>
       </div>

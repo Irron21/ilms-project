@@ -159,27 +159,29 @@
     display: flex; justify-content: space-between; align-items: flex-start;
     width: 100%; box-sizing: border-box;
 }
-.timeline-content > * { margin-top: 30px; margin-bottom: 30px; }
-.timeline-step:first-child { margin-left: 60px; }
-.timeline-step:last-child { margin-right: 60px; }
+.timeline-content > * { margin-top: 16px; margin-bottom: 16px; }
+.timeline-step:first-child { margin-left: 30px; }
+.timeline-step:last-child { margin-right: 30px; }
 
-.timeline-step { flex-shrink: 0; min-height: min-content; position: relative; flex: 1; }
+.timeline-step { flex-shrink: 0; min-height: min-content; position: relative; flex: 1; min-width: 140px; }
 .step-dot {
-    width: 14px; height: 14px; border-radius: 50%; z-index: 2; margin-bottom: 15px;
-    background-color: #E0E0E0; box-shadow: 0 0 0 4px #FAFAFA;
+    width: 10px; height: 10px; border-radius: 50%; z-index: 2; margin: 0 auto 10px auto;
+    background-color: #E0E0E0; box-shadow: 0 0 0 3px #FAFAFA;
 }
 .step-line {
-    position: absolute; top: 6px; left: 14px; right: 0; height: 2px;
+    position: absolute; top: 5px; left: 53%; right: -47%; height: 2px;
     background-color: #E0E0E0; z-index: 1;
 }
-.step-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 4px; }
+.step-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 3px; }
 .step-status-text { font-size: 11px; color: #999; font-style: italic; }
 .step-time { font-size: 12px; color: #27AE60; font-weight: 600; margin-top: 2px; }
+.step-sub { font-size: 10px; color: #777; margin-top: 1px; word-break: break-word; }
 .step-content-desc {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 0px;
+    text-align: center;
 }
 
 .timeline-step.completed .step-dot { background-color: #27AE60; }
@@ -962,6 +964,10 @@
   z-index: 20;
   animation: pulseNew 1.5s infinite;
 }
+.new-badge.scheduled {
+  background-color: #95a5a6;
+  animation: none;
+}
 
 @keyframes pulseNew {
   0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(235, 87, 87, 0.7); }
@@ -1009,6 +1015,20 @@
   color: black;
   margin: 0; 
   text-align: center;
+}
+
+.info-card-mob {
+    background-color: white;
+    padding: 12px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: auto;
+    margin-bottom: 20px;
+    justify-items: start;
+    width: calc(100% - 80px);
 }
 
 .info-item {
@@ -1194,18 +1214,11 @@
   color: white;
   
   display: flex;
-  align-items: center;
-  justify-content: center;
-  
-  font-size: 12px;
-  font-weight: 600;
-  text-align: center;
-  padding: 0 10px;
-  
-  animation: slideDown 0.3s ease-out;
 }
-
-@keyframes slideDown {
-  from { transform: translateY(-100%); }
-  to { transform: translateY(0); }
+/* --- Dashboard card disable for Upcoming --- */
+.shipment-card.disabled-card {
+  position: relative;
+  opacity: 0.6;
+  pointer-events: none;
+  filter: grayscale(20%);
 }

@@ -21,7 +21,8 @@ export const queueManager = {
         if (item.type === 'UPDATE_STATUS') {
           await api.put(`/shipments/${item.shipmentID}/status`, {
             status: item.status,
-            userID: item.userID
+            userID: item.userID,
+            clientTimestamp: item.timestamp
           });
         }
       } catch (err) {

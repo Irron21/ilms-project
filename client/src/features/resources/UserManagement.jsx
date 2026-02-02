@@ -66,21 +66,21 @@ function UserManagement({ activeTab = "users" }) {
     try {
         const res = await api.get(`/users?archived=${showArchived}`, { headers: { Authorization: `Bearer ${token}` } });
         setUsers(res.data);
-    } catch (err) { console.error(err); }
+    } catch { return; }
   };
   
   const fetchVehicles = async () => {
     try {
         const res = await api.get(`/vehicles?archived=${showArchived}`, { headers: { Authorization: `Bearer ${token}` } });
         setVehicles(res.data);
-    } catch (err) { console.error(err); }
+    } catch { return; }
   };
 
   const fetchActionTypes = async () => {
       try {
           const res = await api.get('/logs/actions', { headers: { Authorization: `Bearer ${token}` } });
           setDynamicActionTypes(['All', ...res.data]);
-      } catch (err) { console.error(err); }
+      } catch { return; }
   };
 
   const fetchLogs = async () => {
@@ -110,9 +110,8 @@ function UserManagement({ activeTab = "users" }) {
               setTotalLogItems(res.data.pagination.totalItems); 
               setLoadingLogs(false); 
           }
-      } catch (err) { 
+      } catch { 
           if (currentRequestId === fetchRequestId.current) {
-              console.error("Log fetch error", err); 
               setLoadingLogs(false);
           }
       }
@@ -149,8 +148,65 @@ function UserManagement({ activeTab = "users" }) {
       setLogPage(1); 
   };
 
+  // --- PASSWORD VALIDATION ---
+  const validatePassword = (password) => {
+      return {
+          hasStartCap: /^[A-Z]/.test(password),
+          hasNumber: /\d/.test(password),
+          hasLength: password.length >= 8
+      };
+  };
+
+  const isPasswordValid = (password) => {
+      const { hasStartCap, hasNumber, hasLength } = validatePassword(password);
+      return hasStartCap && hasNumber && hasLength;
+  };
+
+  const renderPasswordFeedback = (password) => {
+      const { hasStartCap, hasNumber, hasLength } = validatePassword(password);
+      const style = { fontSize: '11px', marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px' };
+      const itemStyle = (isValid) => ({ color: isValid ? '#27ae60' : '#bdc3c7', display: 'flex', alignItems: 'center', gap: '6px', opacity: isValid ? 1 : 0.8 });
+      
+      return (
+          <div style={style}>
+              <span style={itemStyle(hasStartCap)}>
+                  {hasStartCap ? <Icons.Check size={10} /> : <div style={{width:'4px', height:'4px', borderRadius:'50%', background:'currentColor'}}></div>} Start with Capital
+              </span>
+              <span style={itemStyle(hasNumber)}>
+                  {hasNumber ? <Icons.Check size={10} /> : <div style={{width:'4px', height:'4px', borderRadius:'50%', background:'currentColor'}}></div>} Contains Number
+              </span>
+              <span style={itemStyle(hasLength)}>
+                  {hasLength ? <Icons.Check size={10} /> : <div style={{width:'4px', height:'4px', borderRadius:'50%', background:'currentColor'}}></div>} 8+ Chars
+              </span>
+          </div>
+      );
+  };
+
   const handleUserInputChange = (e) => { const { name, value } = e.target; e.target.setCustomValidity(''); if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return; setUserForm(prev => ({ ...prev, [name]: value })); };
-  const handleCreateSubmit = async (e) => { e.preventDefault(); try { await api.post('/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowCreateModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'User Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed', onClose: () => setFeedbackModal(null) }); } };
+  
+  const handleCreateSubmit = async (e) => { 
+      e.preventDefault(); 
+      
+      if (!isPasswordValid(userForm.password)) {
+          setFeedbackModal({ type: 'error', title: 'Invalid Password', message: 'Please meet all password requirements.', onClose: () => setFeedbackModal(null) });
+          return;
+      }
+      
+      if (userForm.password !== userForm.confirmPassword) {
+          setFeedbackModal({ type: 'error', title: 'Password Mismatch', message: 'Passwords do not match.', onClose: () => setFeedbackModal(null) });
+          return;
+      }
+
+      try { 
+          await api.post('/users/create', userForm, { headers: { Authorization: `Bearer ${token}` } }); 
+          setShowCreateModal(false); 
+          fetchUsers(); 
+          setFeedbackModal({ type: 'success', title: 'User Created', message: 'Success', onClose: () => setFeedbackModal(null) }); 
+      } catch (err) { 
+          setFeedbackModal({ type: 'error', title: 'Error', message: 'Failed', onClose: () => setFeedbackModal(null) }); 
+      } 
+  };
+  
   const handleUpdateSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
   const handleTruckSubmit = async (e) => { e.preventDefault(); try { await api.post('/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } }); setShowTruckModal(false); fetchVehicles(); setFeedbackModal({ type: 'success', title: 'Vehicle Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
   const handleUpdateTruck = async (e) => { e.preventDefault(); try { await api.put(`/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditTruckModal(false); fetchVehicles(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
@@ -161,7 +217,23 @@ function UserManagement({ activeTab = "users" }) {
   
   // Password Reset Handlers
   const initiateResetPassword = (user) => { setResetData({ userID: user.userID, name: `${user.firstName} ${user.lastName}`, newPassword: '' }); setShowResetModal(true); };
-  const handleResetSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${resetData.userID}/reset-password`, { newPassword: resetData.newPassword }, { headers: { Authorization: `Bearer ${token}` } }); setShowResetModal(false); setFeedbackModal({ type: 'success', title: 'Password Reset', message: `Password for ${resetData.name} updated.`, onClose: () => setFeedbackModal(null) }); } catch (err) { setFeedbackModal({ type: 'error', title: 'Reset Failed', message: err.response?.data?.error || "Error", onClose: () => setFeedbackModal(null) }); } };
+  
+  const handleResetSubmit = async (e) => { 
+      e.preventDefault(); 
+      
+      if (!isPasswordValid(resetData.newPassword)) {
+          setFeedbackModal({ type: 'error', title: 'Invalid Password', message: 'Please meet all password requirements.', onClose: () => setFeedbackModal(null) });
+          return;
+      }
+
+      try { 
+          await api.put(`/users/${resetData.userID}/reset-password`, { newPassword: resetData.newPassword }, { headers: { Authorization: `Bearer ${token}` } }); 
+          setShowResetModal(false); 
+          setFeedbackModal({ type: 'success', title: 'Password Reset', message: `Password for ${resetData.name} updated.`, onClose: () => setFeedbackModal(null) }); 
+      } catch (err) { 
+          setFeedbackModal({ type: 'error', title: 'Reset Failed', message: err.response?.data?.error || "Error", onClose: () => setFeedbackModal(null) }); 
+      } 
+  };
 
   // --- RENDER HELPERS ---
   const renderGhostRows = (currentCount, colSpan) => {
@@ -355,8 +427,11 @@ function UserManagement({ activeTab = "users" }) {
       {activeTab === 'trucks' ? renderTruckView() : activeTab === 'logs' ? renderLogsView() : renderUserView()}
       
       {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
-      {showCreateModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleCreateSubmit}>
-        <h3>Create User</h3>
+      {showCreateModal && (<div className="modal-backdrop"><form className="user-modal-card" onSubmit={handleCreateSubmit}>
+        <div className="modal-header" style={{marginBottom:'15px'}}>
+          <h3 style={{margin:0, textAlign:'left'}}>Create User</h3>
+          <button type="button" className="close-btn" onClick={() => setShowCreateModal(false)}>×</button>
+        </div>
         <div className="form-grid">
           <div className="form-group">
             <label>First Name</label>
@@ -388,6 +463,7 @@ function UserManagement({ activeTab = "users" }) {
           <div className="form-group">
             <label>Password</label>
             <input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} required />
+            {renderPasswordFeedback(userForm.password)}
           </div>
           <div className="form-group">
             <label>Confirm</label>
@@ -402,11 +478,15 @@ function UserManagement({ activeTab = "users" }) {
       </div>
     )}
     
-      {showEditModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateSubmit}><h3>Edit User</h3><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
-      {showTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleTruckSubmit}><h3>Add Vehicle</h3><div className="form-grid">
-          <div className="form-group"><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /></div><div className="form-group"><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
-      {showEditTruckModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleUpdateTruck}><h3>Edit Vehicle</h3><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
-      {showResetModal && (<div className="modal-backdrop"><form className="modal-card" onSubmit={handleResetSubmit} style={{width:'400px'}}><div className="modal-header" style={{marginBottom:'15px'}}><h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3><button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button></div><p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>Enter a new password for <strong>{resetData.name}</strong>.</p><div className="form-group"><label>New Password</label><input type="text" value={resetData.newPassword} onChange={e => setResetData({...resetData, newPassword: e.target.value})} placeholder="Enter new password..." required autoFocus /></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button><button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button></div></form></div>)}
+      {showEditModal && (<div className="modal-backdrop"><form className="user-modal-card" onSubmit={handleUpdateSubmit}><div className="modal-header" style={{marginBottom:'15px'}}>
+          <h3 style={{margin:0, textAlign:'left'}}>Edit User</h3><button type="button" className="close-btn" onClick={() => setShowEditModal(false)}>×</button>
+        </div><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
+      {showTruckModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 350}} onSubmit={handleTruckSubmit}><div className="modal-header" style={{marginBottom:'15px'}}>
+          <h3 style={{margin:0, textAlign:'left'}}>Add Vehicle</h3><button type="button" className="close-btn" onClick={() => setShowTruckModal(false)}>×</button>
+        </div>
+          <div className="form-group"><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /></div><div className="form-group"><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select></div><div className="form-group"><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
+      {showEditTruckModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 350}} onSubmit={handleUpdateTruck}><h3>Edit Vehicle</h3><div className="form-group"><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /></div><div className="form-group"><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select></div><div className="form-group"><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
+      {showResetModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 400}} onSubmit={handleResetSubmit}><div className="modal-header" style={{marginBottom:'15px'}}><h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3><button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button></div><p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>Enter a new password for <strong>{resetData.name}</strong>.</p><div className="form-group"><label>New Password</label><input type="text" value={resetData.newPassword} onChange={e => setResetData({...resetData, newPassword: e.target.value})} placeholder="Enter new password..." required autoFocus />{renderPasswordFeedback(resetData.newPassword)}</div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button><button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button></div></form></div>)}
     </>
   );
 }

@@ -3,10 +3,6 @@ import api from '@utils/api';
 import '@styles/features/profile.css';
 
 function ProfileModal({ user, onClose, onLogout, token }) {
-  const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget && onClose) onClose();
-  };
-
   const handleCloseButtonClick = (e) => {
     e.stopPropagation();
     if (onClose) onClose();
@@ -31,7 +27,7 @@ function ProfileModal({ user, onClose, onLogout, token }) {
     ? `${user.firstName} ${user.lastName}` : 'Crew Member');
 
   return (
-    <div className="profile-modal-overlay" onClick={handleOverlayClick}>
+    <div className="profile-modal-overlay">
       
       {/* The White Card */}
       <div className="profile-modal-card">

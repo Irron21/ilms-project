@@ -4,23 +4,47 @@ const logActivity = require('../utils/activityLogger');
 
 /** Fetches shipments filtered by user role (Driver/Helper see assigned only) or archived state */
 exports.getActiveShipments = (req, res) => {
+    // 1. Get Role
+    const requesterRole = req.user ? req.user.role : 'Driver'; 
     const currentUserID = req.query.userID;
+    
+    // 2. Define who gets "Desktop Mode" (Admin OR Operations)
+    // We treat 'Admin', 'ADMIN', and 'Operations' as Desktop users.
+    const isDesktopUser = ['Admin', 'Operations'].includes(requesterRole);
+
+    // 3. Logic: Only force "Driver Mode" if they are NOT a Desktop User
+    const isDriverMode = !isDesktopUser && currentUserID;
+
+    console.log(`Role: ${requesterRole} | Mode: ${isDriverMode ? "MOBILE" : "DESKTOP"}`);
+
     const showArchived = req.query.archived === 'true';
     const isArchivedVal = showArchived ? 1 : 0; 
 
+    // Define columns 
     const columns = `
         s.shipmentID, s.destName, s.destLocation, 
         s.loadingDate, s.deliveryDate,
         s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType
     `;
-
     const sortLogic = `ORDER BY s.loadingDate IS NULL ASC, s.loadingDate ASC, s.creationTimestamp DESC`;
+
+    // Pagination Logic
+    const page = parseInt(req.query.page);
+    const limit = parseInt(req.query.limit);
+    let limitClause = "";
+    
+    if (page && limit) {
+        const offset = (page - 1) * limit;
+        limitClause = ` LIMIT ${limit} OFFSET ${offset}`;
+    } else if (limit) {
+        limitClause = ` LIMIT ${limit}`;
+    }
 
     let sql;
     let params = [];
 
-    if (currentUserID) {
-        // DRIVER/HELPER MODE
+    if (isDriverMode) {
+        // --- MOBILE / DRIVER MODE ---
         sql = `
             SELECT ${columns}
             FROM Shipments s
@@ -28,10 +52,11 @@ exports.getActiveShipments = (req, res) => {
             JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
             WHERE sc.userID = ? AND s.isArchived = 0 
             ${sortLogic}
+            ${limitClause}
         `;
         params = [currentUserID];
     } else {
-        /* Admin mode: use assigned role from ShipmentCrew */
+        // --- DESKTOP / ADMIN / OPERATIONS MODE ---
         sql = `
             SELECT ${columns},
                 GROUP_CONCAT(CONCAT(sc.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
@@ -42,6 +67,7 @@ exports.getActiveShipments = (req, res) => {
             WHERE s.isArchived = ? 
             GROUP BY s.shipmentID
             ${sortLogic}
+            ${limitClause}
         `;
         params = [isArchivedVal];
     }
@@ -84,11 +110,16 @@ exports.getShipmentResources = (req, res) => {
     });
 };
 
-    const calculatePayroll = (shipmentID) => {
+    const calculatePayroll = (shipmentID, explicitDate = null) => {
+    // Use console.log for maximum reliability in remote environments
+    const log = (msg) => console.error(`[PAYROLL-DEBUG] [Shipment ${shipmentID}] ${msg}`);
+
+    log(`STARTING CALCULATION. Explicit Date: ${explicitDate}`);
+
     const getCrewSQL = `
         SELECT 
             sc.userID as crewID, 
-            sc.role as assignedRole, /* Job on this shipment, not user's default role */          
+            sc.role as assignedRole, 
             s.destLocation, 
             v.type as vehicleType
         FROM ShipmentCrew sc
@@ -99,82 +130,170 @@ exports.getShipmentResources = (req, res) => {
     `;
 
     db.query(getCrewSQL, [shipmentID], (err, crewMembers) => {
-        if (err) return console.error("Payroll Error (Get Crew):", err);
-        if (crewMembers.length === 0) return console.error("Payroll Error: No crew found for this shipment.");
+        if (err) {
+            log(`ERROR getting crew: ${err.message}`);
+            return console.error("Payroll Error (Get Crew):", err);
+        }
+        if (crewMembers.length === 0) {
+            log("ERROR: No crew found");
+            return console.error("Payroll Error: No crew found for this shipment.");
+        }
 
-        // 2. Get the Rates for this Location/Vehicle
         const { destLocation, vehicleType } = crewMembers[0]; 
+        
+        // Helper to find period and insert payroll
+        const performPayrollInsert = (deliveryDateToUse, source) => {
+            log(`Searching Period for Date: ${deliveryDateToUse} (Source: ${source})`);
 
-        const getRateSQL = `
-            SELECT * FROM PayrollRates 
-            WHERE ? LIKE CONCAT('%', routeCluster, '%') 
-            AND vehicleType = ? 
-            LIMIT 1
-        `;
+            const getPeriodSQL = `
+                SELECT periodID, startDate, endDate FROM PayrollPeriods 
+                WHERE startDate <= ? 
+                AND DATE_ADD(endDate, INTERVAL 1 DAY) > ?
+                ORDER BY startDate DESC 
+                LIMIT 1
+            `;
 
-        db.query(getRateSQL, [destLocation, vehicleType || 'AUV'], (err, rates) => {
-            if (err) return console.error("Payroll Error (Get Rate):", err);
-
-            // Default rates if not found in DB
-            const rateData = rates.length > 0 ? rates[0] : null;
-            const standardDriverPay = rateData ? rateData.driverBaseFee : 600.00;
-            const standardHelperPay = rateData ? rateData.helperBaseFee : 400.00;
-            
-            // 3. CALCULATE SPLIT ALLOWANCE
-            const totalAllowance = rateData ? rateData.foodAllowance : 350.00;
-            const crewCount = crewMembers.length;
-            const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
-
-            // 4. Loop through EACH crew member
-            crewMembers.forEach(member => {
-                let payAmount = 0;
-
-                /* Pay based on assigned role on this shipment */
-                if (member.assignedRole === 'Driver') {
-                    payAmount = standardDriverPay;
-                } else {
-                    payAmount = standardHelperPay; 
+            db.query(getPeriodSQL, [deliveryDateToUse, deliveryDateToUse], (err, periodResult) => {
+                if (err) {
+                    log(`DB ERROR getting period: ${err.message}`);
+                    return;
+                }
+                
+                const periodID = (periodResult && periodResult.length > 0) ? periodResult[0].periodID : null;
+                log(`Found Period ID: ${periodID}`);
+                
+                if (!periodID) {
+                    log(`WARNING: No period found for date ${deliveryDateToUse}. Aborting payroll insert.`);
+                    // If we used explicit date and failed, try fetching from DB as a last resort fallback
+                    if (source === 'memory') {
+                        log("Attempting Fallback: Fetching date from DB...");
+                        setTimeout(() => fetchDateFromDBAndRetry(), 1000);
+                    }
+                    return;
                 }
 
-                // 5. Insert Record
-                const insertPayrollSQL = `
-                    INSERT INTO ShipmentPayroll 
-                    (shipmentID, crewID, baseFee, allowance, status, payoutDate) 
-                    VALUES (?, ?, ?, ?, 'PENDING', NOW())
-                    ON DUPLICATE KEY UPDATE payoutDate = NOW()
+                const getRateSQL = `
+                    SELECT * FROM PayrollRates 
+                    WHERE ? LIKE CONCAT('%', routeCluster, '%') 
+                    AND vehicleType = ? 
+                    LIMIT 1
                 `;
 
-                db.query(insertPayrollSQL, [shipmentID, member.crewID, payAmount, allowancePerPerson], (err) => {
+                db.query(getRateSQL, [destLocation, vehicleType || 'AUV'], (err, rates) => {
                     if (err) {
-                        console.error(`Payroll Failed for User ${member.crewID}:`, err.message);
-                    } else {
-                        console.log(`Logged User ${member.crewID} as ${member.assignedRole}: Salary ${payAmount}`);
+                        log(`DB ERROR getting rates: ${err.message}`);
+                        return;
                     }
+
+                    const rateData = rates.length > 0 ? rates[0] : null;
+                    const standardDriverPay = rateData ? rateData.driverBaseFee : 600.00;
+                    const standardHelperPay = rateData ? rateData.helperBaseFee : 400.00;
+                    const totalAllowance = rateData ? rateData.foodAllowance : 350.00;
+                    const crewCount = crewMembers.length;
+                    const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
+
+                    log(`Rates Found: Driver=${standardDriverPay}, Helper=${standardHelperPay}, Allowance=${allowancePerPerson}`);
+
+                    const insertPromises = crewMembers.map(member => {
+                        return new Promise(resolve => {
+                            let payAmount = member.assignedRole === 'Driver' ? standardDriverPay : standardHelperPay;
+                            const insertPayrollSQL = `
+                                INSERT INTO ShipmentPayroll 
+                                (shipmentID, crewID, baseFee, allowance, periodID) 
+                                VALUES (?, ?, ?, ?, ?)
+                                ON DUPLICATE KEY UPDATE 
+                                    periodID = VALUES(periodID)
+                            `;
+                            db.query(insertPayrollSQL, [shipmentID, member.crewID, payAmount, allowancePerPerson, periodID], (err) => {
+                                if (err) {
+                                    log(`INSERT FAILED for Crew ${member.crewID}: ${err.message}`);
+                                } else {
+                                    log(`SUCCESS: Inserted/Updated payroll for Crew ${member.crewID}`);
+                                }
+                                resolve();
+                            });
+                        });
+                    });
+
+                    Promise.all(insertPromises).then(() => {
+                        const fixSql = `
+                            UPDATE ShipmentPayroll sp
+                            JOIN Shipments s ON s.shipmentID = sp.shipmentID
+                            JOIN PayrollPeriods p 
+                              ON s.deliveryDate >= p.startDate 
+                             AND s.deliveryDate < DATE_ADD(p.endDate, INTERVAL 1 DAY)
+                            SET sp.periodID = p.periodID
+                            WHERE sp.shipmentID = ? AND sp.periodID IS NULL
+                        `;
+                        db.query(fixSql, [shipmentID], (err, result) => {
+                            if (err) {
+                                log(`PERIOD FIX UPDATE ERROR: ${err.message}`);
+                            } else {
+                                log(`PERIOD FIX UPDATE AFFECTED ROWS: ${result && result.affectedRows}`);
+                            }
+                        });
+                    });
                 });
             });
-        });
+        };
+
+        const fetchDateFromDBAndRetry = () => {
+            const getShipmentDateSQL = "SELECT deliveryDate FROM Shipments WHERE shipmentID = ?";
+            db.query(getShipmentDateSQL, [shipmentID], (err, shipResult) => {
+                if (err) {
+                    log(`FALLBACK ERROR: Could not fetch date from DB: ${err.message}`);
+                    return;
+                }
+                if (shipResult.length === 0 || !shipResult[0].deliveryDate) {
+                    log(`FALLBACK ERROR: Shipment not found or has no deliveryDate`);
+                    return;
+                }
+                const dbDate = shipResult[0].deliveryDate;
+                log(`Fetched DB Date: ${dbDate}`);
+                performPayrollInsert(dbDate, 'database');
+            });
+        };
+
+        // Main Flow
+        if (explicitDate) {
+            performPayrollInsert(explicitDate, 'memory');
+        } else {
+            fetchDateFromDBAndRetry();
+        }
     });
 };
 
 // 2. Update Status
 exports.updateStatus = (req, res) => {
     const shipmentID = req.params.shipmentID;
-    const { status, userID } = req.body;
+    const { status, userID, deliveryDate, clientTimestamp } = req.body;
 
     if (!shipmentID || shipmentID === 'undefined') {
         return res.status(400).json({ error: "Shipment ID is missing" });
     }
 
-    const updateShipmentSql = "UPDATE Shipments SET currentStatus = ? WHERE shipmentID = ?";
-    const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status) VALUES (?, ?, ?, ?)";
+    let updateShipmentSql = "UPDATE Shipments SET currentStatus = ? WHERE shipmentID = ?";
+    let params = [status, shipmentID];
+    const eventDate = clientTimestamp ? new Date(clientTimestamp) : (deliveryDate ? new Date(deliveryDate) : new Date());
+    console.error(`!!! UPDATE STATUS CALLED !!! ID: ${shipmentID}, Status: '${status}', ClientTS: ${clientTimestamp}, EventDateISO: ${eventDate.toISOString()}`);
 
-    db.query(updateShipmentSql, [status, shipmentID], (err, result) => {
+    // Update Delivery Date if Completed
+    let computedDate = null;
+    if (status === 'Completed') {
+        updateShipmentSql = "UPDATE Shipments SET currentStatus = ?, deliveryDate = ? WHERE shipmentID = ?";
+        computedDate = eventDate;
+        params = [status, computedDate, shipmentID];
+    }
+
+    const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (?, ?, ?, ?, ?)";
+
+    db.query(updateShipmentSql, params, (err, result) => {
         if (err) {
             console.error("Update Error:", err);
             return res.status(500).json({ error: err.message });
         }
 
-        db.query(insertLogSql, [shipmentID, userID, status, status], (err, result) => {
+        db.query(insertLogSql, [shipmentID, userID, status, status, eventDate], (err, result) => {
             if (err) {
                 console.error("Log Error:", err);
                 return res.status(500).json({ error: err.message });
@@ -185,7 +304,10 @@ exports.updateStatus = (req, res) => {
         });
 
         if (status === 'Completed') { 
-            calculatePayroll(shipmentID); 
+            // Delay payroll calculation slightly to ensure DB write is committed and visible
+            setTimeout(() => {
+                calculatePayroll(shipmentID, computedDate || new Date());
+            }, 500); 
         }
     });
 };
@@ -195,10 +317,15 @@ exports.getShipmentLogs = (req, res) => {
     const id = req.params.id; 
 
     const sql = `
-        SELECT phaseName, timestamp 
-        FROM ShipmentStatusLog 
-        WHERE shipmentID = ? 
-        ORDER BY timestamp DESC
+        SELECT 
+            l.phaseName, 
+            l.timestamp,
+            CONCAT(u.firstName, ' ', u.lastName) AS actorName,
+            u.role AS actorRole
+        FROM ShipmentStatusLog l
+        LEFT JOIN Users u ON l.userID = u.userID
+        WHERE l.shipmentID = ? 
+        ORDER BY l.timestamp DESC
     `;
 
     db.query(sql, [id], (err, results) => {
@@ -452,11 +579,11 @@ exports.exportShipments = (req, res) => {
       FROM Shipments s
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
       
-      -- ✅ JOIN 1: Find the person assigned as 'Driver'
+      -- JOIN 1: Find the person assigned as 'Driver'
       LEFT JOIN ShipmentCrew scDriver ON s.shipmentID = scDriver.shipmentID AND scDriver.role = 'Driver'
       LEFT JOIN Users uDriver ON scDriver.userID = uDriver.userID
       
-      -- ✅ JOIN 2: Find the person assigned as 'Helper' (Even if they are actually a Driver)
+      -- JOIN 2: Find the person assigned as 'Helper' (Even if they are actually a Driver)
       LEFT JOIN ShipmentCrew scHelper ON s.shipmentID = scHelper.shipmentID AND scHelper.role = 'Helper'
       LEFT JOIN Users uHelper ON scHelper.userID = uHelper.userID
 

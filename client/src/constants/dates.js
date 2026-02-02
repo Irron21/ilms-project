@@ -16,7 +16,16 @@ export const getTodayString = () => {
 /** Convert date string to local YYYY-MM-DD format */
 export const getDateValue = (dateStr) => {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
+  const s = String(dateStr);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    const local = new Date(y, m - 1, d);
+    const year = local.getFullYear();
+    const month = String(local.getMonth() + 1).padStart(2, '0');
+    const day = String(local.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const d = new Date(s);
   if (isNaN(d.getTime())) return '';
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -27,14 +36,27 @@ export const getDateValue = (dateStr) => {
 /** Format date for display (locale-aware) */
 export const formatDateDisplay = (dateStr) => {
   if (!dateStr) return '-';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString();
+  const s = String(dateStr);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-').map(Number);
+    const local = new Date(y, m - 1, d);
+    return local.toLocaleDateString();
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? '-' : d.toLocaleDateString();
 };
 
 /** Get YYYY-MM from date string */
 export const getMonthValue = (dateStr) => {
   if (!dateStr) return '';
-  const d = new Date(dateStr);
+  const s = String(dateStr);
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, day] = s.split('-').map(Number);
+    d = new Date(y, m - 1, day);
+  } else {
+    d = new Date(s);
+  }
   if (isNaN(d.getTime())) return '';
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, '0');

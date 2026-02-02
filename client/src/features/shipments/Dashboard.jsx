@@ -31,9 +31,11 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
     return (diffInHours < 24) && !hasBeenSeen;
   };
 
-  const newCount = shipments.filter(s =>
-    s.currentStatus === 'Pending' && isNewlyAssigned(s.creationTimestamp, s.shipmentID)
-  ).length;
+  const todayOnlyNewCount = shipments.filter(s => {
+    const today = getTodayString();
+    const loadDate = getDateValue(s.loadingDate);
+    return s.currentStatus === 'Pending' && isNewlyAssigned(s.creationTimestamp, s.shipmentID) && loadDate === today;
+  }).length;
 
   const handleCardClick = (shipment) => {
     const strId = String(shipment.shipmentID);
@@ -72,11 +74,11 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
 
   const getBannerContent = () => {
     const count = filteredShipments.length;
-    if (newCount > 0 && (activeTab === 'ACTIVE' || activeTab === 'UPCOMING')) {
+    if (activeTab === 'ACTIVE' && todayOnlyNewCount > 0) {
       return {
         class: 'alert',
         icon: <Icons.Truck style={{ width: 18, height: 18 }} stroke="white" fill="black" />,
-        text: `You have ${newCount} new shipment assignment(s)!`
+        text: `You have ${todayOnlyNewCount} new shipment assignment(s) today!`
       };
     }
     if (activeTab === 'DELAYED') {
@@ -96,7 +98,7 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
     return {
       class: 'info',
       icon: <Icons.Calendar style={{ width: 18, height: 18 }} />,
-      text: `${count} ${activeTab.toLowerCase()} Shipment(s)`
+      text: `${count} ${activeTab.toLowerCase().replace(/\b\w/g, s => s.toUpperCase())} Shipment(s)`
     };
   };
 
@@ -128,16 +130,17 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
           const style = getCardStyle(shipment.currentStatus);
           const isNew = shipment.currentStatus === 'Pending' && isNewlyAssigned(shipment.creationTimestamp, shipment.shipmentID);
           const isDelayed = activeTab === 'DELAYED';
+          const isUpcoming = activeTab === 'UPCOMING';
           const cardClass = isDelayed ? 'card-yellow' : style.class;
 
           return (
             <div
               key={shipment.shipmentID}
-              className={`shipment-card ${cardClass}`}
-              onClick={() => handleCardClick(shipment)}
+              className={`shipment-card ${cardClass} ${isUpcoming ? 'disabled-card upcoming-card' : ''}`}
+              onClick={isUpcoming ? undefined : () => handleCardClick(shipment)}
               style={isDelayed ? { borderLeft: '5px solid #c0392b' } : {}}
             >
-              {isNew && <div className="new-badge">NEW</div>}
+              {isUpcoming ? <div className="new-badge scheduled">SCHEDULED</div> : (isNew && <div className="new-badge">NEW</div>)}
               <div>
                 <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>
                 <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px" }}>

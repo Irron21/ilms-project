@@ -369,7 +369,7 @@ function KPIView() {
                     </div>
                     <button className="manage-btn" onClick={() => setShowManageModal(true)}>⚙ Manage</button>
                     <input type="file" id="fileUpload" accept='.xlsx, .xls' style={{display:'none'}} onChange={handleFileUpload} />
-                    <button className="import-btn" style ={{display: 'flex', alignItems: 'center', gap: '5px' }} onClick={() => document.getElementById('fileUpload').click()}>
+                    <button className="import-btn" onClick={() => document.getElementById('fileUpload').click()}>
                         <Icons.Upload /> Upload New Report
                     </button>
                 </div>
@@ -560,7 +560,7 @@ function KPIView() {
             )}
 
              {showModal && (
-                <div className="modal-backdrop" onClick={() => setShowModal(false)}>
+                <div className="modal-backdrop">
                     <div className="modal-card" onClick={e => e.stopPropagation()}>
                         <div className="modal-header"><h3>{selectedMetric} Failures</h3><span className="modal-subtitle">{selectedMonth}</span></div>
                         <div className="modal-body">
@@ -574,7 +574,7 @@ function KPIView() {
             )}
             
             {showManageModal && (
-                <div className="modal-backdrop" onClick={() => setShowManageModal(false)}>
+                <div className="modal-backdrop">
                     <div className="modal-card" onClick={e => e.stopPropagation()}>
                         <div className="modal-header"><h3>Manage Uploaded Reports</h3></div>
                         <div className="modal-body">

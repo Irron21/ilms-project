@@ -33,6 +33,25 @@ function RatesManager({ onClose }) {
     // --- HANDLERS ---
     const handleAdd = async (e) => {
         e.preventDefault();
+
+        // Duplicate Check (Case Insensitive)
+        const duplicate = rates.find(r => 
+            r.routeCluster.toLowerCase() === newRate.routeCluster.toLowerCase().trim() && 
+            r.vehicleType === newRate.vehicleType
+        );
+
+        if (duplicate) {
+            setFeedback({
+                type: 'warning',
+                title: 'Duplicate Rate Found',
+                message: `A rate for "${duplicate.routeCluster}" with vehicle "${duplicate.vehicleType}" already exists.`,
+                subMessage: "Please edit the existing record instead.",
+                confirmLabel: "Got it",
+                onClose: () => setFeedback(null)
+            });
+            return;
+        }
+
         try {
             await api.post('/rates', newRate);
             setNewRate({ routeCluster: '', vehicleType: 'AUV', driverBaseFee: '', helperBaseFee: '', foodAllowance: 350 });

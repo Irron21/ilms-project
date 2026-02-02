@@ -106,17 +106,26 @@ exports.generatePayroll = (req, res) => {
         }
 
         // 2. PROCEED: Fetch Period Dates
-        db.query("SELECT * FROM PayrollPeriods WHERE periodID = ?", [periodID], (err, periods) => {
-            if (err || periods.length === 0) return res.status(500).json({ error: "Invalid Period" });
+            db.query("SELECT * FROM PayrollPeriods WHERE periodID = ?", [periodID], (err, periods) => {
+                if (err || periods.length === 0) return res.status(500).json({ error: "Invalid Period" });
 
-            const start = formatDateLocal(periods[0].startDate);
-            const end = formatDateLocal(periods[0].endDate);
+                // Date Handling: Ensure we cover the full range in Local/PH Time
+                const periodStart = new Date(periods[0].startDate);
+                const periodEnd = new Date(periods[0].endDate);
 
-            // 3. Fetch Rates
-            db.query("SELECT * FROM PayrollRates", (err, rates) => {
+                // Add 1 day to end date to ensure we capture the full last day (since DB stores 00:00)
+                periodEnd.setDate(periodEnd.getDate() + 1);
+
+                const start = periodStart.toISOString().slice(0, 19).replace('T', ' ');
+                const end = periodEnd.toISOString().slice(0, 19).replace('T', ' ');
+
+                console.log(`Generating Payroll for Range: ${start} to ${end}`);
+
+                // 3. Fetch Rates
+                db.query("SELECT * FROM PayrollRates", (err, rates) => {
                 if (err) return res.status(500).json({ error: "Failed to fetch rates" });
 
-                // 4. Find Completed Shipments (That haven't been paid yet)
+                // 4. Find Completed Shipments (That haven't been assigned a period yet)
                 const shipmentSql = `
                     SELECT 
                         s.shipmentID, s.destLocation, s.deliveryDate,
@@ -130,7 +139,7 @@ exports.generatePayroll = (req, res) => {
                     LEFT JOIN ShipmentPayroll sp ON s.shipmentID = sp.shipmentID AND sc.userID = sp.crewID
                     WHERE s.currentStatus = 'Completed'
                       AND s.deliveryDate BETWEEN ? AND ?
-                      AND sp.payrollID IS NULL
+                      AND (sp.payrollID IS NULL OR sp.periodID IS NULL)
                 `;
 
                 db.query(shipmentSql, [start, end], (err, shipments) => {
@@ -184,13 +193,17 @@ exports.generatePayroll = (req, res) => {
                         // Split allowance
                         const allowancePerPerson = totalAllowance / (ship.crewCount || 1);
 
-                        return [ship.shipmentID, ship.crewID, periodID, baseFee, allowancePerPerson, 'PENDING'];
+                        return [ship.shipmentID, ship.crewID, periodID, baseFee, allowancePerPerson];
                     });
 
-                    // 6. Bulk Insert
+                    // 6. Bulk Insert with Duplicate Update
                     const insertSql = `
-                        INSERT INTO ShipmentPayroll (shipmentID, crewID, periodID, baseFee, allowance, status) 
+                        INSERT INTO ShipmentPayroll (shipmentID, crewID, periodID, baseFee, allowance) 
                         VALUES ?
+                        ON DUPLICATE KEY UPDATE
+                        periodID = VALUES(periodID),
+                        baseFee = VALUES(baseFee),
+                        allowance = VALUES(allowance)
                     `;
 
                     db.query(insertSql, [valuesToInsert], (err, result) => {

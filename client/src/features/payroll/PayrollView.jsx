@@ -205,6 +205,15 @@ function PayrollView() {
         }
     };
 
+    const handleSelectAllColumns = () => {
+        const allChecked = columnConfig.every(col => col.checked);
+        const newConfig = columnConfig.map(col => ({
+            ...col,
+            checked: !allChecked
+        }));
+        setColumnConfig(newConfig);
+    };
+
     const dragStart = (e, position) => {
         dragItem.current = position;
         e.target.classList.add('dragging'); 
@@ -665,7 +674,7 @@ function PayrollView() {
 
           {/* --- EXPORT MODAL --- */}
             {showExportModal && (
-                <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
+                <div className="modal-overlay-desktop">
                     <div className="modal-form-card" onClick={e => e.stopPropagation()} style={{width: '500px'}}>
                         <div className="modal-header">
                             <h2>Export Payroll</h2>
@@ -699,7 +708,12 @@ function PayrollView() {
                             </div>
 
                             {/* --- 2. COLUMN CONFIG --- */}
-                            <label className="export-options-label">Customize Columns</label>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+                                <label className="export-options-label" style={{marginBottom:0}}>Customize Columns</label>
+                                <button className="text-link-btn" onClick={handleSelectAllColumns} style={{fontSize:'11px', color:'#43B2DA', background:'none', border:'none', cursor:'pointer'}}>
+                                    {columnConfig.every(col => col.checked) ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
                             <div className="sortable-list">
                                 {columnConfig.map((col, index) => (
                                     <div 

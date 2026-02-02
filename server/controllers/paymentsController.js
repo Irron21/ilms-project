@@ -32,12 +32,16 @@ exports.addPayment = (req, res) => {
                 res.status(500).json({ error: err.message });
             });
         }
+        const paymentID = result.insertId;
         logActivity(
             adminID, 
             'ADD_PAYMENT', 
-            `Recorded payment of ${amount} for User #${userID}. Notes: ${notes}`,
+            'Recorded payment of ' + amount + ' for User #' + userID + '. Notes: ' + (notes || ''),
             () => {
-                res.json({ message: "Payment recorded", id: result.insertId });
+                res.json({ 
+                    message: "Payment recorded", 
+                    id: paymentID
+                });
             }
         );
     });

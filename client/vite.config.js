@@ -17,12 +17,13 @@ export default defineConfig({
     }
   },
   server: {
-    host: true,
     port: 5173,
-    strictPort: false,
-    watch: {
-      usePolling: true,
-      interval: 100
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+        secure: false,
+      }
     }
   }
 })

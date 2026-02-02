@@ -19,6 +19,18 @@ function LoginPage({ onLoginSuccess }) {
       if (token) localStorage.setItem('token', token);
       if (response.data.user) localStorage.setItem('user', JSON.stringify(response.data.user));
 
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        let senderId = sessionStorage.getItem('tabId');
+        if (!senderId) {
+          const gen = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+          sessionStorage.setItem('tabId', gen);
+          senderId = gen;
+        }
+        const bc = new BroadcastChannel('session');
+        bc.postMessage({ type: 'login', token, userID: response.data.user?.userID, senderId });
+        bc.close();
+      }
+
       onLoginSuccess(response.data);
     } catch (err) {
       console.error(err);

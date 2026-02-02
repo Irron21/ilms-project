@@ -61,7 +61,10 @@ exports.getActivityLogs = (req, res) => {
     `;
     
     db.query(countSql, queryParams, (err, countResult) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            console.error("Error executing count query:", err);
+            return res.status(500).json({ error: err.message, sqlMessage: err.sqlMessage });
+        }
         
         const totalItems = countResult[0].total;
         const totalPages = Math.ceil(totalItems / limit);
@@ -86,7 +89,10 @@ exports.getActivityLogs = (req, res) => {
         const finalParams = [...queryParams, limit, offset];
 
         db.query(sql, finalParams, (err, results) => {
-            if (err) return res.status(500).json({ error: err.message });
+            if (err) {
+                console.error("Error executing data query:", err);
+                return res.status(500).json({ error: err.message, sqlMessage: err.sqlMessage });
+            }
             
             res.json({
                 data: results,

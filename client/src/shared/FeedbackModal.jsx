@@ -35,7 +35,7 @@ const FeedbackModal = ({ type = 'info', title, message, subMessage, onClose, onC
   const iconContent = icons[type] || icons.info;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <div className={`modal-card ${style.card}`} onClick={e => e.stopPropagation()}>
         <div className={`modal-icon ${style.icon}`}>
           {iconContent}

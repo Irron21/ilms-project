@@ -31,8 +31,8 @@ function DesktopApp({ user, token, onLogout }) {
         details,
         timestamp: new Date().toISOString()
       }, config);
-    } catch (error) {
-      console.error("Logout log failed:", error);
+    } catch {
+      void 0;
     } finally {
       onLogout();
     }

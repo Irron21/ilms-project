@@ -79,13 +79,15 @@ function MobileApp({ user, token, onLogout }) {
     try {
       await api.put(`/shipments/${modal.shipmentID}/status`, {
         status: modal.statusName,
-        userID: user.userID
+        userID: user.userID,
+        clientTimestamp: Date.now()
       }, config);
 
       if (modal.statusName === 'Departure') {
         await api.put(`/shipments/${modal.shipmentID}/status`, {
           status: 'Completed',
-          userID: user.userID
+          userID: user.userID,
+          clientTimestamp: Date.now()
         }, config);
       }
 
@@ -140,7 +142,7 @@ function MobileApp({ user, token, onLogout }) {
       )}
 
       {modal.show && (
-        <div className="modal-overlay" onClick={() => setModal({ show: false, shipmentID: null })}>
+        <div className="modal-overlay">
           <div className="modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">Confirm Update</div>
             <div className="modal-text">

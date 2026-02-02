@@ -146,6 +146,16 @@ function ShipmentView({ user, token, onLogout }) {
 
     // Helper for rendering form (looks at current index)
     const currentForm = batchData[batchIndex] || getBlankShipment();
+    
+    const handleSelectAllColumns = () => {
+        const allChecked = columnConfig.every(col => col.checked);
+        const newConfig = columnConfig.map(col => ({
+            ...col,
+            checked: !allChecked
+        }));
+        setColumnConfig(newConfig);
+    };
+
     // --- SMART DRAG HANDLERS ---
     const dragStart = (e, position) => {
         dragItem.current = position;
@@ -188,17 +198,19 @@ function ShipmentView({ user, token, onLogout }) {
         setDateRange({ start: today, end: today }); 
 
         const loadData = async () => {
+            if (!token) return;
             try {
+                const config = { headers: { Authorization: `Bearer ${token}` } };
                 const [routeRes, vehicleRes] = await Promise.all([
-                    api.get('/shipments/payroll-routes'),
-                    api.get('/vehicles')
+                    api.get('/shipments/payroll-routes', config),
+                    api.get('/vehicles', config)
                 ]);
                 setRouteRules(routeRes.data || {});
                 setAllVehicles(vehicleRes.data || []);
-            } catch (error) { console.error("Error loading data:", error); }
+            } catch { void 0; }
         };
         loadData();
-    }, []);
+    }, [token]);
 
     useEffect(() => {
         fetchData(true); 
@@ -230,7 +242,17 @@ function ShipmentView({ user, token, onLogout }) {
             }
             prevShipmentsRef.current = newData;
             setShipments(newData);
-        } catch (err) { if (err.response?.status === 401) onLogout(); }
+        } catch (err) { 
+            if (err.response?.status === 401) {
+                setFeedbackModal({ 
+                    type: 'error', 
+                    title: 'Session Expired', 
+                    message: 'Please log in again to continue.', 
+                    confirmLabel: 'Log In',
+                    onConfirm: () => onLogout()
+                });
+            }
+        }
     };
 
     const expandedIdRef = useRef(null);
@@ -240,7 +262,7 @@ function ShipmentView({ user, token, onLogout }) {
         try {
             const res = await api.get(`/shipments/${id}/logs`, { headers: { Authorization: `Bearer ${token}` } });
             setActiveLogs(res.data);
-        } catch (error) { console.error("Log sync error", error); }
+        } catch { void 0; }
     };
 
     const triggerNotification = (ids) => {
@@ -542,9 +564,16 @@ function ShipmentView({ user, token, onLogout }) {
         if (phaseIndex === currentIndex + 1) return 'active'; 
         return 'pending'; 
     };
-    const getPhaseTime = (phase) => {
+    const getPhaseMeta = (phase) => {
         const log = activeLogs.find(l => l.phaseName === phase);
-        return log ? new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null;
+        if (!log) return null;
+        const d = new Date(log.timestamp);
+        return {
+            time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            date: d.toLocaleDateString(),
+            actorName: log.actorName || '',
+            actorRole: log.actorRole || ''
+        };
     };
 
     const paginatedShipments = sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
@@ -741,14 +770,21 @@ function ShipmentView({ user, token, onLogout }) {
                                             <div className="timeline-content">
                                             {PHASE_ORDER.map((phase, index) => {
                                                 const state = getTimelineNodeState(phase, s.currentStatus);
-                                                const realTime = getPhaseTime(phase);
+                                                const meta = getPhaseMeta(phase);
                                                 return (
                                                     <div key={phase} className={`timeline-step ${state}`}>
                                                         {index !== PHASE_ORDER.length - 1 && <div className="step-line"></div>}
                                                         <div className="step-dot"></div>
                                                         <div className="step-content-desc">
                                                             <div className="step-title">{phase}</div>
-                                                            {realTime ? <div className="step-time">{realTime}</div> : <div className="step-status-text">{state === 'active' ? 'In Progress' : '-'}</div>}
+                                                            {meta ? (
+                                                                <>
+                                                                    <div className="step-time">{meta.time}</div>
+                                                                    <div className="step-sub">{meta.date}{meta.actorName ? ` · ${meta.actorRole}: ${meta.actorName}` : ''}</div>
+                                                                </>
+                                                            ) : (
+                                                                <div className="step-status-text">{state === 'active' ? 'In Progress' : '-'}</div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 );
@@ -764,8 +800,8 @@ function ShipmentView({ user, token, onLogout }) {
             </div>
             
             {showModal && (
-                <div className="modal-overlay-desktop" onClick={() => setShowModal(false)}>
-                    <div className="modal-form-card" onClick={e => e.stopPropagation()}>
+                <div className="modal-overlay-desktop">
+                    <div className="modal-form-card">
                         
                         {/* 1. NEW BATCH NAVIGATION HEADER */}
                         <div className="batch-nav-header">
@@ -966,16 +1002,16 @@ function ShipmentView({ user, token, onLogout }) {
                 </div>
             )}
             {showNoDataModal && (
-                <div className="modal-overlay-desktop" onClick={() => setShowNoDataModal(false)}>
-                    <div className="modal-form-card small-modal" onClick={e => e.stopPropagation()} style={{textAlign: 'center', padding: '40px 30px'}}>
+                <div className="modal-overlay-desktop">
+                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
                         <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
                         <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
                     </div>
                 </div>
             )}
             {showExportModal && (
-                <div className="modal-overlay-desktop" onClick={() => setShowExportModal(false)}>
-                    <div className="modal-form-card" onClick={e => e.stopPropagation()} style={{width: '500px'}}>
+                <div className="modal-overlay-desktop">
+                    <div className="modal-form-card" style={{width: '500px'}}>
                         <div className="modal-header">
                             <h2>Extract Data</h2>
                             <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
@@ -1018,7 +1054,12 @@ function ShipmentView({ user, token, onLogout }) {
                                 </div>
                             </div>
 
-                            <label className="export-options-label">Select & Arrange Columns (Drag to Reorder)</label>
+                            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'5px'}}>
+                                <label className="export-options-label" style={{marginBottom:0}}>Select & Arrange Columns (Drag to Reorder)</label>
+                                <button className="text-link-btn" onClick={handleSelectAllColumns} style={{fontSize:'11px', color:'#43B2DA', background:'none', border:'none', cursor:'pointer'}}>
+                                    {columnConfig.every(col => col.checked) ? 'Deselect All' : 'Select All'}
+                                </button>
+                            </div>
                             
                             <div className="sortable-list">
                                 {columnConfig.map((col, index) => (

@@ -38,8 +38,8 @@ export const Icons = {
       <circle cx="12" cy="7" r="4"></circle>
     </svg>
   ),
-  Check: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+  Check: ({ size = 24, ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={iconStyle} {...props}>
       <polyline points="20 6 9 17 4 12"></polyline>
     </svg>
   ),
@@ -123,20 +123,20 @@ export const Icons = {
       <line x1="12" y1="3" x2="12" y2="15"></line>
     </svg>
   ),
-  Edit: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+  Edit: ({ size = 24, ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={iconStyle} {...props}>
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
       <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
     </svg>
   ),
-  Trash: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+  Trash: ({ size = 24, ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={iconStyle} {...props}>
       <polyline points="3 6 5 6 21 6"></polyline>
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
     </svg>
   ),
-  Restore: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+  Restore: ({ size = 24, ...props }) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={iconStyle} {...props}>
       <polyline points="1 4 1 10 7 10"></polyline>
       <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
     </svg>
