@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const ratesController = require('../controllers/ratesController');
+const verifyToken = require('../middleware/authMiddleware');
 
-router.get('/', ratesController.getAllRates);
-router.post('/', ratesController.createRate);
-router.put('/:id', ratesController.updateRate);
-router.delete('/:id', ratesController.deleteRate);
+router.get('/', verifyToken, ratesController.getAllRates);
+router.post('/', verifyToken, ratesController.createRate);
+router.put('/:id', verifyToken, ratesController.updateRate);
+router.delete('/:id', verifyToken, ratesController.deleteRate);
 
 module.exports = router;

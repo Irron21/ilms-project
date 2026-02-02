@@ -1,0 +1,26 @@
+@import './variables.css';
+
+/* Global reset and base layout */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--bg-light);
+  width: 100%;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}

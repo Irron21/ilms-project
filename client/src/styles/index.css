@@ -1,0 +1,17 @@
+/* Main styles entry point - imports all styles */
+@import './global.css';
+
+/* Page styles */
+@import './pages/login.css';
+@import './pages/desktop-app.css';
+@import './pages/mobile-app.css';
+
+/* Feature styles */
+@import './features/shipments.css';
+@import './features/payroll.css';
+@import './features/analytics.css';
+@import './features/resources.css';
+@import './features/profile.css';
+
+/* Shared component styles */
+@import './shared/feedback-modal.css';

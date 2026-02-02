@@ -1,5 +1,5 @@
 /* eslint-disable no-restricted-globals */
-const CACHE_NAME = 'k2mac-prod-v1';
+const CACHE_NAME = 'k2mac-prod-v2';
 
 const STATIC_ASSETS = [
   '/',
@@ -32,6 +32,19 @@ self.addEventListener('fetch', (event) => {
     event.request.method !== 'GET'
   ) {
     return; // Let the browser handle these normally
+  }
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).then((networkResponse) => {
+        const responseToCache = networkResponse.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put('/index.html', responseToCache);
+        });
+        return networkResponse;
+      }).catch(() => caches.match('/index.html'))
+    );
+    return;
   }
 
   event.respondWith(

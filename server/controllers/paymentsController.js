@@ -18,6 +18,7 @@ exports.getUserPayments = (req, res) => {
 // ADD a payment
 exports.addPayment = (req, res) => {
     const { periodID, userID, amount, notes, referenceNumber } = req.body;
+    const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
 
     if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
 
@@ -26,8 +27,23 @@ exports.addPayment = (req, res) => {
         VALUES (?, ?, ?, ?, ?)
     `;
     db.query(sql, [periodID, userID, amount, notes, referenceNumber], (err, result) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: "Payment recorded", id: result.insertId });
+        if (err) {
+            return logActivity(adminID, 'PAYMENT_ERROR', `Database error while adding payment for User #${userID}: ${err.message}`, () => {
+                res.status(500).json({ error: err.message });
+            });
+        }
+        const paymentID = result.insertId;
+        logActivity(
+            adminID, 
+            'ADD_PAYMENT', 
+            'Recorded payment of ' + amount + ' for User #' + userID + '. Notes: ' + (notes || ''),
+            () => {
+                res.json({ 
+                    message: "Payment recorded", 
+                    id: paymentID
+                });
+            }
+        );
     });
 };
 
@@ -42,9 +58,10 @@ exports.voidPayment = (req, res) => {
         logActivity(
             adminID, 
             'VOID_PAYMENT', 
-            `Voided payment reference #${id}`
+            `Voided payment transaction #${id}`,
+            () => {
+                res.json({ message: "Payment voided successfully" });
+            }
         );
-
-        res.json({ message: "Payment voided successfully" });
     });
 };

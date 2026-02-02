@@ -1,8 +1,36 @@
+# Dependencies
 node_modules/
 */node_modules/
+thesis_materials
+
+# Environment Variables
 .env
 */.env
+.env.*
+
+# System Files
 .DS_Store
+Thumbs.db
+
+# Build Artifacts
 dist/
 build/
+
+# Database
 *.sql
+!database/init_db.sql
+
+# Logs
+logs/
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# SSL Certificates (for local dev)
+*.pem
+*.key
+*.crt
+nginx-proxy/ssl/*
+!nginx-proxy/ssl/.gitkeep
