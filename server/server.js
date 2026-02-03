@@ -42,6 +42,7 @@ const loginLimiter = rateLimit({
 
 // Define allowed origins
 const allowedOrigins = [
+  '*', // Allow all origins (for development)
   'http://localhost',      // <--- ADD THIS (For Docker/Nginx on Port 80)
   'http://127.0.0.1',      // <--- ADD THIS (Just to be safe)
   'http://localhost:5173', 

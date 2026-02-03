@@ -254,16 +254,6 @@ CREATE TABLE ShipmentPayroll (
 
   allowance DECIMAL(10,2) NULL,
 
-  additionalPay DECIMAL(10,2) DEFAULT '0.00',
-
-  deductions DECIMAL(10,2) DEFAULT '0.00',
-
-  status VARCHAR(20) DEFAULT 'PENDING',
-
-  payoutDate DATETIME NULL,
-
-  totalPayout DECIMAL(10,2) GENERATED ALWAYS AS ((baseFee + additionalPay) - deductions) STORED,
-
   periodID INT NULL,
 
   PRIMARY KEY (payrollID),
@@ -320,8 +310,6 @@ CREATE TABLE PayrollPayments (
 
   notes VARCHAR(255) NULL,
 
-  referenceNumber VARCHAR(100) NULL,
-
   status ENUM('COMPLETED', 'VOID') DEFAULT 'COMPLETED',
 
   PRIMARY KEY (paymentID),
@@ -329,28 +317,6 @@ CREATE TABLE PayrollPayments (
   FOREIGN KEY (periodID) REFERENCES PayrollPeriods (periodID) ON DELETE CASCADE,
 
   FOREIGN KEY (userID) REFERENCES Users (userID)
-
-);
-
-
-
-CREATE TABLE EmployeeDeductions (
-
-  deductionID INT NOT NULL AUTO_INCREMENT,
-
-  userID INT NOT NULL,
-
-  amount DECIMAL(10,2) NOT NULL,
-
-  deductionDate DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-  reason VARCHAR(255) NULL,
-
-  status VARCHAR(20) DEFAULT 'UNPAID',
-
-  payrollReferenceID INT NULL,
-
-  PRIMARY KEY (deductionID)
 
 );
 
@@ -383,8 +349,6 @@ CREATE TABLE KPI_Monthly_Reports (
   scorePOD DECIMAL(5,2) NULL,
 
   rawFailureData JSON NULL,
-
-  uploadTimestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 
   is_archived TINYINT(1) DEFAULT '0',
 
@@ -678,35 +642,6 @@ INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES
 -- DECEMBER
 ('December 1-15, 2026',  '2026-12-01', '2026-12-15', 'OPEN'),
 ('December 16-31, 2026', '2026-12-16', '2026-12-31', 'OPEN');
-
-
-
--- 6. Shipments
-
-INSERT INTO Shipments (shipmentID, userID, vehicleID, destName, destLocation, loadingDate, deliveryDate, currentStatus) 
-
-VALUES (1001, 1, 1, 'SM Megamall', 'Metro Manila', '2026-01-10', '2026-01-11', 'Completed');
-
-
-
-INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (1001, 3, 'Driver'), (1001, 4, 'Helper');
-
-
-
-INSERT INTO ShipmentPayroll (shipmentID, crewID, baseFee, allowance, status, periodID) 
-
-VALUES (1001, 3, 500.00, 150.00, 'PAID', 1), (1001, 4, 350.00, 150.00, 'PAID', 1);
-
-
-
-INSERT INTO Shipments (shipmentID, userID, vehicleID, destName, destLocation, loadingDate, deliveryDate, currentStatus) 
-
-VALUES (1002, 1, 2, 'Batangas Port', 'Provincial', '2026-01-28', '2026-01-30', 'In Transit');
-
-
-
-INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (1002, 5, 'Driver'), (1002, 6, 'Helper');
-
 
 
 -- 7. KPI Data

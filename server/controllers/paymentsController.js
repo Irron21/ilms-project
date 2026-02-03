@@ -17,16 +17,16 @@ exports.getUserPayments = (req, res) => {
 
 // ADD a payment
 exports.addPayment = (req, res) => {
-    const { periodID, userID, amount, notes, referenceNumber } = req.body;
+    const { periodID, userID, amount, notes } = req.body;
     const adminID = (req.user && req.user.userID) ? req.user.userID : 1;
 
     if (!amount || amount <= 0) return res.status(400).json({ error: "Invalid amount" });
 
     const sql = `
-        INSERT INTO PayrollPayments (periodID, userID, amount, notes, referenceNumber)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO PayrollPayments (periodID, userID, amount, notes)
+        VALUES (?, ?, ?, ?)
     `;
-    db.query(sql, [periodID, userID, amount, notes, referenceNumber], (err, result) => {
+    db.query(sql, [periodID, userID, amount, notes], (err, result) => {
         if (err) {
             return logActivity(adminID, 'PAYMENT_ERROR', `Database error while adding payment for User #${userID}: ${err.message}`, () => {
                 res.status(500).json({ error: err.message });
