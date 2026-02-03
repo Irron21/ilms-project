@@ -40,32 +40,38 @@ const loginLimiter = rateLimit({
   message: "Too many login attempts, please try again later."
 });
 
-// Define allowed origins
-const allowedOrigins = [
-  '*', // Allow all origins (for development)
-  'http://localhost',      // <--- ADD THIS (For Docker/Nginx on Port 80)
-  'http://127.0.0.1',      // <--- ADD THIS (Just to be safe)
-  'http://localhost:5173', 
-  'http://localhost:4173', 
-  'http://127.0.0.1:5173', 
-  'http://127.0.0.1:4173'
-];
-
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.indexOf(origin) === -1) {
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
-    }
-    return callback(null, true);
-  },
+  origin: true, // This reflects the request origin back to the client (Allow Everyone)
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
+
+// // Define allowed origins
+// const allowedOrigins = [
+//   'http://localhost',      // <--- ADD THIS (For Docker/Nginx on Port 80)
+//   'http://127.0.0.1',      // <--- ADD THIS (Just to be safe)
+//   'http://localhost:5173', 
+//   'http://localhost:4173', 
+//   'http://127.0.0.1:5173', 
+//   'http://127.0.0.1:4173'
+// ];
+
+// app.use(cors({
+//   origin: function (origin, callback) {
+//     // Allow requests with no origin (like mobile apps or curl requests)
+//     if (!origin) return callback(null, true);
+    
+//     if (allowedOrigins.indexOf(origin) === -1) {
+//       const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
+//       return callback(new Error(msg), false);
+//     }
+//     return callback(null, true);
+//   },
+//   credentials: true,
+//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+//   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+// }));
 
 app.use(express.json()); 
 app.use(express.urlencoded({ extended: true }));
