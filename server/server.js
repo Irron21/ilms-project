@@ -88,7 +88,20 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/shipments', verifyToken, shipmentRoutes);
 app.use('/api/vehicles', require('./routes/vehicleRoutes'));
 // Apply Redis caching to KPI routes (cache for 5 minutes)
-app.use('/api/kpi', cache(300), kpiRoutes);
+const useCache = (duration) => {
+    return (req, res, next) => {
+        if (redisClient.isOpen) {
+            // If Redis is alive, run the real cache middleware
+            return cache(duration)(req, res, next);
+        } else {
+            // If Redis is dead, just skip caching and continue
+            return next();
+        }
+    };
+};
+
+// Use the smart wrapper instead of the direct cache
+app.use('/api/kpi', useCache(300), kpiRoutes);
 app.use('/api/logs', logRoutes);
 app.use('/api/payroll', require('./routes/payrollRoutes'));
 app.use('/api/rates', require('./routes/ratesRoutes'));
