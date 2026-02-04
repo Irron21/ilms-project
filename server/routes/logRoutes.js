@@ -4,8 +4,8 @@ const logActivity = require('../utils/activityLogger');
 const logController = require('../controllers/logController');
 const  verifyToken  = require('../middleware/authMiddleware'); 
 
-router.get('/actions', logController.getLogActions);
-router.get('/history', logController.getActivityLogs);
+router.get('/actions', verifyToken, logController.getLogActions);
+router.get('/history', verifyToken, logController.getActivityLogs);
 router.post('/', verifyToken, (req, res) => {
     try {
         const { action, details } = req.body;

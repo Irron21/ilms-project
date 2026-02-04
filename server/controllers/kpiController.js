@@ -15,15 +15,28 @@ exports.uploadKPIReport = (req, res) => {
         } catch (err) { console.error("Warning:", err.message); }
     };
 
-    // 1. STRICT Filename Validation
+    // 1. STRICT Filename Validation (Updated to be more flexible)
+    // Allows "KPI_K2MAC_MONTH_YEAR.xlsx" with optional spaces and case insensitivity
     const fileName = req.file.originalname;
-    const filenameRegex = /^KPI_K2MAC_(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)_(\d{4})\.xlsx$/i;
+    // Regex breakdown:
+    // ^KPI_K2MAC_ : Start with prefix
+    // ([A-Z]+) : Capture Month (Letters only)
+    // _ : Separator
+    // (\d{4}) : Capture Year
+    // .xlsx$ : End with extension
+    const filenameRegex = /^KPI_K2MAC_([A-Z]+)_(\d{4})\.xlsx$/i;
     const match = fileName.match(filenameRegex);
 
-    if (!match) {
+    const validMonths = [
+        "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", 
+        "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"
+    ];
+
+    if (!match || !validMonths.includes(match[1].toUpperCase())) {
         cleanup();
         return res.status(400).json({ 
-            error: "Invalid filename format. Expected: KPI_K2MAC_[MONTH]_[YEAR].xlsx (e.g., KPI_K2MAC_DECEMBER_2026.xlsx)" 
+            error: "Invalid filename format.", 
+            details: "Expected format: KPI_K2MAC_[MONTH]_[YEAR].xlsx (e.g., KPI_K2MAC_DECEMBER_2026.xlsx)" 
         });
     }
 
@@ -39,11 +52,16 @@ exports.uploadKPIReport = (req, res) => {
         if (!summarySheet) summarySheet = workbook.Sheets[workbook.SheetNames[0]];
 
         if (!summarySheet) {
+            workbook = null; // Free memory
             cleanup(); 
             return res.status(400).json({ error: "No valid sheet found. Please check your Excel file." });
         }
 
         const data = xlsx.utils.sheet_to_json(summarySheet, { header: 1 });
+        
+        // Free memory immediately
+        workbook = null;
+        summarySheet = null;
 
         // 3. Layout Validation
         const rowStrings = data.map(row => (row || []).join(" ").toUpperCase());
@@ -139,55 +157,55 @@ exports.uploadKPIReport = (req, res) => {
             }
         }
 
-        // 5. Database Operation
-        const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); 
-        
-        // Delete existing report for this Month/Year (Overwrite)
-        const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
+            // 5. Database Operation
+            const reportDate = new Date(`${detectedMonth} 1, ${detectedYear}`); 
+            
+            // Delete existing report for this Month/Year (Overwrite)
+            const deleteSql = "DELETE FROM KPI_Monthly_Reports WHERE MONTH(reportMonth) = ? AND YEAR(reportMonth) = ?";
 
-        db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], (delErr) => {
-            if (delErr) {
-                cleanup();
-                console.error("DB Delete Error:", delErr);
-                return res.status(500).json({ error: "Database error during cleanup: " + delErr.message });
-            }
-
-            const insertSql = `
-                INSERT INTO KPI_Monthly_Reports 
-                (reportMonth, scoreBooking, scoreTruck, scoreCalltime, scoreDOT, scoreDelivery, scorePOD, rawFailureData)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `;
-            const values = [
-                reportDate, metrics.booking, metrics.truck, metrics.calltime, 
-                metrics.dot, metrics.delivery, metrics.pod, JSON.stringify(failureReasons)
-            ];
-
-            db.query(insertSql, values, (err, result) => {
-                cleanup();
-                
-                if (err) {
-                    console.error("DB Error:", err);
-                    return res.status(500).json({ error: "Database error: " + err.message });
+            db.query(deleteSql, [reportDate.getMonth() + 1, reportDate.getFullYear()], (delErr) => {
+                if (delErr) {
+                    cleanup();
+                    console.error("DB Delete Error:", delErr);
+                    return res.status(500).json({ error: "Database error during cleanup: " + delErr.message });
                 }
-                
-                const logDetails = `Uploaded KPI Report - ${detectedMonth} ${detectedYear} [ID: ${result.insertId}]`;
-                logActivity(adminID, 'UPLOAD_KPI_REPORT', logDetails, async () => {
-                    await clearCache('cache:/api/kpi*'); // Clear Cache
-                    res.json({ 
-                        message: "Success", 
-                        scores: metrics,
-                        reportMonth: reportDate.toISOString(),
-                        year: detectedYear
+
+                const insertSql = `
+                    INSERT INTO KPI_Monthly_Reports 
+                    (reportMonth, scoreBooking, scoreTruck, scoreCalltime, scoreDOT, scoreDelivery, scorePOD, rawFailureData)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                `;
+                const values = [
+                    reportDate, metrics.booking, metrics.truck, metrics.calltime, 
+                    metrics.dot, metrics.delivery, metrics.pod, JSON.stringify(failureReasons)
+                ];
+
+                db.query(insertSql, values, (err, result) => {
+                    cleanup();
+                    
+                    if (err) {
+                        console.error("DB Error:", err);
+                        return res.status(500).json({ error: "Database error: " + err.message });
+                    }
+                    
+                    const logDetails = `Uploaded KPI Report - ${detectedMonth} ${detectedYear} [ID: ${result.insertId}]`;
+                    logActivity(adminID, 'UPLOAD_KPI_REPORT', logDetails, async () => {
+                        await clearCache('cache:/api/kpi*'); // Clear Cache
+                        res.json({ 
+                            message: "Success", 
+                            scores: metrics,
+                            reportMonth: reportDate.toISOString(),
+                            year: detectedYear
+                        });
                     });
                 });
             });
-        });
 
-    } catch (e) {
-        cleanup(); 
-        console.error("Upload Error:", e);
-        res.status(500).json({ error: "Processing Error: " + e.message });
-    }
+        } catch (e) {
+            cleanup(); 
+            console.error("Upload Error:", e);
+            res.status(500).json({ error: "Processing Error: " + e.message });
+        }
 };
 
 exports.getAvailableMonths = (req, res) => {

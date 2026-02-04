@@ -2,8 +2,9 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const verifyToken = require('../middleware/authMiddleware'); 
+const cache = require('../middleware/cacheMiddleware');
 
-router.get('/', verifyToken, userController.getAllUsers);
+router.get('/', verifyToken, cache(300), userController.getAllUsers);
 router.post('/create', verifyToken, userController.createUser);
 router.put('/:id', verifyToken, userController.updateUser);
 router.delete('/:id', verifyToken, userController.deleteUser);
