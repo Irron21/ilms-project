@@ -118,9 +118,13 @@ app.use((err, req, res, next) => {
 // Safety nets for unexpected errors
 process.on('uncaughtException', (err) => {
   console.error('[UNCAUGHT EXCEPTION]', err && err.stack ? err.stack : err);
+  console.error('Critical Error: Exiting process to ensure restart...');
+  process.exit(1); // Force exit so process manager/docker/nodemon restarts it
 });
+
 process.on('unhandledRejection', (reason) => {
   console.error('[UNHANDLED REJECTION]', reason);
+  // Optional: process.exit(1) here too if you want strict handling
 });
 
 // Start Server

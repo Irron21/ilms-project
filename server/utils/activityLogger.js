@@ -8,7 +8,18 @@ const logActivity = (userID, actionType, details, callback) => {
 
     db.query(sql, [finalUserID, actionType, details], (err) => {
         if (err) console.error("Activity Log Error:", err.message);
-        if (callback) callback(err);
+        
+        if (callback) {
+            try {
+                // Safely execute callback and handle Promises if async
+                const result = callback(err);
+                if (result instanceof Promise) {
+                    result.catch(pErr => console.error("Activity Callback Async Error:", pErr));
+                }
+            } catch (cbErr) {
+                console.error("Activity Callback Sync Error:", cbErr);
+            }
+        }
     });
 };
 
