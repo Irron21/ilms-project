@@ -402,18 +402,22 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
                   <div className="step-text-group">
                       <span className="step-label">{step.label}</span>
                       
-                      {state === 'done' && (
-                        <>
-                          {timeData ? (
-                            <span className="step-timestamp">
-                              Completed: {timeData.text} 
-                              {timeData.isPending && <span style={{color: 'orange', marginLeft: '5px'}}>(Saving...)</span>}
-                            </span>
-                          ) : (
-                             <span className="step-timestamp">Completed</span>
-                          )}
-                        </>
-                      )}
+                      <span className="step-timestamp">
+                        {state === 'done' ? (
+                          <>
+                            {timeData ? (
+                              <>
+                                Completed: {timeData.text} 
+                                {timeData.isPending && <span style={{color: 'orange', marginLeft: '5px'}}>(Saving...)</span>}
+                              </>
+                            ) : (
+                               "Completed"
+                            )}
+                          </>
+                        ) : (
+                          "\u00A0" 
+                        )}
+                      </span>
                   </div>
                 </div>
 
