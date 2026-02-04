@@ -6,6 +6,15 @@
     justify-content: center;
     align-items: center;
     padding: 20px;
+    box-sizing: border-box;
+}
+
+@media (max-height: 600px), (max-width: 480px) {
+    .login-container {
+        align-items: flex-start;
+        padding-top: 40px;
+        overflow-y: auto;
+    }
 }
 
 .login-card {
@@ -58,12 +67,44 @@ form {
     font-size: 1em;
     width: 100%;
     color: #333;
+    transition: all 0.2s ease;
 }
 
 .login-input:focus {
     background-color: #fff;
     border-color: #E65100;
     outline: none;
+}
+
+.password-wrapper {
+    position: relative;
+    width: 100%;
+    margin-bottom: 25px;
+}
+
+.password-wrapper .login-input {
+    margin-bottom: 0;
+    padding-right: 45px;
+}
+
+.password-toggle-icon {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+}
+
+.password-toggle-icon:hover {
+    background-color: rgba(0,0,0,0.05);
+    color: #333;
 }
 
 .error-msg {
