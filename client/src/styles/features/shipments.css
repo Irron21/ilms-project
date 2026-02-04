@@ -1097,7 +1097,10 @@
 }
 
 .steps-container {
-  padding: 0 20px; display: flex; flex-direction: column; gap: 12px;
+  padding: 0 20px 60px 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
   transition: filter 0.3s ease, opacity 0.3s ease;
 }
 
@@ -1166,28 +1169,36 @@
 
 /* --- BUTTON STYLES --- */
 .step-button {
-  width: 100%; border: none; padding: 15px 15px; border-radius: 4px;
-  display: flex; justify-content: space-between; 
+  width: 100%; border: none; padding: 16px 8px; border-radius: 12px;
+  display: flex; flex-direction: column; justify-content: center; 
   align-items: center; position: relative;
-  font-size: 0.9em; text-transform: uppercase;
+  font-size: 0.85em; text-transform: uppercase;
   cursor: default; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  min-height: 60px;
+  min-height: 110px;
+  text-align: center;
 }
 
 .step-content { 
     display: flex; 
+    flex-direction: column;
     align-items: center; 
-    gap: 15px; 
-    text-align: left;
+    gap: 10px; 
+    width: 100%;
 }
 
 .step-text-group {
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
+    width: 100%;
 }
 
-.step-label { font-weight: 700; line-height: 1.2; }
+.step-label { 
+    font-weight: 700; 
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
 
 .step-timestamp {
     font-size: 0.75em;
@@ -1196,11 +1207,22 @@
     margin-top: 4px;
     text-transform: none; 
     color: inherit;
+    line-height: 1.2;
+    display: block;
+    width: 100%;
+    word-break: break-word;
 }
 
-.step-status-icon { display: flex; align-items: center; }
+.step-status-icon { 
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex; 
+    align-items: center; 
+}
 
-.step-icon svg, .step-status-icon svg { width: 24px; height: 24px; fill: black; display: block; }
+.step-icon svg { width: 28px; height: 28px; fill: black; display: block; margin: 0 auto; }
+.step-status-icon svg { width: 18px; height: 18px; fill: black; display: block; }
 
 .step-done { background-color: #81C784; color: #1B5E20; }
 .step-done .step-icon svg, .step-done .step-status-icon svg { fill: #1B5E20; }
