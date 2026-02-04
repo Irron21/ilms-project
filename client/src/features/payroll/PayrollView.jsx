@@ -75,6 +75,7 @@ function PayrollView() {
     const rowsPerPage = 8;
     const [feedbackModal, setFeedbackModal] = useState(null);
     const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+    const [selectedMonth, setSelectedMonth] = useState('');
 
     const getAvailableYears = () => {
         const years = periods.map(p => {
@@ -91,6 +92,23 @@ function PayrollView() {
 
     const availableYears = getAvailableYears();
     const filteredPeriods = getFilteredPeriods();
+    
+    // Get unique months for the dropdown
+    const availableMonths = [...new Set(filteredPeriods.map(p => p.periodName.split(' ')[0]))];
+    
+    // Get periods for the selected month
+    const periodsInMonth = filteredPeriods.filter(p => p.periodName.startsWith(selectedMonth));
+
+    // Sync Month when Period Changes (e.g. initial load)
+    useEffect(() => {
+        if (selectedPeriod && periods.length > 0) {
+            const p = periods.find(item => item.periodID === Number(selectedPeriod));
+            if (p) {
+                const month = p.periodName.split(' ')[0];
+                if (month !== selectedMonth) setSelectedMonth(month);
+            }
+        }
+    }, [selectedPeriod, periods]);
 
     const getPeriodName = () => {
         const p = periods.find(item => item.periodID === Number(selectedPeriod));
@@ -414,23 +432,60 @@ function PayrollView() {
                         </div>
                         <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
                         <div style={{display:'flex', flexDirection:'column'}}>
-                            <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Select Period:</label>
-                            <select 
-                                className="period-select" 
-                                style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}} 
-                                value={selectedPeriod}
-                                onChange={(e) => setSelectedPeriod(e.target.value)}
-                            >
-                                {filteredPeriods.length > 0 ? (
-                                    filteredPeriods.map(p => (
-                                        <option key={p.periodID} value={p.periodID}>
-                                            {p.periodName} ({p.status})
-                                        </option>
-                                    ))
-                                ) : (
-                                    <option disabled>No periods for {selectedYear}</option>
+                            <div style={{display:'flex', alignItems:'center', gap: '5px'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Select Period:</label>
+                                {selectedPeriod && (
+                                    <span style={{
+                                        fontSize: '9px',
+                                        fontWeight: '700',
+                                        padding: '1px 4px',
+                                        borderRadius: '3px',
+                                        textTransform: 'uppercase',
+                                        backgroundColor: isPeriodLocked() ? '#ffebee' : '#e8f5e9',
+                                        color: isPeriodLocked() ? '#c62828' : '#2e7d32',
+                                        border: `1px solid ${isPeriodLocked() ? '#ffcdd2' : '#c8e6c9'}`
+                                    }}>
+                                        {isPeriodLocked() ? 'CLOSED' : 'OPEN'}
+                                    </span>
                                 )}
-                            </select>
+                            </div>
+                            <div style={{display:'flex', gap: '8px'}}>
+                                {/* Month Selector */}
+                                <select 
+                                    className="period-select" 
+                                    style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer', minWidth: '80px'}}
+                                    value={selectedMonth}
+                                    onChange={(e) => {
+                                        const newMonth = e.target.value;
+                                        setSelectedMonth(newMonth);
+                                        // Auto-select first period of new month
+                                        const firstPeriod = filteredPeriods.find(p => p.periodName.startsWith(newMonth));
+                                        if (firstPeriod) setSelectedPeriod(firstPeriod.periodID);
+                                    }}
+                                >
+                                    {availableMonths.map(month => (
+                                        <option key={month} value={month}>{month}</option>
+                                    ))}
+                                </select>
+
+                                {/* Period Range Selector */}
+                                <select 
+                                    className="period-select" 
+                                    style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer', minWidth: '50px'}} 
+                                    value={selectedPeriod}
+                                    onChange={(e) => setSelectedPeriod(e.target.value)}
+                                >
+                                    {periodsInMonth.length > 0 ? (
+                                        periodsInMonth.map(p => (
+                                            <option key={p.periodID} value={p.periodID}>
+                                                {p.periodName.split(',')[0].replace(selectedMonth, '').trim()}
+                                            </option>
+                                        ))
+                                    ) : (
+                                        <option disabled>No periods</option>
+                                    )}
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
