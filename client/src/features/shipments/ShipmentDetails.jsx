@@ -63,6 +63,18 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     return offlineData ? offlineData.logs : [];
   });
 
+  const partnerName = (() => {
+    if (!shipment.crewDetails || !user) return null;
+    const parts = shipment.crewDetails.split('|');
+    let targetRole = '';
+    if (user.role === 'Driver') targetRole = 'Helper';
+    else if (user.role === 'Helper') targetRole = 'Driver';
+    else return null;
+    
+    const found = parts.find(p => p.startsWith(targetRole + ':'));
+    return found ? found.split(':')[1] : null;
+  })();
+
   // --- HELPER: Date Formatter ---
   const formatDate = (dateStr) => {
     if (!dateStr) return 'Not Set';
@@ -233,8 +245,9 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
       </div>
 
       <div className="info-card-mob">
+        <div className="info-card-mob-grid">
         {/* 1. Destination */}
-        <div className="info-item">
+        <div className="info-item item-dest"> 
           <div className="info-icon-box">
              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M20 9v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V9"/>
@@ -248,48 +261,64 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         </div>
 
         {/* 2. Address */}
-        <div className="info-item">
-          <div className="info-icon-box">
-             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                <circle cx="12" cy="10" r="3"></circle>
-             </svg>
+        <div className="info-item item-addr">
+            <div className="info-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+              </svg>
+            </div>
+            <div className="info-content">
+              <span className="info-label">Address</span>
+              <span className="info-value">{shipment.destLocation}</span>
+            </div>
           </div>
-          <div className="info-content">
-             <span className="info-label">Address</span>
-             <span className="info-value">{shipment.destLocation}</span>
+
+          {/* 3. Loading Date */}
+          <div className="info-item item-load">
+            <div className="info-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="16" y1="2" x2="16" y2="6"></line>
+                  <line x1="8" y1="2" x2="8" y2="6"></line>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+              </svg>
+            </div>
+            <div className="info-content">
+              <span className="info-label">Loading Date</span>
+              <span className="info-value" style={{color:'#2980b9', fontWeight: 700}}>{formatDate(shipment.loadingDate)}</span>
+            </div>
+          </div>
+
+          {/* 4. Delivery Date */}
+          <div className="info-item item-del">
+            <div className="info-icon-box">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+                  <line x1="4" y1="22" x2="4" y2="15"></line>
+              </svg>
+            </div>
+            <div className="info-content">
+              <span className="info-label">Delivery Date</span>
+              <span className="info-value" style={{color:'#d35400', fontWeight: 700}}>{formatDate(shipment.deliveryDate)}</span>
+            </div>
           </div>
         </div>
 
-        {/* 3. Loading Date */}
-        <div className="info-item">
+        {partnerName && (
+        <div className="info-item item-partner">
           <div className="info-icon-box">
              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="16" y1="2" x2="16" y2="6"></line>
-                <line x1="8" y1="2" x2="8" y2="6"></line>
-                <line x1="3" y1="10" x2="21" y2="10"></line>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
              </svg>
           </div>
           <div className="info-content">
-             <span className="info-label">Loading Date</span>
-             <span className="info-value" style={{color:'#2980b9', fontWeight: 700}}>{formatDate(shipment.loadingDate)}</span>
+             <span className="info-label">{user.role === 'Driver' ? 'Helper' : 'Driver'}</span>
+             <span className="info-value" style={{fontWeight: 600}}>{partnerName}</span>
           </div>
         </div>
-
-        {/* 4. Delivery Date */}
-        <div className="info-item">
-          <div className="info-icon-box">
-             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
-                <line x1="4" y1="22" x2="4" y2="15"></line>
-             </svg>
-          </div>
-          <div className="info-content">
-             <span className="info-label">Delivery Date</span>
-             <span className="info-value" style={{color:'#d35400', fontWeight: 700}}>{formatDate(shipment.deliveryDate)}</span>
-          </div>
-        </div>
+        )}
       </div>
 
       <div className="steps-wrapper">
