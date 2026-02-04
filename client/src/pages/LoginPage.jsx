@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import api from '@utils/api';
+import { Icons } from '@shared';
 import logoPng from '@assets/k2mac_logo2.png';
 import '@styles/pages/login.css';
 
 function LoginPage({ onLoginSuccess }) {
   const [employeeID, setEmployeeID] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async (e) => {
@@ -59,12 +61,20 @@ function LoginPage({ onLoginSuccess }) {
           />
 
           <label className="input-label">Password</label>
-          <input
-            type="password"
-            className="login-input"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className="password-wrapper">
+            <input
+              type={showPassword ? "text" : "password"}
+              className="login-input"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <div 
+              className="password-toggle-icon" 
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? <Icons.EyeOff /> : <Icons.Eye />}
+            </div>
+          </div>
 
           <div className="error-msg">{error}</div>
 
