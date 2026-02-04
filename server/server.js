@@ -14,6 +14,11 @@ const kpiRoutes = require('./routes/kpiRoutes');
 const app = express();
 const PORT = process.env.PORT || 4000;
 const logRoutes = require('./routes/logRoutes');
+const { ErrorReporting } = require('@google-cloud/error-reporting');
+let errors;
+if (process.env.NODE_ENV === 'production') {
+    errors = new ErrorReporting();
+}
 
 // Trust Proxy (Required for Rate Limiting behind Nginx)
 app.set('trust proxy', 1);
@@ -117,6 +122,10 @@ process.on('unhandledRejection', (reason) => {
   console.error('[UNHANDLED REJECTION]', reason);
   // Optional: process.exit(1) here too if you want strict handling
 });
+
+if (process.env.NODE_ENV === 'production' && errors) {
+    app.use(errors.express);
+}
 
 // Start Server
 app.listen(PORT, () => {
