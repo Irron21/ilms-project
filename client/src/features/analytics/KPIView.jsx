@@ -26,6 +26,7 @@ function KPIView() {
     const [graphYear, setGraphYear] = useState(new Date().getFullYear().toString());
     const [viewMode, setViewMode] = useState('monthly'); 
     const [showTarget, setShowTarget] = useState(false);
+    const [targetValue, setTargetValue] = useState(95);
 
     const metricConfig = [
         { key: 'Booking', color: '#2F80ED', label: 'Booking' },
@@ -380,16 +381,28 @@ function KPIView() {
                 {loading && kpiScores.length === 0 ? (
                     <div style={{gridColumn:'1 / -1', height:'90px', display:'flex', alignItems:'center', justifyContent:'center', color:'#CCC'}}>Loading Metrics...</div>
                 ) : kpiScores.length > 0 ? (
-                    kpiScores.map((kpi, index) => (
-                        <div key={index} className={`score-card ${kpi.status}`}>
-                            <div className="score-top">
-                                <span className="score-title">{kpi.title}</span>
-                                {kpi.status === 'good' ? <span className="icon-check">✔</span> : <span className="icon-alert">!</span>}
+                    kpiScores.map((kpi, index) => {
+                        const score = parseFloat(kpi.score);
+                        let dynamicStatus = 'good';
+                        if (score < targetValue) {
+                            dynamicStatus = 'danger';
+                        } else if (score < targetValue + 1) {
+                            dynamicStatus = 'warning';
+                        }
+                        
+                        return (
+                            <div key={index} className={`score-card ${dynamicStatus}`}>
+                                <div className="score-top">
+                                    <span className="score-title">{kpi.title}</span>
+                                    {dynamicStatus === 'good' ? <span className="icon-check">✔</span> : 
+                                     dynamicStatus === 'warning' ? <span className="icon-alert" style={{color:'#F2994A'}}>!</span> : 
+                                     <span className="icon-alert">!</span>}
+                                </div>
+                                <div className="score-value">{kpi.score}%</div>
+                                <div className="progress-bg"><div className="progress-fill" style={{width: `${kpi.score}%`}}></div></div>
                             </div>
-                            <div className="score-value">{kpi.score}%</div>
-                            <div className="progress-bg"><div className="progress-fill" style={{width: `${kpi.score}%`}}></div></div>
-                        </div>
-                    ))
+                        );
+                    })
                 ) : (
                     <div style={{gridColumn:'1 / -1', textAlign:'center', padding:'20px', color:'#999'}}>
                         {!loading && "No data found for this month."}
@@ -437,15 +450,29 @@ function KPIView() {
                     <div className="chart-controls-group">
 
                         {/* TARGET TOGGLE */}
-                        <div className='filter-group-bordered' style={{padding: "7px 12px"}}>
-                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'600', cursor:'pointer', userSelect:'none'}}>
+                        <div className='filter-group-bordered'>
+                            <label style={{display:'flex', alignItems:'center', gap:'5px', fontSize:'13px', fontWeight:'600', cursor:'pointer', userSelect:'none', marginRight: '8px'}}>
                                 <input 
                                     type="checkbox" 
                                     checked={showTarget} 
                                     onChange={e => setShowTarget(e.target.checked)} 
                                 />
-                                Show Target (95%)
-                            </label>                   
+                                Show Target
+                            </label>
+                            <input 
+                                type="number" 
+                                min="0" 
+                                max="100" 
+                                value={targetValue} 
+                                onChange={(e) => setTargetValue(Number(e.target.value))}
+                                style={{
+                                    width: '50px',
+                                    padding: '2px 5px',
+                                    fontSize: '13px',
+                                    border: '1px solid #ccc',
+                                    borderRadius: '4px'
+                                }}
+                            />
                         </div>
                         {/* Multi-Select Dropdown Component */}
                         <div className="multi-select-container">
@@ -510,7 +537,7 @@ function KPIView() {
                                     <Legend content={renderLegend} />
 
                                     {showTarget && (
-                                        <ReferenceLine y={95} label="Target (95%)" stroke="#EB5757" strokeDasharray="3 3" />
+                                        <ReferenceLine y={targetValue} label={`Target (${targetValue}%)`} stroke="#EB5757" strokeDasharray="3 3" />
                                     )}
 
                                     {metricConfig.map(m => {
@@ -532,7 +559,7 @@ function KPIView() {
                                     <Legend content={renderLegend} />
 
                                     {showTarget && (
-                                        <ReferenceLine y={95} label="Target (95%)" stroke="#EB5757" strokeDasharray="3 3" />
+                                        <ReferenceLine y={targetValue} label={`Target (${targetValue}%)`} stroke="#EB5757" strokeDasharray="3 3" />
                                     )}
 
                                     {metricConfig.map(m => {
