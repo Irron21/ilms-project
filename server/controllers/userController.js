@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const logActivity = require('../utils/activityLogger');
+const { clearCache } = require('../utils/cacheHelper');
 
 // HELPER: Generate Prefix based on Role
 const generateEmployeeID = (role) => {
@@ -54,7 +55,8 @@ exports.restoreUser = (req, res) => {
                 connection.query(enableLoginSql, [id], (err) => {
                     if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Failed to enable login" }); });
 
-                    logActivity(adminID, 'RESTORE_USER', `Restored User - [ID: ${id}]`, () => {
+                    logActivity(adminID, 'RESTORE_USER', `Restored User - [ID: ${id}]`, async () => {
+                        await clearCache('cache:/api/users*');
                         connection.commit(err => {
                             if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
                             connection.release();
@@ -98,7 +100,8 @@ exports.createUser = async (req, res) => {
                     if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
 
                     const logDetails = `Created User - ${firstName} ${lastName} (${role}) [ID: ${finalEmployeeID}]`;
-                    logActivity(adminID, 'CREATE_USER', logDetails, () => {
+                    logActivity(adminID, 'CREATE_USER', logDetails, async () => {
+                        await clearCache('cache:/api/users*');
                         connection.commit(err => {
                             if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
                             connection.release();
@@ -122,7 +125,8 @@ exports.updateUser = (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const logDetails = `Updated User - ${firstName} ${lastName} [ID: ${id}]`;
-        logActivity(adminID, 'UPDATE_USER', logDetails, () => {
+        logActivity(adminID, 'UPDATE_USER', logDetails, async () => {
+             await clearCache('cache:/api/users*');
              res.json({ message: "User updated successfully" });
         });
     });
@@ -189,7 +193,8 @@ exports.deleteUser = (req, res) => {
             
             const disableLogin = "UPDATE UserLogins SET isActive = 0 WHERE userID = ?";
             db.query(disableLogin, [id], () => {
-                logActivity(adminID, 'ARCHIVE_USER', `Archived User - [ID: ${id}]`, () => {
+                logActivity(adminID, 'ARCHIVE_USER', `Archived User - [ID: ${id}]`, async () => {
+                    await clearCache('cache:/api/users*');
                     res.json({ message: "User archived successfully" });
                 });
             });

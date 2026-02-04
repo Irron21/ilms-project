@@ -43,7 +43,7 @@ function KPIView() {
 
     useEffect(() => { 
         fetchMonths();
-        fetchDashboardData(); 
+        // refreshData will run because of the other useEffect dependent on graphYear/currentFilter
     }, []);
 
     const fetchMonths = async () => {
@@ -53,26 +53,9 @@ function KPIView() {
         } catch (err) { console.error(err); }
     };
 
-    const fetchDashboardData = async (monthFilter = '') => {
-        setLoading(true);
-        try {
-            const url = monthFilter 
-                ? `/kpi/dashboard?month=${monthFilter}`
-                : '/kpi/dashboard';
-            const res = await api.get(url);
-            if (res.data) {
-                setKpiScores(res.data.latestScores);
-                setTrendData(res.data.trendData);
-                setMonthLabel(res.data.selectedMonthLabel);
-            }
-            setLoading(false);
-        } catch (err) { setLoading(false); }
-    };
-    
     const handleFilterChange = (e) => {
         const newMonth = e.target.value;
         setCurrentFilter(newMonth);
-        fetchDashboardData(newMonth);
     };
 
     const handleDeleteReport = (id) => {
@@ -87,8 +70,44 @@ function KPIView() {
             onConfirm: async () => {
                 try {
                     await api.post('/kpi/delete', { id });
-                    fetchMonths();
-                    fetchDashboardData();
+                    
+                    // 1. Refresh available months list
+                    const monthsRes = await api.get('/kpi/months');
+                    const updatedMonths = monthsRes.data || [];
+                    setAvailableMonths(updatedMonths);
+
+                    // 2. Determine new state
+                    // If we deleted the currently selected report, we need to reset
+                    // Check if currentFilter ID still exists in the new list
+                    const currentStillExists = updatedMonths.some(m => m.value === currentFilter);
+                    
+                    if (!currentStillExists) {
+                        // Reset to default (Latest)
+                        setCurrentFilter('');
+                        
+                        // Also check if we need to switch the year
+                        // Find the year of the latest available report
+                        if (updatedMonths.length > 0) {
+                            const latestReportDate = new Date(updatedMonths[0].value);
+                            setGraphYear(latestReportDate.getFullYear().toString());
+                        } else {
+                            // Fallback to current year if no reports left
+                            setGraphYear(new Date().getFullYear().toString());
+                        }
+                    }
+
+                    // 3. Refresh Dashboard Data (this will use the new state or default)
+                    // Note: We need to pass the *new* state explicitly if we just changed it, 
+                    // because state updates are async and won't be reflected immediately in 'currentFilter'
+                    const nextFilter = !currentStillExists ? '' : currentFilter;
+                    const nextYear = !currentStillExists && updatedMonths.length > 0 
+                        ? new Date(updatedMonths[0].value).getFullYear().toString() 
+                        : graphYear;
+
+                    const dashboardRes = await api.get(`/kpi/dashboard?month=${nextFilter}&year=${nextYear}`);
+                    setKpiScores(dashboardRes.data.latestScores || []);
+                    setTrendData(dashboardRes.data.trendData || []);
+                    setMonthLabel(dashboardRes.data.selectedMonthLabel);
 
                     setFeedbackModal({
                         type: 'success',
@@ -100,6 +119,7 @@ function KPIView() {
                         }
                     });
                 } catch (err) {
+                    console.error("Delete error:", err);
                     setFeedbackModal({
                         type: 'error',
                         title: 'Error',
@@ -119,6 +139,7 @@ function KPIView() {
     };
 
     const refreshData = async () => {
+        setLoading(true);
         try {
             // Pass BOTH 'month' (for cards) and 'year' (for graph)
             const dashboardRes = await api.get(`/kpi/dashboard?month=${currentFilter}&year=${graphYear}`);
@@ -202,13 +223,27 @@ function KPIView() {
         const file = e.target.files[0];
         if (!file) return;
 
+        // Frontend Filename Validation
+        const filenameRegex = /^KPI_K2MAC_(JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)_\d{4}\.xlsx$/i;
+        if (!filenameRegex.test(file.name)) {
+            setFeedbackModal({
+                type: 'error',
+                title: 'Invalid Filename',
+                message: 'The filename does not match the required format.',
+                subMessage: 'Expected: KPI_K2MAC_[MONTH]_[YEAR].xlsx (e.g., KPI_K2MAC_DECEMBER_2026.xlsx)',
+                onClose: () => setFeedbackModal(null)
+            });
+            e.target.value = null; // Reset input
+            return;
+        }
+
         const formData = new FormData();
         formData.append('kpiReport', file); 
 
         setLoading(true);
 
         try {
-            await api.post('/kpi/upload', formData, {
+            const res = await api.post('/kpi/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                     Authorization: `Bearer ${localStorage.getItem('token')}`
@@ -221,7 +256,17 @@ function KPIView() {
                 message: "KPI Report processed successfully.",
                 onClose: () => {
                     setFeedbackModal(null);
-                    refreshData(); 
+                    
+                    // Auto-switch to the uploaded report
+                    if (res.data.year && res.data.reportMonth) {
+                        setGraphYear(res.data.year.toString());
+                        setCurrentFilter(res.data.reportMonth);
+                        // Refresh data will happen via useEffect when currentFilter/graphYear changes
+                        // But we also need to refresh the list of available months
+                        fetchMonths();
+                    } else {
+                        refreshData();
+                    }
                 }
             });
 
@@ -348,6 +393,11 @@ function KPIView() {
         );
     };
 
+    // Filter available months based on selected graphYear
+    const monthsForSelectedYear = availableMonths.filter(m => 
+        new Date(m.value).getFullYear().toString() === graphYear
+    );
+
     return (
         <div className="kpi-container">
             {/* Header Section*/}
@@ -358,14 +408,50 @@ function KPIView() {
                 </div>
                 <div className="actions-right">
                     <div className="filter-group-bordered">
-                        <div style={{display: "flex", flexDirection: "row", gap: 5, alignItems: "center"}}>
-                        <span className="filter-label">Viewing:</span>
-                        <select className="month-select" value={currentFilter} onChange={handleFilterChange}>
-                            <option value="">Latest Upload</option>
-                            {availableMonths.map((m, idx) => (
-                                <option key={idx} value={m.value}>{m.label}</option>
-                            ))}
-                        </select>
+                        <div style={{display: "flex", flexDirection: "row", gap: 10, alignItems: "center"}}>
+                            
+                            {/* Year Selector */}
+                            <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
+                                <span className="filter-label">Year:</span>
+                                <select 
+                                    className="month-select" // Reusing same class for consistent style
+                                    value={graphYear} 
+                                    onChange={(e) => {
+                                        setGraphYear(e.target.value);
+                                        setCurrentFilter(''); // Reset month selection when year changes
+                                    }}
+                                    style={{minWidth: '80px'}}
+                                >
+                                    {availableYears.map(year => (
+                                        <option key={year} value={year}>{year}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Month Selector (Filtered by Year) */}
+                            <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
+                                <span className="filter-label">Month:</span>
+                                <select 
+                                    className="month-select" 
+                                    value={currentFilter} 
+                                    onChange={handleFilterChange}
+                                    style={{minWidth: '120px'}}
+                                >
+                                    <option value="">Yearly Average</option>
+                                    <optgroup label="Quarterly Averages">
+                                        <option value="Q1">Q1 (Jan-Mar)</option>
+                                        <option value="Q2">Q2 (Apr-Jun)</option>
+                                        <option value="Q3">Q3 (Jul-Sep)</option>
+                                        <option value="Q4">Q4 (Oct-Dec)</option>
+                                    </optgroup>
+                                    <optgroup label="Monthly Reports">
+                                        {monthsForSelectedYear.map((m, idx) => (
+                                            <option key={idx} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </optgroup>
+                                </select>
+                            </div>
+
                         </div>
                     </div>
                     <button className="manage-btn" onClick={() => setShowManageModal(true)}>⚙ Manage</button>
@@ -384,9 +470,9 @@ function KPIView() {
                     kpiScores.map((kpi, index) => {
                         const score = parseFloat(kpi.score);
                         let dynamicStatus = 'good';
-                        if (score < targetValue) {
+                        if (score < targetValue - 3) {
                             dynamicStatus = 'danger';
-                        } else if (score < targetValue + 1) {
+                        } else if (score < targetValue) {
                             dynamicStatus = 'warning';
                         }
                         
@@ -413,23 +499,7 @@ function KPIView() {
             <div className="chart-wrapper">
                 <div className="chart-header-row">
                     <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                        <label style={{fontSize: '13px', fontWeight: '600', color: '#555'}}>Year:</label>
-                        <select 
-                            value={graphYear} 
-                            onChange={(e) => setGraphYear(e.target.value)}
-                            style={{
-                                padding: '6px 12px',
-                                borderRadius: '6px',
-                                border: '1px solid #ddd',
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                fontWeight: '600'
-                            }}
-                        >
-                            {availableYears.map(year => (
-                                <option key={year} value={year}>{year}</option>
-                            ))}
-                        </select>
+                        
                         <div className="view-switcher">
                             <button 
                                 className={`switch-btn ${viewMode === 'monthly' ? 'active' : ''}`}

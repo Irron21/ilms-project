@@ -41,7 +41,7 @@ const loginLimiter = rateLimit({
 });
 
 app.use(cors({
-  origin: true, // This reflects the request origin back to the client (Allow Everyone)
+  origin: true, // Reflects the request origin
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
@@ -81,12 +81,6 @@ app.get('/', (req, res) => { res.send('K2Mac ILMS Backend is Running'); });
 
 // 1. PUBLIC ROUTES (No Login Required)
 app.post('/api/login', loginLimiter, authController.login); 
-app.use('/api/users', require('./routes/userRoutes'));
-
-// 2. PROTECTED ROUTES (Login Required)
-// It runs BEFORE shipmentRoutes. If verifyToken fails, shipmentRoutes never runs.
-app.use('/api/shipments', verifyToken, shipmentRoutes);
-app.use('/api/vehicles', require('./routes/vehicleRoutes'));
 // Apply Redis caching to KPI routes (cache for 5 minutes)
 const useCache = (duration) => {
     return (req, res, next) => {
@@ -99,6 +93,13 @@ const useCache = (duration) => {
         }
     };
 };
+
+app.use('/api/users', useCache(300), require('./routes/userRoutes'));
+
+// 2. PROTECTED ROUTES (Login Required)
+// It runs BEFORE shipmentRoutes. If verifyToken fails, shipmentRoutes never runs.
+app.use('/api/shipments', verifyToken, shipmentRoutes);
+app.use('/api/vehicles', useCache(300), require('./routes/vehicleRoutes'));
 
 // Use the smart wrapper instead of the direct cache
 app.use('/api/kpi', useCache(300), kpiRoutes);
