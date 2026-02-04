@@ -16,7 +16,8 @@ exports.login = (req, res) => {
             ul.isActive, 
             u.role, 
             u.firstName, 
-            u.lastName
+            u.lastName,
+            u.dateCreated
         FROM UserLogins ul
         JOIN Users u ON ul.userID = u.userID
         WHERE ul.employeeID = ?
@@ -73,7 +74,7 @@ exports.login = (req, res) => {
                     username: employeeID,
                     role: user.role,
                     fullName: `${user.firstName} ${user.lastName}`,
-                    dateCreated: new Date().toLocaleDateString()
+                    dateCreated: new Date(user.dateCreated).toLocaleDateString()
                 }
             });
         });
