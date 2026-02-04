@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const logActivity = require('../utils/activityLogger');
+const { clearCache } = require('../utils/cacheHelper');
 
 // GET VEHICLES
 exports.getAllVehicles = (req, res) => {
@@ -21,7 +22,8 @@ exports.restoreVehicle = (req, res) => {
     db.query(sql, [id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(adminID, 'RESTORE_VEHICLE', `Restored Vehicle - [ID: ${id}]`, () => {
+        logActivity(adminID, 'RESTORE_VEHICLE', `Restored Vehicle - [ID: ${id}]`, async () => {
+             await clearCache('cache:/api/vehicles*');
              res.json({ message: "Vehicle restored successfully" });
         });
     });
@@ -37,7 +39,8 @@ exports.createVehicle = (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const logDetails = `Created Vehicle - ${plateNo} (${type}) [ID: ${result.insertId}]`;
-        logActivity(adminID, 'CREATE_VEHICLE', logDetails, () => {
+        logActivity(adminID, 'CREATE_VEHICLE', logDetails, async () => {
+            await clearCache('cache:/api/vehicles*');
             res.json({ message: "Vehicle added successfully", id: result.insertId });
         });
     });
@@ -53,7 +56,8 @@ exports.updateVehicle = (req, res) => {
     db.query(sql, [plateNo, type, status, id], (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
 
-        logActivity(adminID, 'UPDATE_VEHICLE', `Updated Vehicle - ${plateNo} [ID: ${id}]`, () => {
+        logActivity(adminID, 'UPDATE_VEHICLE', `Updated Vehicle - ${plateNo} [ID: ${id}]`, async () => {
+             await clearCache('cache:/api/vehicles*');
              res.json({ message: "Vehicle updated successfully" });
         });
     });
@@ -94,7 +98,8 @@ exports.updateVehicleStatus = (req, res) => {
         db.query(sql, [status, id], (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            logActivity(adminID, 'UPDATE_VEHICLE_STATUS', `Updated Status - [ID: ${id}] to ${status}`, () => {
+            logActivity(adminID, 'UPDATE_VEHICLE_STATUS', `Updated Status - [ID: ${id}] to ${status}`, async () => {
+                await clearCache('cache:/api/vehicles*');
                 res.json({ message: "Status updated successfully" });
             });
         });
@@ -130,7 +135,8 @@ exports.deleteVehicle = (req, res) => {
         db.query(archiveSql, [id], (err) => {
             if (err) return res.status(500).json({ error: err.message });
 
-            logActivity(adminID, 'ARCHIVE_VEHICLE', `Archived Vehicle - [ID: ${id}]`, () => {
+            logActivity(adminID, 'ARCHIVE_VEHICLE', `Archived Vehicle - [ID: ${id}]`, async () => {
+                await clearCache('cache:/api/vehicles*');
                 res.json({ message: "Vehicle archived successfully" });
             });
         });

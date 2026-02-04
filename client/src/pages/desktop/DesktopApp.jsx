@@ -31,6 +31,10 @@ function DesktopApp({ user, token, onLogout }) {
         details,
         timestamp: new Date().toISOString()
       }, config);
+      
+      // Perform server-side logout
+      await api.post('/logout', {}, config);
+
     } catch {
       void 0;
     } finally {

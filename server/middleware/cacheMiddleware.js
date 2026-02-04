@@ -1,8 +1,13 @@
 const redisClient = require('../config/redis');
 
 const cache = (duration = 3600) => async (req, res, next) => {
-    // If Redis is not open/connected, skip caching to avoid crashing
+    // If Redis is not open/connected, skip caching
     if (!redisClient.isOpen) {
+        return next();
+    }
+
+    // Only cache GET requests
+    if (req.method !== 'GET') {
         return next();
     }
 

@@ -16,6 +16,8 @@ function ProfileModal({ user, onClose, onLogout, token }) {
         details: 'User logged out via Mobile App',
         timestamp: new Date().toISOString()
       }, config);
+      
+      await api.post('/logout', {}, config);
     } catch (error) {
       console.error('Failed to log logout activity:', error);
     } finally {

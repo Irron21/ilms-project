@@ -1,6 +1,7 @@
 const db = require('../config/db');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const redisClient = require('../config/redis'); // Import Redis
 
 const SECRET_KEY = process.env.JWT_SECRET; 
 
@@ -52,6 +53,11 @@ exports.login = (req, res) => {
         const token = jwt.sign({ id: user.userID, role: user.role }, SECRET_KEY, { expiresIn: '12h' });
 
         // 6. SAVE SESSION & LOG
+        // Cache active token in Redis for 12 hours
+        if (redisClient.isOpen) {
+            await redisClient.setEx(`session:${user.userID}`, 43200, token);
+        }
+
         const updateTokenSql = "UPDATE UserLogins SET activeToken = ? WHERE userID = ?";
         db.query(updateTokenSql, [token, user.userID], (updateErr) => {
             if (updateErr) console.error("Token Save Error:", updateErr);
@@ -71,5 +77,24 @@ exports.login = (req, res) => {
                 }
             });
         });
+    });
+};
+
+exports.logout = async (req, res) => {
+    const userID = req.user.id; // From verifyToken
+
+    // Clear from Redis
+    if (redisClient.isOpen) {
+        await redisClient.del(`session:${userID}`);
+    }
+
+    // Set activeToken to NULL
+    const sql = "UPDATE UserLogins SET activeToken = NULL WHERE userID = ?";
+    db.query(sql, [userID], (err) => {
+        if (err) {
+            console.error("Logout Error:", err);
+            return res.status(500).json({ error: "Logout failed" });
+        }
+        res.json({ message: "Logged out successfully" });
     });
 };

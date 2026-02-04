@@ -45,12 +45,17 @@ exports.getActiveShipments = (req, res) => {
 
     if (isDriverMode) {
         // --- MOBILE / DRIVER MODE ---
+        // Updated to include crewDetails so mobile users can see their partner
         sql = `
-            SELECT ${columns}
+            SELECT ${columns},
+                GROUP_CONCAT(CONCAT(sc_all.role, ':', u.firstName, ' ', u.lastName) SEPARATOR '|') AS crewDetails
             FROM Shipments s
             JOIN Vehicles v ON s.vehicleID = v.vehicleID 
-            JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
-            WHERE sc.userID = ? AND s.isArchived = 0 
+            JOIN ShipmentCrew sc_me ON s.shipmentID = sc_me.shipmentID
+            LEFT JOIN ShipmentCrew sc_all ON s.shipmentID = sc_all.shipmentID
+            LEFT JOIN Users u ON sc_all.userID = u.userID
+            WHERE sc_me.userID = ? AND s.isArchived = 0 
+            GROUP BY s.shipmentID
             ${sortLogic}
             ${limitClause}
         `;
