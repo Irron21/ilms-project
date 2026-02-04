@@ -26,7 +26,7 @@ redisClient.on('error', (err) => {
     console.warn('Redis Connection Failed (Caching Disabled):', err.message);
 });
 
-redisClient.on('connect', () => console.log('✅ Redis Client Connected'));
+redisClient.on('connect', () => console.log('Redis Client Connected'));
 
 // 3. Connect Asynchronously (Don't await it!)
 redisClient.connect().catch((err) => {
