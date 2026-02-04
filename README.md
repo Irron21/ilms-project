@@ -16,28 +16,13 @@ This repository contains a production-ready setup for the ILMS project using Doc
 
 ## 3. Deployment
 
-### Option A: Manual Deployment (Docker Compose)
+### Deployment (Manual)
 1. Copy the project to your server.
 2. Create a `.env` file in the root directory (use `.env.example` as a template).
 3. Run the following command to build and start the services:
    ```bash
    docker-compose up -d --build
    ```
-
-### Option B: Automated Deployment (GitHub Actions)
-The project includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) for CD.
-1. Push the code to a GitHub repository.
-2. Go to **Settings > Secrets and variables > Actions** and add the following Repository Secrets:
-   - `SERVER_HOST`: Your server's IP address.
-   - `SERVER_USER`: SSH username (e.g., `ubuntu` or `root`).
-   - `SSH_PRIVATE_KEY`: Your private SSH key content.
-   - `DB_USER`: Database username.
-   - `DB_PASSWORD`: Database password.
-   - `DB_ROOT_PASSWORD`: Database root password.
-   - `DB_NAME`: Database name.
-   - `JWT_SECRET`: Secret key for JWT.
-
-3. Pushing to the `main` branch will automatically deploy to your server.
 
 ## 4. Security Hardening
 A script is provided to set up the Firewall (UFW) and harden OpenSSH configurations.

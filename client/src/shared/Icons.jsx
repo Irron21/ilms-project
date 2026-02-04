@@ -25,7 +25,7 @@ export const Icons = {
     </svg>
   ),
   Truck: (props) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
       <rect x="1" y="3" width="15" height="13"></rect>
       <polygon points="16 8 20 8 23 11 23 16 16 16 16 8"></polygon>
       <circle cx="5.5" cy="18.5" r="2.5"></circle>

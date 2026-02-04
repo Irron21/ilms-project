@@ -296,7 +296,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         <div className="info-card-mob-grid">
           <div className="info-item item-id">
             <div className="info-icon-box">
-              <Icons.Truck />
+              <Icons.Truck size={18} />
             </div>
             <div className="info-content">
               <span className="info-label">Shipment ID</span>
