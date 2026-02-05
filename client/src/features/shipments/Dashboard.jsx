@@ -72,6 +72,15 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
     return false;
   });
 
+  // SORTING: For Completed tab, show NEWEST first.
+  if (activeTab === 'COMPLETED') {
+    filteredShipments.sort((a, b) => {
+      const dateA = getDateValue(a.deliveryDate) ? new Date(a.deliveryDate) : new Date(0);
+      const dateB = getDateValue(b.deliveryDate) ? new Date(b.deliveryDate) : new Date(0);
+      return dateB - dateA; 
+    });
+  }
+
   const getBannerContent = () => {
     const count = filteredShipments.length;
     if (activeTab === 'ACTIVE' && todayOnlyNewCount > 0) {

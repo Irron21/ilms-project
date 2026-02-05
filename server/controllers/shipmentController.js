@@ -54,7 +54,12 @@ exports.getActiveShipments = (req, res) => {
             JOIN ShipmentCrew sc_me ON s.shipmentID = sc_me.shipmentID
             LEFT JOIN ShipmentCrew sc_all ON s.shipmentID = sc_all.shipmentID
             LEFT JOIN Users u ON sc_all.userID = u.userID
-            WHERE sc_me.userID = ? AND s.isArchived = 0 
+            WHERE sc_me.userID = ? 
+              AND s.isArchived = 0 
+              AND (
+                  s.currentStatus != 'Completed' 
+                  OR (s.currentStatus = 'Completed' AND s.deliveryDate >= DATE_SUB(CURDATE(), INTERVAL 30 DAY))
+              )
             GROUP BY s.shipmentID
             ${sortLogic}
             ${limitClause}
