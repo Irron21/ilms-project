@@ -631,6 +631,16 @@ function ShipmentView({ user, token, onLogout }) {
                             <span className="tab-badge">{getCount(tab)}</span>
                         </div>
                     ))}
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px', fontSize: '11px', fontWeight: '600', color: '#666', paddingBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px" }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F2C94C' }}></span>
+                            <span>Pending</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px"}}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#27AE60' }}></span>
+                            <span>Completed</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="table-controls">
