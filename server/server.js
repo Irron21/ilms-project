@@ -37,19 +37,19 @@ app.use(cors({
 // Scalability Middleware (Compression)
 app.use(compression());
 
-// Rate Limiting (General: 1000 requests per 15 minutes)
+// Rate Limiting (General: 300 requests per minute)
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 1000, 
+  windowMs: 1 * 60 * 1000, 
+  max: 300, 
   standardHeaders: true, 
   legacyHeaders: false,
   message: "Too many requests from this IP, please try again later."
 });
 app.use(limiter);
 
-// Strict Rate Limiting for Login (5 attempts per hour)
+// Strict Rate Limiting for Login (10 attempts every 15 minutes)
 const loginLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
+  windowMs: 15 * 60 * 1000,
   max: 10,
   message: "Too many login attempts, please try again later."
 });
