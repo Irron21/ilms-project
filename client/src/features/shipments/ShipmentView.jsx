@@ -1,5 +1,5 @@
 import React from 'react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal, PaginationControls } from '@shared';
 import { PHASE_ORDER, EXPORT_COLUMNS, MONTH_NAMES, getTodayString, getDateValue, formatDateDisplay, getMonthValue, formatMonthDisplay } from '@constants';
@@ -14,6 +14,8 @@ function ShipmentView({ user, token, onLogout }) {
 
     // Filters
     const [dateFilter, setDateFilter] = useState(''); 
+    const [routeFilter, setRouteFilter] = useState('');
+    const [crewFilter, setCrewFilter] = useState('');
     const [showArchived, setShowArchived] = useState(false); 
     const [sortConfig, setSortConfig] = useState({ key: 'loadingDate', direction: 'desc' });
 
@@ -398,9 +400,9 @@ function ShipmentView({ user, token, onLogout }) {
     };
 
     // --- TAB FILTERING ---
-    const filterByTab = (items) => {
+    const tabFiltered = useMemo(() => {
         const today = getTodayString();
-        return items.filter(s => {
+        return shipments.filter(s => {
             const loadDate = getDateValue(s.loadingDate);
             const delDate = getDateValue(s.deliveryDate);
             const isCompleted = s.currentStatus === 'Completed';
@@ -412,10 +414,9 @@ function ShipmentView({ user, token, onLogout }) {
                 case 'Active': default: return !isCompleted && loadDate === today;
             }
         });
-    };
-    const tabFiltered = filterByTab(shipments);
+    }, [shipments, activeTab]);
 
-    const getFilterOptions = () => {
+    const filterOptions = useMemo(() => {
         if (activeTab === 'Completed') {
             const months = tabFiltered.map(s => s.loadingDate ? getMonthValue(s.loadingDate) : null).filter(Boolean);
             const uniqueMonths = [...new Set(months)].sort().reverse();
@@ -433,9 +434,28 @@ function ShipmentView({ user, token, onLogout }) {
                 count: tabFiltered.filter(s => s.loadingDate && getDateValue(s.loadingDate) === d).length
             }));
         }
-    };
+    }, [tabFiltered, activeTab]);
 
-    const filterOptions = getFilterOptions();
+    const tabRoutes = useMemo(() => {
+        const routes = tabFiltered.map(s => s.destLocation).filter(Boolean);
+        return [...new Set(routes)].sort();
+    }, [tabFiltered]);
+
+    const tabCrew = useMemo(() => {
+        const crew = new Set();
+        tabFiltered.forEach(s => {
+            if (s.crewDetails) {
+                s.crewDetails.split('|').forEach(c => {
+                    const parts = c.split(':');
+                    if (parts.length > 1) {
+                        const name = parts[1].trim();
+                        if (name) crew.add(name);
+                    }
+                });
+            }
+        });
+        return [...crew].sort();
+    }, [tabFiltered]);
 
     const getDisplayStatus = (dbStatus) => {
         if (dbStatus === 'Pending') return 'Arrival'; 
@@ -495,8 +515,7 @@ function ShipmentView({ user, token, onLogout }) {
         setSortConfig({ key, direction });
     };
 
-    const finalFiltered = shipments.filter(s => {
-        if (getShipmentCategory(s) !== activeTab) return false;
+    const finalFiltered = useMemo(() => tabFiltered.filter(s => {
         if (activeTab !== 'Active') {
             const sYear = new Date(s.loadingDate).getFullYear().toString();
             if (sYear !== filterYear) return false;
@@ -509,10 +528,21 @@ function ShipmentView({ user, token, onLogout }) {
             const displayStatus = getDisplayStatus(s.currentStatus);
             if (displayStatus !== statusFilter) return false;
         }
-        return true;
-    });
 
-    const sortedShipments = [...finalFiltered].sort((a, b) => {
+        if (routeFilter && (!s.destLocation || !s.destLocation.toLowerCase().includes(routeFilter.toLowerCase()))) return false;
+        
+        if (crewFilter) {
+             if (!s.crewDetails) return false;
+             // Check if any name in the crew string matches the filter
+             // crewDetails format: "Role:Name|Role:Name"
+             const names = s.crewDetails.split('|').map(c => c.split(':')[1]?.trim().toLowerCase());
+             if (!names.some(n => n && n.includes(crewFilter.toLowerCase()))) return false;
+        }
+
+        return true;
+    }), [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter]);
+
+    const sortedShipments = useMemo(() => [...finalFiltered].sort((a, b) => {
         const { key, direction } = sortConfig;
 
         // 1. STATUS SORTING
@@ -545,7 +575,7 @@ function ShipmentView({ user, token, onLogout }) {
         }
 
         return 0;
-    });
+    }), [finalFiltered, sortConfig]);
 
     const getDisplayColor = (dbStatus) => {
         if (dbStatus === 'Pending') return '#EB5757'; 
@@ -576,7 +606,7 @@ function ShipmentView({ user, token, onLogout }) {
         };
     };
 
-    const paginatedShipments = sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+    const paginatedShipments = useMemo(() => sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage), [sortedShipments, currentPage]);
 
     const getCount = (tabName) => {
         return shipments.filter(s => {
@@ -625,12 +655,29 @@ function ShipmentView({ user, token, onLogout }) {
                         <div 
                             key={tab} 
                             className={`desktop-tab tab-type-${tab.toLowerCase()} ${activeTab === tab ? 'selected' : ''}`}
-                            onClick={() => { setActiveTab(tab); setCurrentPage(1); setStatusFilter('All'); setDateFilter(''); }}
+                            onClick={() => { 
+                                setActiveTab(tab); 
+                                setCurrentPage(1); 
+                                setStatusFilter('All'); 
+                                setDateFilter(''); 
+                                setRouteFilter(''); 
+                                setCrewFilter(''); 
+                            }}
                         >
                             {tab}
                             <span className="tab-badge">{getCount(tab)}</span>
                         </div>
                     ))}
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px', fontSize: '11px', fontWeight: '600', color: '#666', paddingBottom: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px" }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F2C94C' }}></span>
+                            <span>Pending</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px"}}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#27AE60' }}></span>
+                            <span>Completed</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="table-controls">
@@ -677,9 +724,44 @@ function ShipmentView({ user, token, onLogout }) {
                             </div>
                             
                         </div>   
-                        <div style={{width:'1px', height:'35px', background:'#eee'}}></div>            
+                                  
                             </>
                         )}
+                        <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
+                        
+                        <div className="filter-group">
+                             <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Route</label>
+                                <input 
+                                    type="text" 
+                                    list={routeFilter.length > 0 ? "route-filter-list" : undefined}
+                                    placeholder="All Routes"
+                                    value={routeFilter}
+                                    onChange={(e) => { setRouteFilter(e.target.value); setCurrentPage(1); }}
+                                    style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '100px', outline: 'none'}}
+                                />
+                                <datalist id="route-filter-list">
+                                    {tabRoutes.map(r => <option key={r} value={r} />)}
+                                </datalist>
+                            </div>
+                        </div>
+
+                        <div className="filter-group">
+                             <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Crew</label>
+                                <input 
+                                    type="text" 
+                                    list={crewFilter.length > 0 ? "crew-filter-list" : undefined}
+                                    placeholder="All Crew"
+                                    value={crewFilter}
+                                    onChange={(e) => { setCrewFilter(e.target.value); setCurrentPage(1); }}
+                                    style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '100px', outline: 'none'}}
+                                />
+                                <datalist id="crew-filter-list">
+                                    {tabCrew.map(c => <option key={c} value={c} />)}
+                                </datalist>
+                            </div>
+                        </div>
 
                         <div className="filter-group">
                             <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setCurrentPage(1); }}>

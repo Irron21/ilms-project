@@ -20,6 +20,7 @@ function UserManagement({ activeTab = "users" }) {
 
   // Filters
   const [roleFilter, setRoleFilter] = useState('All');
+  const [searchTerm, setSearchTerm] = useState('');
   const [truckFilter, setTruckFilter] = useState('All');
   
   // LOGS FILTERS (Updated)
@@ -295,7 +296,16 @@ function UserManagement({ activeTab = "users" }) {
   };
 
   const renderUserView = () => {
-    const filteredUsers = users.filter(user => roleFilter === 'All' || user.role.toLowerCase() === roleFilter.toLowerCase());
+    const filteredUsers = users.filter(user => {
+      const matchesRole = roleFilter === 'All' || user.role.toLowerCase() === roleFilter.toLowerCase();
+      const searchLower = searchTerm.toLowerCase();
+      const fullName = `${user.firstName} ${user.lastName}`.toLowerCase();
+      const matchesSearch = searchTerm === '' || 
+                            fullName.includes(searchLower) || 
+                            (user.employeeID && user.employeeID.toLowerCase().includes(searchLower));
+      return matchesRole && matchesSearch;
+    });
+
     const sortedUsers = [...filteredUsers].sort((a, b) => {
         const dateA = new Date(a.dateCreated || 0);
         const dateB = new Date(b.dateCreated || 0);
@@ -306,11 +316,22 @@ function UserManagement({ activeTab = "users" }) {
     return (
       <div className="user-mgmt-container">
         <div className="header-actions">
-            <div className="filter-group-inline">
+            <div className="filter-group-inline">         
                 <label>Filter by Role:</label>
                 <select value={roleFilter} onChange={(e) => {setRoleFilter(e.target.value); setUserPage(1);}} className="role-filter-dropdown">
                     <option value="All">All Roles</option><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option>
                 </select>
+                <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
+                <div style={{display:'flex', flexDirection:'column', marginRight:'15px'}}>
+                    <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Search</label>
+                    <input 
+                        type="text" 
+                        placeholder="Name or ID..." 
+                        value={searchTerm} 
+                        onChange={(e) => { setSearchTerm(e.target.value); setUserPage(1); }} 
+                        style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '150px', outline: 'none', padding:'2px 0'}}
+                    />
+                </div>
                 <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setUserPage(1); }}>
                     {showArchived ? '← Back to Active' : 'View Archived'}
                 </button>
@@ -329,7 +350,9 @@ function UserManagement({ activeTab = "users" }) {
               {paginatedUsers.length > 0 ? paginatedUsers.map(u => (
                 <tr key={u.userID}>
                   <td style={{fontWeight:'700', color:'#555'}}>{u.employeeID || 'N/A'}</td>
-                  <td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td><td>{u.email || '-'}</td><td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
+                  <td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td>
+                  <td style={{ whiteSpace: 'normal', wordBreak: 'break-all', minWidth: '150px' }}>{u.email || '-'}</td>
+                  <td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                   <td className="action-cells">
                   {showArchived ? (<button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>) : 
                   (<><button className="icon-btn" onClick={() => initiateResetPassword(u)} title="Reset Password"><Icons.Key size={18} /></button><button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button><button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button></>)}

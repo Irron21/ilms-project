@@ -430,7 +430,7 @@ function KPIView() {
 
                             {/* Month Selector (Filtered by Year) */}
                             <div style={{display:'flex', alignItems:'center', gap:'5px'}}>
-                                <span className="filter-label">Month:</span>
+                                <span className="filter-label">Timeframe:</span>
                                 <select 
                                     className="month-select" 
                                     value={currentFilter} 
@@ -490,7 +490,7 @@ function KPIView() {
                         );
                     })
                 ) : (
-                    <div style={{gridColumn:'1 / -1', textAlign:'center', padding:'20px', color:'#999'}}>
+                    <div style={{gridColumn:'1 / -1', display:'flex', alignItems:'center', justifyContent:'center', height:'90px', color:'#999'}}>
                         {!loading && "No data found for this month."}
                     </div>
                 )}

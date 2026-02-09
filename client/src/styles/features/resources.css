@@ -22,7 +22,7 @@
 .filter-group-inline {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 20px;
 }
 
 .filter-group-inline label {
