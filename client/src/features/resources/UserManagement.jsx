@@ -316,21 +316,22 @@ function UserManagement({ activeTab = "users" }) {
     return (
       <div className="user-mgmt-container">
         <div className="header-actions">
-            <div className="filter-group-inline">
-                <div className="search-box-wrapper" style={{ display: 'flex', alignItems: 'center', background: '#fff', border: '1px solid #ddd', borderRadius: '6px', padding: '0 8px', marginRight: '10px' }}>
-                    <Icons.Search size={16} color="#999" />
-                    <input 
-                        type="text" 
-                        placeholder="Search Name or ID..." 
-                        value={searchTerm} 
-                        onChange={(e) => { setSearchTerm(e.target.value); setUserPage(1); }} 
-                        style={{ border: 'none', outline: 'none', padding: '6px 8px', fontSize: '13px', width: '180px' }}
-                    />
-                </div>
+            <div className="filter-group-inline">         
                 <label>Filter by Role:</label>
                 <select value={roleFilter} onChange={(e) => {setRoleFilter(e.target.value); setUserPage(1);}} className="role-filter-dropdown">
                     <option value="All">All Roles</option><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option>
                 </select>
+                <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
+                <div style={{display:'flex', flexDirection:'column', marginRight:'15px'}}>
+                    <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Search</label>
+                    <input 
+                        type="text" 
+                        placeholder="Name or ID..." 
+                        value={searchTerm} 
+                        onChange={(e) => { setSearchTerm(e.target.value); setUserPage(1); }} 
+                        style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '150px', outline: 'none', padding:'2px 0'}}
+                    />
+                </div>
                 <button className={`archive-toggle-btn ${showArchived ? 'active' : ''}`} onClick={() => { setShowArchived(!showArchived); setUserPage(1); }}>
                     {showArchived ? '← Back to Active' : 'View Archived'}
                 </button>
