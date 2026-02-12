@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { Icons } from '@shared';
 import { getTodayString, getDateValue, formatDateDisplay } from '@constants';
 import '@styles/features/shipments.css';
 
-function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
+const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => {
   const [isAtBottom, setIsAtBottom] = useState(false);
   const [seenShipments, setSeenShipments] = useState(() => {
     try {
@@ -47,9 +47,20 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
     onCardClick(shipment);
   };
 
-  const getCardStyle = (status) => {
+  const getCardStyle = (shipment) => {
+    const today = getTodayString();
+    const delDate = getDateValue(shipment.deliveryDate);
+    const loadDate = getDateValue(shipment.loadingDate);
+    const status = shipment.currentStatus;
+
     if (status === 'Completed') return { class: 'card-green', label: 'COMPLETED' };
-    if (status === 'Pending') return { class: 'card-blue', label: 'TO DELIVER' };
+    
+    // In Transit: Explicitly Loaded but not yet delivery day
+    if (status === 'Loaded' && delDate > today) {
+        return { class: 'card-blue', label: 'IN TRANSIT' };
+    }
+
+    if (status === 'Pending') return { class: 'card-blue', label: 'TO LOAD' };
     return { class: 'card-yellow', label: 'IN PROGRESS' };
   };
 
@@ -62,11 +73,15 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
 
     if (s.currentStatus !== 'Completed') {
       if (activeTab === 'DELAYED') return delDate && delDate < today;
-      if (activeTab === 'UPCOMING') return loadDate > today;
+      if (activeTab === 'UPCOMING') return loadDate > today && s.currentStatus === 'Pending';
       if (activeTab === 'ACTIVE') {
-        const isLoadActive = loadDate <= today || !loadDate;
-        const isDeliveryValid = !delDate || delDate >= today;
-        return isLoadActive && isDeliveryValid;
+        // Active if:
+        // 1. Loading date is today or passed (and not delayed/completed)
+        // 2. OR it has been explicitly loaded (even if early)
+        // 3. AND delivery date is today or in the future
+        const isStarted = (loadDate && loadDate <= today) || s.currentStatus === 'Loaded';
+        const isNotYetDelayed = !delDate || delDate >= today;
+        return isStarted && isNotYetDelayed;
       }
     }
     return false;
@@ -136,20 +151,26 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
         )}
 
         {filteredShipments.map((shipment) => {
-          const style = getCardStyle(shipment.currentStatus);
+          const style = getCardStyle(shipment);
           const isNew = shipment.currentStatus === 'Pending' && isNewlyAssigned(shipment.creationTimestamp, shipment.shipmentID);
           const isDelayed = activeTab === 'DELAYED';
           const isUpcoming = activeTab === 'UPCOMING';
+          const isInTransit = style.label === 'IN TRANSIT';
           const cardClass = isDelayed ? 'card-yellow' : style.class;
 
           return (
             <div
               key={shipment.shipmentID}
-              className={`shipment-card ${cardClass} ${isUpcoming ? 'disabled-card upcoming-card' : ''}`}
-              onClick={isUpcoming ? undefined : () => handleCardClick(shipment)}
-              style={isDelayed ? { borderLeft: '5px solid #c0392b' } : {}}
+              className={`shipment-card ${cardClass} ${isUpcoming ? 'disabled-card upcoming-card' : ''} ${isInTransit ? 'transit-card' : ''}`}
+              onClick={(isUpcoming || isInTransit) ? undefined : () => handleCardClick(shipment)}
             >
-              {isUpcoming ? <div className="new-badge scheduled">SCHEDULED</div> : (isNew && <div className="new-badge">NEW</div>)}
+              {isUpcoming ? (
+                <div className="new-badge scheduled">SCHEDULED</div>
+              ) : isInTransit ? (
+                <div className="new-badge transit">IN TRANSIT</div>
+              ) : (
+                isNew && <div className="new-badge">NEW</div>
+              )}
               <div>
                 <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>
                 <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px" }}>
@@ -186,6 +207,6 @@ function Dashboard({ shipments, activeTab, setActiveTab, onCardClick }) {
       </div>
     </div>
   );
-}
+});
 
 export default Dashboard;

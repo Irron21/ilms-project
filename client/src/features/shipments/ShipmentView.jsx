@@ -16,6 +16,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [dateFilter, setDateFilter] = useState(''); 
     const [routeFilter, setRouteFilter] = useState('');
     const [crewFilter, setCrewFilter] = useState('');
+    const [delayTypeFilter, setDelayTypeFilter] = useState('All'); // 'All', 'Loading', 'Delivery'
     const [showArchived, setShowArchived] = useState(false); 
     const [sortConfig, setSortConfig] = useState({ key: 'loadingDate', direction: 'desc' });
 
@@ -411,7 +412,12 @@ function ShipmentView({ user, token, onLogout }) {
                 case 'Completed': return isCompleted;
                 case 'Delayed': return !isCompleted && delDate && delDate < today;
                 case 'Upcoming': return !isCompleted && loadDate > today;
-                case 'Active': default: return !isCompleted && loadDate === today;
+                case 'Active': default: 
+                    // Show if delivering today OR if loaded/in-transit for future delivery
+                    return !isCompleted && (
+                        (delDate === today) || 
+                        (loadDate <= today && delDate > today)
+                    );
             }
         });
     }, [shipments, activeTab]);
@@ -457,27 +463,107 @@ function ShipmentView({ user, token, onLogout }) {
         return [...crew].sort();
     }, [tabFiltered]);
 
-    const getDisplayStatus = (dbStatus) => {
-        if (dbStatus === 'Pending') return 'Arrival'; 
+    const getDisplayStatus = (s) => {
+        const dbStatus = s.currentStatus;
+        const today = getTodayString();
+        const delDate = getDateValue(s.deliveryDate);
+        const loadDate = getDateValue(s.loadingDate);
+
         if (dbStatus === 'Completed') return 'Completed';
+        
+        // In Transit check
+        if (dbStatus === 'Loaded' && delDate > today) return 'In Transit';
+
+        if (dbStatus === 'Pending') return 'To Load'; 
         const idx = PHASE_ORDER.indexOf(dbStatus);
         if (idx !== -1 && idx < PHASE_ORDER.length - 1) return PHASE_ORDER[idx + 1];
         if (idx === PHASE_ORDER.length - 1) return 'Completed';
         return dbStatus; 
     };
 
+    const getDaysDelayed = (s) => {
+        const today = new Date(getTodayString());
+        const loadDate = s.loadingDate ? new Date(s.loadingDate) : null;
+        const delDate = s.deliveryDate ? new Date(s.deliveryDate) : null;
+        
+        // 1. Delivery Delay
+        if (delDate && delDate < today) {
+            const diffTime = Math.abs(today - delDate);
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        }
+
+        // 2. Loading Delay
+        if (loadDate && loadDate < today && s.currentStatus === 'Pending') {
+            const diffTime = Math.abs(today - loadDate);
+            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        return 0;
+    };
+
+    const isAtRisk = (s) => {
+        const today = getTodayString();
+        const loadDate = getDateValue(s.loadingDate);
+        const delDate = getDateValue(s.deliveryDate);
+        
+        if (s.currentStatus === 'Completed') return false;
+
+        // Due for Loading Today (and not yet loaded)
+        if (loadDate === today && s.currentStatus === 'Pending') return true;
+
+        // Due for Delivery Today (and not yet completed)
+        if (delDate === today && s.currentStatus !== 'Completed') return true;
+
+        return false;
+    };
+
+    // --- DELAY REASON MODAL STATE ---
+    const [showDelayReasonModal, setShowDelayReasonModal] = useState(false);
+    const [delayReasonData, setDelayReasonData] = useState({ id: null, reason: '' });
+
+    const openDelayReasonModal = (id, currentReason) => {
+        setDelayReasonData({ id, reason: currentReason || '' });
+        setShowDelayReasonModal(true);
+    };
+
+    const handleDelayReasonSubmit = async (e) => {
+        e.preventDefault();
+        try {
+            await api.put(`/shipments/${delayReasonData.id}/delay-reason`, 
+                { reason: delayReasonData.reason, userID: user.userID }, 
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+            fetchData(true);
+            setShowDelayReasonModal(false);
+            setFeedbackModal({ type: 'success', title: 'Reason Updated', message: 'Delay reason saved successfully.', onClose: () => setFeedbackModal(null) });
+        } catch (err) {
+            console.error("Failed to update reason:", err);
+            setFeedbackModal({ type: 'error', title: 'Update Failed', message: 'Could not save delay reason.', onClose: () => setFeedbackModal(null) });
+        }
+    };
+
+    const updateDelayReason = (id, reason) => {
+        openDelayReasonModal(id, reason);
+    };
+
+    // --- RENDER HELPERS ---
+
     // 1. Get Years from Data
-    const availableYears = [...new Set(shipments.map(s => new Date(s.loadingDate).getFullYear().toString()))].sort().reverse();
-    // Ensure current year is always an option even if no data yet
-    if (!availableYears.includes(new Date().getFullYear().toString())) {
-        availableYears.unshift(new Date().getFullYear().toString());
-    }
+    const availableYears = useMemo(() => {
+        const years = [...new Set(shipments.map(s => new Date(s.loadingDate).getFullYear().toString()))].sort().reverse();
+        if (!years.includes(new Date().getFullYear().toString())) {
+            years.unshift(new Date().getFullYear().toString());
+        }
+        return years;
+    }, [shipments]);
 
     // 2. Get Months based on Selected Year
-    const availableMonths = [...new Set(shipments
-        .filter(s => new Date(s.loadingDate).getFullYear().toString() === filterYear)
-        .map(s => new Date(s.loadingDate).getMonth())
-    )].sort((a,b) => a - b);
+    const availableMonths = useMemo(() => {
+        return [...new Set(shipments
+            .filter(s => new Date(s.loadingDate).getFullYear().toString() === filterYear)
+            .map(s => new Date(s.loadingDate).getMonth())
+        )].sort((a,b) => a - b);
+    }, [shipments, filterYear]);
 
     const getShipmentCategory = (s) => {
         const today = getTodayString();
@@ -501,9 +587,12 @@ function ShipmentView({ user, token, onLogout }) {
         if (loadDate && loadDate < today && s.currentStatus === 'Pending') return 'Delayed';
 
         // 3. Upcoming Tab
-        if (loadDate && loadDate > today) return 'Upcoming';
+        if (loadDate && loadDate > today && s.currentStatus === 'Pending') return 'Upcoming';
         
-        // 4. Active Tab (Fallback)
+        // 4. In Transit (Explicitly Loaded but not yet delivery date)
+        if (s.currentStatus === 'Loaded' && delDate > today) return 'In Transit';
+
+        // 5. Active Tab (Fallback)
         return 'Active';
     };
 
@@ -515,32 +604,58 @@ function ShipmentView({ user, token, onLogout }) {
         setSortConfig({ key, direction });
     };
 
-    const finalFiltered = useMemo(() => tabFiltered.filter(s => {
-        if (activeTab !== 'Active') {
-            const sYear = new Date(s.loadingDate).getFullYear().toString();
-            if (sYear !== filterYear) return false;
-            if (filterMonth !== 'All') {
-                const sMonth = new Date(s.loadingDate).getMonth();
-                if (sMonth !== parseInt(filterMonth)) return false;
+    const finalFiltered = useMemo(() => {
+        // Optimize: Calculate common values once
+        const todayStr = getTodayString();
+        const filterNameLower = routeFilter.toLowerCase();
+        const filterCrewLower = crewFilter.toLowerCase();
+        const isDelayedTab = activeTab === 'Delayed';
+        const isLoadingFilter = delayTypeFilter === 'Loading';
+        const isDeliveryFilter = delayTypeFilter === 'Delivery';
+
+        return tabFiltered.filter(s => {
+            // 1. Year/Month Filter (Skip for Active)
+            if (activeTab !== 'Active') {
+                // Optimize: Use string manipulation instead of new Date()
+                const sYear = s.loadingDate ? String(s.loadingDate).substring(0, 4) : '';
+                if (sYear !== filterYear) return false;
+                
+                if (filterMonth !== 'All') {
+                    // Optimize: Parse month from string YYYY-MM
+                    const sMonth = s.loadingDate ? parseInt(String(s.loadingDate).substring(5, 7)) - 1 : -1;
+                    if (sMonth !== parseInt(filterMonth)) return false;
+                }
             }
-        }
-        if (activeTab === 'Active' && statusFilter !== 'All') {
-            const displayStatus = getDisplayStatus(s.currentStatus);
-            if (displayStatus !== statusFilter) return false;
-        }
 
-        if (routeFilter && (!s.destLocation || !s.destLocation.toLowerCase().includes(routeFilter.toLowerCase()))) return false;
-        
-        if (crewFilter) {
-             if (!s.crewDetails) return false;
-             // Check if any name in the crew string matches the filter
-             // crewDetails format: "Role:Name|Role:Name"
-             const names = s.crewDetails.split('|').map(c => c.split(':')[1]?.trim().toLowerCase());
-             if (!names.some(n => n && n.includes(crewFilter.toLowerCase()))) return false;
-        }
+            // 2. Active Status Filter
+            if (activeTab === 'Active' && statusFilter !== 'All') {
+                const displayStatus = getDisplayStatus(s);
+                if (displayStatus !== statusFilter) return false;
+            }
 
-        return true;
-    }), [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter]);
+            // 3. Delayed Type Filter (Optimized)
+            if (isDelayedTab) {
+                 const loadDateVal = s.loadingDate ? String(s.loadingDate).substring(0, 10) : '';
+                 // Loading Delay: Pending + Past Load Date
+                 const isLoadingDelay = loadDateVal && loadDateVal < todayStr && s.currentStatus === 'Pending';
+                 
+                 if (isLoadingFilter && !isLoadingDelay) return false;
+                 if (isDeliveryFilter && isLoadingDelay) return false;
+            }
+
+            // 4. Route Filter
+            if (routeFilter && (!s.destLocation || !s.destLocation.toLowerCase().includes(filterNameLower))) return false;
+            
+            // 5. Crew Filter
+            if (crewFilter) {
+                 if (!s.crewDetails) return false;
+                 const names = s.crewDetails.split('|').map(c => c.split(':')[1]?.trim().toLowerCase());
+                 if (!names.some(n => n && n.includes(filterCrewLower))) return false;
+            }
+
+            return true;
+        });
+    }, [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter, delayTypeFilter]);
 
     const sortedShipments = useMemo(() => [...finalFiltered].sort((a, b) => {
         const { key, direction } = sortConfig;
@@ -577,10 +692,15 @@ function ShipmentView({ user, token, onLogout }) {
         return 0;
     }), [finalFiltered, sortConfig]);
 
-    const getDisplayColor = (dbStatus) => {
-        if (dbStatus === 'Pending') return '#EB5757'; 
-        const displayStatus = getDisplayStatus(dbStatus);
-        if (displayStatus === 'Completed') return '#27AE60'; 
+    const getDisplayColor = (s) => {
+        const dbStatus = s.currentStatus;
+        const today = getTodayString();
+        const delDate = getDateValue(s.deliveryDate);
+        const loadDate = getDateValue(s.loadingDate);
+
+        if (dbStatus === 'Completed') return '#27AE60';
+        if (dbStatus === 'Loaded' && delDate > today) return '#2980b9'; // Blue for In Transit
+        if (dbStatus === 'Pending') return '#F2C94C'; // Orange for Pending/To Load
         return '#F2C94C'; 
     };
 
@@ -589,7 +709,7 @@ function ShipmentView({ user, token, onLogout }) {
         const phases = PHASE_ORDER;
         const currentIndex = phases.indexOf(dbStatus); 
         const phaseIndex = phases.indexOf(phase);
-        if (dbStatus === 'Pending') { if (phase === 'Arrival') return 'active'; return 'pending'; }
+        if (dbStatus === 'Pending') { if (phase === 'Loaded') return 'active'; return 'pending'; }
         if (phaseIndex <= currentIndex) return 'completed'; 
         if (phaseIndex === currentIndex + 1) return 'active'; 
         return 'pending'; 
@@ -670,6 +790,14 @@ function ShipmentView({ user, token, onLogout }) {
                     ))}
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '15px', fontSize: '11px', fontWeight: '600', color: '#666', paddingBottom: '8px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px" }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#c0392b' }}></span>
+                            <span>Delayed</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px" }}>
+                            <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#2980b9' }}></span>
+                            <span>In Transit</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: "13px" }}>
                             <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#F2C94C' }}></span>
                             <span>Pending</span>
                         </div>
@@ -687,7 +815,8 @@ function ShipmentView({ user, token, onLogout }) {
                                 <label>Phase:</label>
                                 <select value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }} className="status-select">
                                     <option value="All">All Phases</option>
-                                    <option value="Arrival">Arrival (Pending)</option>
+                                    <option value="Pending">To Load (Pending)</option>
+                                    <option value="In Transit">In Transit (Loaded)</option>
                                     {PHASE_ORDER.slice(1).map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                             </div>
@@ -708,6 +837,24 @@ function ShipmentView({ user, token, onLogout }) {
                             </div>
                             
                             <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+                            
+                            {activeTab === 'Delayed' && (
+                                <>
+                                    <div style={{display:'flex', flexDirection:'column'}}>
+                                        <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Type</label>
+                                        <select 
+                                            value={delayTypeFilter} 
+                                            onChange={(e) => { setDelayTypeFilter(e.target.value); setCurrentPage(1); }}
+                                            style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer'}}
+                                        >
+                                            <option value="All">All Delays</option>
+                                            <option value="Loading">Loading Delay</option>
+                                            <option value="Delivery">Delivery Delay</option>
+                                        </select>
+                                    </div>
+                                    <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+                                </>
+                            )}
 
                             <div style={{display:'flex', flexDirection:'column'}}>
                                 <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Month</label>
@@ -811,18 +958,43 @@ function ShipmentView({ user, token, onLogout }) {
                         {paginatedShipments.length > 0 ? paginatedShipments.map(s => {
                             const isOpen = expandedShipmentID === s.shipmentID;
                             const isClosing = closingId === s.shipmentID;
-                            const displayStatus = getDisplayStatus(s.currentStatus);
-                            const displayColor = getDisplayColor(s.currentStatus);
+                            const displayStatus = getDisplayStatus(s);
+                            const displayColor = getDisplayColor(s);
                             const isFlashing = flashingIds.includes(s.shipmentID);
                             const isDelayedRow = activeTab === 'Delayed';
+                            const daysDelayed = isDelayedRow ? getDaysDelayed(s) : 0;
+                            const atRisk = activeTab === 'Active' && isAtRisk(s);
 
                             return (
                             <React.Fragment key={s.shipmentID}>
                                 <tr className={isOpen ? 'row-active' : ''}>
                                     <td>{s.shipmentID}</td>
-                                    <td>
-                                        <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
-                                        {isDelayedRow ? <span style={{color: '#c0392b', fontWeight: 'bold'}}>Delayed</span> : displayStatus}
+                                    <td className="status-cell-visible">
+                                        <div className="status-cell-flex">
+                                            <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
+                                            {isDelayedRow ? (
+                                                <div className="status-cell-delayed">
+                                                    <span style={{color: '#c0392b', fontWeight: 'bold'}}>Delayed (+{daysDelayed}d)</span>
+                                                    <span 
+                                                        className="delay-reason-link" 
+                                                        onClick={(e) => { e.stopPropagation(); updateDelayReason(s.shipmentID, s.delayReason); }}
+                                                        title={s.delayReason ? "Edit Reason" : "Add Reason"}
+                                                    >
+                                                        {s.delayReason ? <Icons.Edit size={12} /> : <span style={{fontSize:'10px', textDecoration:'underline'}}>Reason</span>}
+                                                    </span>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    {displayStatus}
+                                                    {atRisk && (
+                                                        <span className="tooltip-container" style={{marginLeft:'6px', color:'#e67e22'}}>
+                                                            <Icons.Clock size={14} />
+                                                            <span className="tooltip-text">Due Today</span>
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
+                                        </div>
                                     </td>
                                     <td>{s.destName}</td>
                                     <td>{s.destLocation}</td>
@@ -1181,6 +1353,39 @@ function ShipmentView({ user, token, onLogout }) {
                                 <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download Report</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* --- DELAY REASON MODAL --- */}
+            {showDelayReasonModal && (
+                <div className="modal-backdrop">
+                    <div className="modal-card">
+                        <div className="modal-icon warning-icon">
+                            <Icons.Warning />
+                        </div>
+                        <h3>Update Delay Reason</h3>
+                        <p className="modal-message">Why is this shipment delayed?</p>
+                        <p className="modal-sub-text">This will be visible in the Delayed tab.</p>
+                        
+                        <form onSubmit={handleDelayReasonSubmit} style={{width:'100%', marginTop:'20px'}}>
+                            <input 
+                                type="text" 
+                                value={delayReasonData.reason}
+                                onChange={(e) => setDelayReasonData({...delayReasonData, reason: e.target.value})}
+                                placeholder="e.g., Truck Breakdown, Weather, Port Congestion..."
+                                style={{
+                                    width: '100%', padding: '12px', borderRadius: '8px', 
+                                    border: '1px solid #ddd', fontSize: '14px', marginBottom: '20px',
+                                    outline: 'none', background: '#FAFAFA'
+                                }}
+                                autoFocus
+                            />
+                            <div className="modal-actions">
+                                <button type="button" className="btn-secondary" onClick={() => setShowDelayReasonModal(false)}>Cancel</button>
+                                <button type="submit" className="btn-warning">Save Reason</button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

@@ -94,10 +94,10 @@
     vertical-align: middle;
 }
 
-.custom-table th:nth-child(1) { width: 8%; }  /* ID */
-.custom-table th:nth-child(2) { width: 10%; } /* Status */
-.custom-table th:nth-child(3) { width: 14%; } /* Dest Name */
-.custom-table th:nth-child(4) { width: 14%; } /* Route */
+.custom-table th:nth-child(1) { width: 7%; }  /* ID */
+.custom-table th:nth-child(2) { width: 14%; } /* Status - Increased for Delayed */
+.custom-table th:nth-child(3) { width: 13%; } /* Dest Name */
+.custom-table th:nth-child(4) { width: 13%; } /* Route */
 .custom-table th:nth-child(5) { width: 10%; } /* Loading */
 .custom-table th:nth-child(6) { width: 10%; } /* Delivery */
 .custom-table th:nth-child(7) { width: 8%; }  /* Plate */
@@ -115,6 +115,17 @@
     font-size: 14px;
 }
 
+/* Fix for tooltip clipping */
+.custom-table td.status-cell-visible {
+    overflow: visible !important;
+}
+
+.status-cell-flex {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+
 .custom-table tbody {
     background-color: white;
 }
@@ -122,6 +133,7 @@
 .status-dot {
     display: inline-block; width: 10px; height: 10px;
     border-radius: 50%; margin-right: 8px;
+    flex-shrink: 0; /* Prevent dot shrinking */
 }
 @keyframes pulseGlow {
     0% { box-shadow: 0 0 0 0 rgba(242, 201, 76, 0.7); transform: scale(1); }
@@ -901,6 +913,21 @@
   background: linear-gradient(90deg, #FFFFFF 40%, #90CAF9 100%);
   border: 1px solid #E3F2FD;
 }
+
+.shipment-card.card-transit {
+    border-left: 5px solid #2980b9;
+    background: #f0f7ff;
+}
+
+.transit-card {
+    opacity: 0.85;
+    cursor: default !important;
+}
+
+.new-badge.transit {
+    background: #2980b9;
+    color: white;
+}
 .card-yellow {
   background: linear-gradient(90deg, #FFFFFF 40%, #FFF59D 100%);
   border: 1px solid #FFF9C4;
@@ -1142,17 +1169,15 @@
   align-items: center;
   gap: 8px;
   border: 2px solid #2E7D32;
-  pointer-events: none; 
+  pointer-events: auto; 
 }
-
 .lockout-icon svg {
   width: 40px !important;
   height: 40px !important;
-  fill: #2E7D32;
+  stroke: #2E7D32;
   display: block;
-}
-
-.lockout-badge span {
+  margin: 0 auto;
+}.lockout-badge span {
   color: #2E7D32;
   font-weight: 800;
   font-size: 14px;
@@ -1269,10 +1294,98 @@
   justify-content: center;
   pointer-events: auto;
 }
+
+.transit-banner {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 10px 15px;
+    border-radius: 8px;
+    margin: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid #bbdefb;
+}
+
+.step-button.disabled-transit {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #f5f5f5;
+    color: #999;
+}
 /* --- Dashboard card disable for Upcoming --- */
 .shipment-card.disabled-card {
   position: relative;
   opacity: 0.6;
   pointer-events: none;
   filter: grayscale(20%);
+}
+
+.delay-reason-link {
+    font-size: 11px;
+    color: #666;
+    cursor: pointer;
+    text-decoration: underline;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.delay-reason-link:hover {
+    color: #333;
+}
+
+/* --- TOOLTIP --- */
+.tooltip-container {
+    position: relative;
+    display: inline-block;
+    cursor: help;
+    z-index: 200; /* Higher than cell */
+}
+
+.tooltip-text {
+    visibility: hidden;
+    width: 80px;
+    background-color: #333;
+    color: #fff;
+    text-align: center;
+    border-radius: 6px;
+    padding: 5px 0;
+    position: absolute;
+    z-index: 300;
+    bottom: 125%; /* Position above */
+    left: 50%;
+    margin-left: -40px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    margin-left: -5px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: #333 transparent transparent transparent;
+}
+
+.tooltip-container:hover .tooltip-text {
+    visibility: visible;
+    opacity: 1;
+}
+
+/* --- DELAYED CELL LAYOUT --- */
+.status-cell-delayed {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: nowrap; /* Prevent stacking */
+    white-space: nowrap;
 }

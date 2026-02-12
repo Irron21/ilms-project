@@ -9,7 +9,8 @@ router.get('/payroll-routes', shipmentController.getPayrollRoutes);
 
 router.post('/create', shipmentController.createShipment);
 router.post('/create-batch', shipmentController.createBatchShipments);
-router.put('/:shipmentID/status', shipmentController.updateStatus);
+router.put('/:id/status', shipmentController.updateStatus);
+router.put('/:id/delay-reason', shipmentController.updateDelayReason);
 router.put('/:id/archive', shipmentController.archiveShipment);
 router.put('/:id/restore', shipmentController.restoreShipment);
 

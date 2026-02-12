@@ -1,5 +1,6 @@
 /** Shipment delivery phase order used for status progression */
 export const PHASE_ORDER = [
+  'Loaded',
   'Arrival',
   'Handover Invoice',
   'Start Unload',
@@ -10,6 +11,7 @@ export const PHASE_ORDER = [
 
 /** Step definitions for mobile shipment details (icons added in component) */
 export const STEP_DEFINITIONS = [
+  { label: 'Confirm Loaded', dbStatus: 'Loaded', iconName: 'CheckCircle' },
   { label: 'Arrival Time', dbStatus: 'Arrival', iconName: 'Truck' },
   { label: 'Handover Invoice', dbStatus: 'Handover Invoice', iconName: 'Document' },
   { label: 'Start Unload', dbStatus: 'Start Unload', iconName: 'Box' },

@@ -160,6 +160,46 @@
 .role-tag.driver { background: #E8F5E9; color: #2E7D32; }
 .role-tag.helper { background: #FFF3E0; color: #E65100; }
 
+/* Status Toggle Button (Trucks) - Matches Payroll Action-Btn Style */
+.status-toggle-btn {
+    padding: 4px 12px;
+    border-radius: 15px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+    width: auto;
+    min-width: 90px;
+}
+
+.status-toggle-btn.working {
+    background-color: #E8F5E9;
+    color: #2E7D32;
+    border-color: #2E7D32;
+}
+
+.status-toggle-btn.maintenance {
+    background-color: #FFEBEE;
+    color: #C62828;
+    border-color: #C62828;
+}
+
+.status-toggle-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    filter: brightness(0.98);
+}
+
+.status-toggle-btn:active {
+    transform: translateY(0);
+}
+
 .action-cells {
     display: flex;
     gap: 8px;
@@ -557,9 +597,14 @@
     justify-content: center;
     color: #555; 
 }
-.action-btn:hover { background-color: #F0F0F0;
-    color: #000; 
-    transform: scale(1.1);
+.action-btn:hover { 
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    filter: brightness(0.98);
+}
+
+.action-btn:active {
+    transform: translateY(0);
 }
 
 .action-btn svg {

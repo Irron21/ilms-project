@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '@utils/api';
 import logoPng from '@assets/k2mac_logo.png';
 import { Icons } from '@shared';
@@ -18,16 +18,7 @@ function MobileApp({ user, token, onLogout }) {
   const [modal, setModal] = useState({ show: false, shipmentID: null, statusName: null });
   const [showProfile, setShowProfile] = useState(false);
 
-  useEffect(() => {
-    fetchShipments();
-  }, []);
-
-  useEffect(() => {
-    const intervalID = setInterval(() => fetchShipments(true), 3000);
-    return () => clearInterval(intervalID);
-  }, [selectedShipment]);
-
-  const fetchShipments = async (isPolling = false) => {
+  const fetchShipments = useCallback(async (isPolling = false) => {
     if (!isPolling) setLoading(true);
 
     try {
@@ -37,7 +28,11 @@ function MobileApp({ user, token, onLogout }) {
       };
       const response = await api.get('/shipments', config);
       const newData = response.data;
-      setShipments(newData);
+      
+      setShipments(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(newData)) return prev;
+        return newData;
+      });
 
       if (selectedShipment) {
         const updatedView = newData.find(s => s.shipmentID === selectedShipment.shipmentID);
@@ -52,24 +47,33 @@ function MobileApp({ user, token, onLogout }) {
         setIsKickedOut(true);
       }
     }
-  };
+  }, [token, user.userID, selectedShipment]);
 
-  const handleCardClick = (shipment) => {
+  useEffect(() => {
+    fetchShipments();
+  }, [fetchShipments]);
+
+  useEffect(() => {
+    const intervalID = setInterval(() => fetchShipments(true), 5000);
+    return () => clearInterval(intervalID);
+  }, [fetchShipments]);
+
+  const handleCardClick = useCallback((shipment) => {
     setSelectedShipment(shipment);
     setView('details');
-  };
+  }, []);
 
-  const handleBackToDashboard = () => {
+  const handleBackToDashboard = useCallback(() => {
     setView('dashboard');
     setSelectedShipment(null);
     fetchShipments();
-  };
+  }, [fetchShipments]);
 
-  const handleProfileClick = () => setShowProfile(true);
+  const handleProfileClick = useCallback(() => setShowProfile(true), []);
 
-  const handleStepClick = (shipmentID, statusName) => {
+  const handleStepClick = useCallback((shipmentID, statusName) => {
     setModal({ show: true, shipmentID, statusName });
-  };
+  }, []);
 
   const confirmUpdate = async () => {
     if (!modal.shipmentID || !modal.statusName) return;
