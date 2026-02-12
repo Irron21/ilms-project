@@ -136,6 +136,8 @@ CREATE TABLE Shipments (
 
   currentStatus VARCHAR(20) DEFAULT 'Pending',
 
+  delayReason VARCHAR(255) NULL,
+
   isArchived TINYINT(1) DEFAULT '0',
 
   PRIMARY KEY (shipmentID),

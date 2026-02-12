@@ -278,7 +278,15 @@ function UserManagement({ activeTab = "users" }) {
                 {paginatedTrucks.map(v => (
                   <tr key={v.vehicleID}>
                     <td style={{fontWeight:'700'}}>{v.plateNo}</td><td>{v.type}</td>
-                    <td><span className="role-tag" style={{backgroundColor: v.status === 'Working' ? '#E8F5E9' : '#FFEBEE', color: v.status === 'Working' ? '#2E7D32' : '#C62828', cursor:'pointer'}} onClick={() => toggleTruckStatus(v)}>{v.status}</span></td>
+                    <td>
+                      <button 
+                        className={`status-toggle-btn ${v.status.toLowerCase()}`} 
+                        onClick={() => toggleTruckStatus(v)}
+                        title="Click to toggle status"
+                      >
+                        {v.status}
+                      </button>
+                    </td>
                     <td>{new Date(v.dateCreated).toLocaleDateString()}</td>
                     <td className="action-cells">
                       {showArchived ? (<button className="icon-btn" onClick={() => initiateRestore('truck', v.vehicleID)}><Icons.Restore/></button>) : 

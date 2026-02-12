@@ -197,11 +197,57 @@ export const Icons = {
       <line x1="3" y1="10" x2="21" y2="10"></line>
     </svg>
   ),
+  Clock: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <circle cx="12" cy="12" r="10"></circle>
+      <polyline points="12 6 12 12 16 14"></polyline>
+    </svg>
+  ),
+  FileText: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+      <line x1="16" y1="13" x2="8" y2="13"></line>
+      <line x1="16" y1="17" x2="8" y2="17"></line>
+      <polyline points="10 9 9 9 8 9"></polyline>
+    </svg>
+  ),
+  Package: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+      <line x1="12" y1="22.08" x2="12" y2="12"></line>
+    </svg>
+  ),
+  Activity: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+    </svg>
+  ),
+  Clipboard: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+    </svg>
+  ),
+  Send: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <line x1="22" y1="2" x2="11" y2="13"></line>
+      <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+    </svg>
+  ),
   AlertCircle: (props) => (
     <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <circle cx="12" cy="12" r="10"></circle>
       <line x1="12" y1="8" x2="12" y2="12"></line>
       <line x1="12" y1="16" x2="12.01" y2="16"></line>
+    </svg>
+  ),
+  Warning: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+      <line x1="12" y1="9" x2="12" y2="13"></line>
+      <line x1="12" y1="17" x2="12.01" y2="17"></line>
     </svg>
   ),
   GripIcon: () => (
@@ -229,6 +275,17 @@ export const Icons = {
   Key: ({ size = 24, color = "currentColor", ...props }) => (
     <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path>
+    </svg>
+  ),
+  TruckLoad: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M10 17h4V5H2v12h3" />
+      <path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5" />
+      <path d="M14 17h1" />
+      <circle cx="7.5" cy="17.5" r="2.5" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
+      <path d="M7 11V8h3v3H7z" />
+      <path d="M9 13h2" />
     </svg>
   )
 };

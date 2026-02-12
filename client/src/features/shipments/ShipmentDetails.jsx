@@ -1,19 +1,21 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal } from '@shared';
 import { queueManager } from '@utils/queueManager';
+import { getTodayString, getDateValue, formatDateDisplay } from '@constants';
 
 const STEPS = [
-  { label: 'Arrival Time', dbStatus: 'Arrival', icon: <Icons.Truck /> },
-  { label: 'Handover Invoice', dbStatus: 'Handover Invoice', icon: <Icons.Document /> },
-  { label: 'Start Unload', dbStatus: 'Start Unload', icon: <Icons.Box /> },
-  { label: 'Finish Unload', dbStatus: 'Finish Unload', icon: <Icons.Timer /> },
-  { label: 'Invoice Receive', dbStatus: 'Invoice Receive', icon: <Icons.Pen /> },
-  { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Flag /> }
+  { label: 'Arrival Time', dbStatus: 'Arrival', icon: <Icons.Clock /> },
+  { label: 'Handover Invoice', dbStatus: 'Handover Invoice', icon: <Icons.FileText /> },
+  { label: 'Start Unload', dbStatus: 'Start Unload', icon: <Icons.Package /> },
+  { label: 'Finish Unload', dbStatus: 'Finish Unload', icon: <Icons.Activity /> },
+  { label: 'Invoice Receive', dbStatus: 'Invoice Receive', icon: <Icons.Clipboard /> },
+  { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Send /> }
 ];
 
 const getStatusPriority = (status) => {
     if (status === 'Completed') return 100;
+    if (status === 'Loaded') return 0.5; // Loaded is between Pending and Arrival
     const index = STEPS.findIndex(s => s.dbStatus === status);
     return index === -1 ? 0 : index + 1;
 };
@@ -48,7 +50,7 @@ const getPendingOfflineData = (shipmentID) => {
   }
 };
 
-function ShipmentDetails({ shipment, onBack, token, user }) { 
+const ShipmentDetails = memo(({ shipment, onBack, token, user }) => { 
   const [showOverlay, setShowOverlay] = useState(true);
   const [confirmStep, setConfirmStep] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -56,6 +58,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
   const containerRef = useRef(null);
   const touchStartRef = useRef(null);
 
+  // Initialize status/logs once, but update if parent prop changes significantly
   const [localStatus, setLocalStatus] = useState(() => {
     const offlineData = getPendingOfflineData(shipment.shipmentID);
     return offlineData ? offlineData.status : shipment.currentStatus;
@@ -65,6 +68,19 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     const offlineData = getPendingOfflineData(shipment.shipmentID);
     return offlineData ? offlineData.logs : [];
   });
+
+  // Keep localStatus in sync with shipment.currentStatus ONLY if it represents a forward progression
+  useEffect(() => {
+    const offlineData = getPendingOfflineData(shipment.shipmentID);
+    if (offlineData) return; // Don't sync if we have local pending changes
+
+    const serverPriority = getStatusPriority(shipment.currentStatus);
+    const localPriority = getStatusPriority(localStatus);
+    
+    if (serverPriority > localPriority) {
+      setLocalStatus(shipment.currentStatus);
+    }
+  }, [shipment.currentStatus, shipment.shipmentID]);
 
   const partnerName = (() => {
     if (!shipment.crewDetails || !user) return null;
@@ -77,14 +93,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
     const found = parts.find(p => p.startsWith(targetRole + ':'));
     return found ? found.split(':')[1] : null;
   })();
-
-  // --- HELPER: Date Formatter ---
-  const formatDate = (dateStr) => {
-    if (!dateStr) return 'Not Set';
-    // Safe parse YYYY-MM-DD to avoid timezone shifts
-    const [year, month, day] = String(dateStr).substring(0, 10).split('-');
-    return `${month}/${day}/${year}`;
-  };
 
   const fetchLogs = useCallback(async () => {
     if (!navigator.onLine) return; 
@@ -100,7 +108,11 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
             const distinctPending = pendingLogs.filter(p => 
               !serverLogs.some(s => s.phaseName === p.phaseName)
             );
-            return [...serverLogs, ...distinctPending];
+            const nextLogs = [...serverLogs, ...distinctPending];
+            
+            // Optimization: Only update if the data actually changed to prevent re-render "blinks"
+            if (JSON.stringify(prev) === JSON.stringify(nextLogs)) return prev;
+            return nextLogs;
         });
 
         if (serverLogs.length > 0) {
@@ -112,7 +124,11 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
             setLocalStatus(current => {
                 const currentPri = getStatusPriority(current);
                 const newPri = getStatusPriority(newStatus);
-                return newPri >= currentPri ? newStatus : current;
+                const targetStatus = newPri >= currentPri ? newStatus : current;
+                
+                // Optimization: Only update if status actually changed
+                if (current === targetStatus) return current;
+                return targetStatus;
             });
         }
 
@@ -152,22 +168,9 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
   useEffect(() => {
     if (isOffline) return;
     fetchLogs(); 
-    const intervalId = setInterval(fetchLogs, 3000);
+    const intervalId = setInterval(fetchLogs, 5000); // Increased interval to reduce traffic
     return () => clearInterval(intervalId);
   }, [isOffline, fetchLogs]);
-
-  useEffect(() => {
-      if (navigator.onLine) {
-         const hasPending = logs.some(l => l.isPending);
-         if (!hasPending) {
-             const parentPriority = getStatusPriority(shipment.currentStatus);
-             const localPriority = getStatusPriority(localStatus);
-             if (parentPriority >= localPriority) {
-                 setLocalStatus(shipment.currentStatus);
-             }
-         }
-      }
-  }, [shipment.currentStatus, logs, localStatus]);
 
   const handleTouchStart = (e) => {
     if (!e.touches || e.touches.length === 0) return;
@@ -253,16 +256,30 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
   };
 
   const getStepState = (currentDbStatus, stepIndex) => {
-    let currentStatusIndex = STEPS.findIndex(s => s.dbStatus === currentDbStatus);
-    if (currentDbStatus === 'Pending') currentStatusIndex = -1;
-    if (currentDbStatus === 'Completed') currentStatusIndex = 99;
+    // Priority-based state
+    const currentPriority = getStatusPriority(currentDbStatus);
+    const stepPriority = stepIndex + 1; // STEPS are indices 0-5, priorities are 1-6
 
-    if (stepIndex <= currentStatusIndex) return 'done';
-    if (stepIndex === currentStatusIndex + 1) return 'active';
+    if (stepPriority <= currentPriority) return 'done';
+    if (stepPriority === Math.floor(currentPriority) + 1) return 'active';
     return 'pending';
   };
 
   const isCompleted = localStatus === 'Completed';
+  const isPendingLoad = getStatusPriority(localStatus) < 0.5;
+  const today = getTodayString();
+  const deliveryDate = getDateValue(shipment.deliveryDate);
+  const loadingDate = getDateValue(shipment.loadingDate);
+  
+  // Explicitly In Transit if Loaded but not yet delivery date
+  const isInTransit = localStatus === 'Loaded' && deliveryDate > today;
+  
+  // Block delivery steps if not delivery date
+  const isBlockedByDate = (stepIndex) => {
+    return today < deliveryDate; // Block delivery steps if too early
+  };
+
+  const canConfirmLoad = today >= loadingDate;
 
   return (
     <div className="details-container" ref={containerRef} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
@@ -270,6 +287,12 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         {isOffline && offlineVisible && (
           <div className="offline-banner">
              You are Offline. Changes will save automatically when online.
+          </div>
+        )}
+        {isInTransit && (
+          <div className="transit-banner">
+             <Icons.Clock size={16} />
+             <span>Goods Loaded. Ready for Delivery on {formatDateDisplay(shipment.deliveryDate)}</span>
           </div>
         )}
       </div>
@@ -289,6 +312,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
         </div>
         )}
       </div>
+      
       
       
 
@@ -356,7 +380,7 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
               </div>
               <div className="info-content">
                 <span className="info-label">Loading Date</span>
-                <span className="info-value" style={{color:'#2980b9', fontWeight: 700}}>{formatDate(shipment.loadingDate)}</span>
+                <span className="info-value" style={{color:'#2980b9', fontWeight: 700}}>{formatDateDisplay(shipment.loadingDate)}</span>
               </div>
             </div>
 
@@ -369,32 +393,61 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
               </div>
               <div className="info-content">
                 <span className="info-label">Delivery Date</span>
-                <span className="info-value" style={{color:'#d35400', fontWeight: 700}}>{formatDate(shipment.deliveryDate)}</span>
+                <span className="info-value" style={{color:'#d35400', fontWeight: 700}}>{formatDateDisplay(shipment.deliveryDate)}</span>
               </div>
             </div>
         </div>
       </div>
 
-      <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`}>
-        {isCompleted && showOverlay && (
-          <div className="completion-overlay" onClick={() => setShowOverlay(false)}>
-            <div className="lockout-badge">
-              <div className="lockout-icon"><Icons.Check /></div>
-              <span>SHIPMENT COMPLETED</span>
+      <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`} style={{ position: 'relative' }}>
+        {isPendingLoad && (
+          <div className="completion-overlay confirm-load-overlay">
+            <div className={`lockout-badge ${!canConfirmLoad ? 'locked-load' : ''}`} style={{ borderColor: '#2980b9' }}>
+              <div className="lockout-icon"><Icons.Truck size={40} stroke="#2980b9" /></div>
+              <span style={{ color: '#2980b9' }}>READY TO DELIVER</span>
+              {!canConfirmLoad ? (
+                <span className="tap-hint">Available on {formatDateDisplay(shipment.loadingDate)}</span>
+              ) : (
+                <button 
+                  className="confirm-load-btn" 
+                  onClick={() => executeStepUpdate('Loaded')}
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 20px',
+                    background: '#2980b9',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '20px',
+                    fontWeight: '600'
+                  }}
+                >
+                  Confirm Loaded
+                </button>
+              )}
             </div>
           </div>
         )}
 
-        <div className={`steps-container ${isCompleted && showOverlay ? 'blurred-background' : ''}`}>
+        {isCompleted && showOverlay && (
+          <div className="completion-overlay" onClick={() => setShowOverlay(false)}>
+            <div className="lockout-badge">
+              <div className="lockout-icon"><Icons.CheckCircle size={40} stroke="#27ae60" /></div>
+              <span style={{ color: '#27ae60' }}>SHIPMENT COMPLETED</span>
+            </div>
+          </div>
+        )}
+
+        <div className={`steps-container ${(isCompleted && showOverlay) || isPendingLoad ? 'blurred-background' : ''}`}>
           {STEPS.map((step, index) => {
             const state = getStepState(localStatus, index);
             const timeData = getStepTimestamp(step.dbStatus);
+            const isBlocked = state === 'active' && isBlockedByDate(index);
 
             return (
               <button
                 key={index}
-                className={`step-button step-${state}`}
-                disabled={state !== 'active' || isCompleted} 
+                className={`step-button step-${state} ${isBlocked ? 'disabled-transit' : ''}`}
+                disabled={state !== 'active' || isCompleted || isBlocked} 
                 onClick={() => handleStepClick(step)} 
               >
                 <div className="step-content">
@@ -414,6 +467,10 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
                                "Completed"
                             )}
                           </>
+                        ) : state === 'active' && isBlocked ? (
+                           <span className="blocked-hint" style={{fontSize: '11px', color: '#e67e22'}}>
+                             Available on {index === 0 ? formatDateDisplay(shipment.loadingDate) : formatDateDisplay(shipment.deliveryDate)}
+                           </span>
                         ) : (
                           "\u00A0" 
                         )}
@@ -445,6 +502,6 @@ function ShipmentDetails({ shipment, onBack, token, user }) {
       )}
     </div>
   );
-}
+});
 
 export default ShipmentDetails;

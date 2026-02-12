@@ -35,4 +35,6 @@ logs/
 nginx-proxy/ssl/*
 !nginx-proxy/ssl/.gitkeep
 
+/scripts/
+
 server/scripts/

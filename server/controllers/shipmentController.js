@@ -23,7 +23,7 @@ exports.getActiveShipments = (req, res) => {
     // Define columns 
     const columns = `
         s.shipmentID, s.destName, s.destLocation, 
-        s.loadingDate, s.deliveryDate,
+        s.loadingDate, s.deliveryDate, s.delayReason,
         s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType
     `;
     const sortLogic = `ORDER BY s.loadingDate IS NULL ASC, s.loadingDate ASC, s.creationTimestamp DESC`;
@@ -275,51 +275,107 @@ exports.getShipmentResources = (req, res) => {
 
 // 2. Update Status
 exports.updateStatus = (req, res) => {
-    const shipmentID = req.params.shipmentID;
+    const shipmentID = req.params.id;
     const { status, userID, deliveryDate, clientTimestamp } = req.body;
 
     if (!shipmentID || shipmentID === 'undefined') {
         return res.status(400).json({ error: "Shipment ID is missing" });
     }
 
-    let updateShipmentSql = "UPDATE Shipments SET currentStatus = ? WHERE shipmentID = ?";
-    let params = [status, shipmentID];
-    const eventDate = clientTimestamp ? new Date(clientTimestamp) : (deliveryDate ? new Date(deliveryDate) : new Date());
-    console.error(`!!! UPDATE STATUS CALLED !!! ID: ${shipmentID}, Status: '${status}', ClientTS: ${clientTimestamp}, EventDateISO: ${eventDate.toISOString()}`);
+    // --- Date Validation Guard ---
+    // Prevent updates to statuses based on loading/delivery dates
+    const deliveryStatuses = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure', 'Completed'];
+    
+    if (status === 'Loaded' || deliveryStatuses.includes(status)) {
+        const checkSql = "SELECT loadingDate, deliveryDate FROM Shipments WHERE shipmentID = ?";
+        db.query(checkSql, [shipmentID], (err, rows) => {
+            if (err) return res.status(500).json({ error: "DB Check failed: " + err.message });
+            
+            if (rows.length === 0) {
+                return res.status(404).json({ error: "Shipment not found" });
+            }
 
-    // Update Delivery Date if Completed
-    let computedDate = null;
-    if (status === 'Completed') {
-        updateShipmentSql = "UPDATE Shipments SET currentStatus = ?, deliveryDate = ? WHERE shipmentID = ?";
-        computedDate = eventDate;
-        params = [status, computedDate, shipmentID];
+            if (rows.length > 0) {
+                const { loadingDate, deliveryDate } = rows[0];
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+
+                // 1. Loading Date Check
+                if (status === 'Loaded' && loadingDate) {
+                    const loadDateObj = new Date(loadingDate);
+                    loadDateObj.setHours(0, 0, 0, 0);
+                    if (today < loadDateObj) {
+                        return res.status(403).json({ 
+                            error: "Business Rule Violation", 
+                            message: `Loading confirmation is restricted until the loading date (${loadingDate}).` 
+                        });
+                    }
+                }
+
+                // 2. Delivery Date Check
+                if (deliveryStatuses.includes(status) && deliveryDate) {
+                    const delDateObj = new Date(deliveryDate);
+                    delDateObj.setHours(0, 0, 0, 0);
+                    if (today < delDateObj) {
+                        return res.status(403).json({ 
+                            error: "Business Rule Violation", 
+                            message: `Delivery steps are restricted until the delivery date (${deliveryDate}).` 
+                        });
+                    }
+                }
+            }
+            proceedWithUpdate();
+        });
+    } else {
+        proceedWithUpdate();
     }
 
-    const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (?, ?, ?, ?, ?)";
+    function proceedWithUpdate() {
+        let updateShipmentSql = "UPDATE Shipments SET currentStatus = ? WHERE shipmentID = ?";
+        let params = [status, shipmentID];
+        const eventDate = clientTimestamp ? new Date(clientTimestamp) : (deliveryDate ? new Date(deliveryDate) : new Date());
+        
+        // Safety check for invalid eventDate
+        const validTimestamp = isNaN(eventDate.getTime()) ? new Date() : eventDate;
 
-    db.query(updateShipmentSql, params, (err, result) => {
-        if (err) {
-            console.error("Update Error:", err);
-            return res.status(500).json({ error: err.message });
+        // Update Delivery Date if Completed
+        let computedDate = null;
+        if (status === 'Completed') {
+            updateShipmentSql = "UPDATE Shipments SET currentStatus = ?, deliveryDate = ? WHERE shipmentID = ?";
+            computedDate = validTimestamp;
+            params = [status, computedDate, shipmentID];
         }
 
-        db.query(insertLogSql, [shipmentID, userID, status, status, eventDate], (err, result) => {
+        const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (?, ?, ?, ?, ?)";
+
+        db.query(updateShipmentSql, params, (err, result) => {
             if (err) {
-                console.error("Log Error:", err);
+                console.error("Update Error:", err);
                 return res.status(500).json({ error: err.message });
             }
 
-            logActivity(userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
-            res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
-        });
+            db.query(insertLogSql, [shipmentID, userID, status, status, validTimestamp], (err, result) => {
+                if (err) {
+                    // Check for Foreign Key Constraint Failure (Shipment doesn't exist)
+                    if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') {
+                        console.warn(`Log Insert Failed: Shipment ${shipmentID} does not exist.`);
+                        return res.status(404).json({ error: "Shipment not found (during log update)" });
+                    }
+                    console.error("Log Error:", err);
+                    return res.status(500).json({ error: err.message });
+                }
 
-        if (status === 'Completed') { 
-            // Delay payroll calculation slightly to ensure DB write is committed and visible
-            setTimeout(() => {
-                calculatePayroll(shipmentID, computedDate || new Date());
-            }, 500); 
-        }
-    });
+                logActivity(userID, 'UPDATE_SHIPMENT', `Updated Shipment #${shipmentID} to ${status}`);
+                res.json({ message: `Shipment ${shipmentID} updated to ${status}` });
+            });
+
+            if (status === 'Completed') { 
+                setTimeout(() => {
+                    calculatePayroll(shipmentID, computedDate || new Date());
+                }, 500); 
+            }
+        });
+    }
 };
 
 // 3. Get Logs 
@@ -681,6 +737,22 @@ exports.exportShipments = (req, res) => {
             console.error("Excel Gen Error:", error);
             if (!res.headersSent) res.status(500).json({ message: "Error generating Excel file" });
         }
+    });
+};
+
+exports.updateDelayReason = (req, res) => {
+    const { id } = req.params;
+    const { reason, userID } = req.body;
+
+    if (!reason) return res.status(400).json({ error: "Reason is required" });
+
+    const sql = "UPDATE Shipments SET delayReason = ? WHERE shipmentID = ?";
+    db.query(sql, [reason, id], (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+
+        logActivity(userID || 1, 'UPDATE_DELAY_REASON', `Added delay reason for #${id}: ${reason}`, () => {
+            res.json({ message: "Delay reason updated" });
+        });
     });
 };
 

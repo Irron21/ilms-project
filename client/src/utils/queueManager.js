@@ -26,8 +26,16 @@ export const queueManager = {
           });
         }
       } catch (err) {
-        console.error('Sync failed, keeping in queue:', err);
-        newQueue.push(item);
+        const status = err.response?.status;
+        // If it's a client error (4xx), the request is invalid/impossible. Drop it.
+        // If it's a server error (5xx) or network error, keep it to retry.
+        if (status && status >= 400 && status < 500) {
+            console.warn(`Sync rejected (Status ${status}): Dropping item from queue.`, item);
+            // Do NOT add to newQueue -> effectively deletes it
+        } else {
+            console.error('Sync failed, keeping in queue:', err.response?.data || err.message);
+            newQueue.push(item);
+        }
       }
     }
     localStorage.setItem(QUEUE_KEY, JSON.stringify(newQueue));
