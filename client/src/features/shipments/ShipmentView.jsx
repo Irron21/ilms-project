@@ -406,17 +406,31 @@ function ShipmentView({ user, token, onLogout }) {
         return shipments.filter(s => {
             const loadDate = getDateValue(s.loadingDate);
             const delDate = getDateValue(s.deliveryDate);
-            const isCompleted = s.currentStatus === 'Completed';
+            const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
 
             switch (activeTab) {
                 case 'Completed': return isCompleted;
-                case 'Delayed': return !isCompleted && delDate && delDate < today;
-                case 'Upcoming': return !isCompleted && loadDate > today;
+                case 'Delayed': 
+                    // Delayed if:
+                    // 1. Delivery Date passed AND not completed
+                    // 2. Loading Date passed AND status is Pending
+                    return !isCompleted && (
+                        (delDate && delDate < today) || 
+                        (loadDate && loadDate < today && s.currentStatus === 'Pending')
+                    );
+                case 'Upcoming': 
+                    // Upcoming if:
+                    // Loading Date is in future AND status is Pending
+                    return !isCompleted && loadDate > today && s.currentStatus === 'Pending';
                 case 'Active': default: 
-                    // Show if delivering today OR if loaded/in-transit for future delivery
+                    // Active if:
+                    // 1. Delivering Today
+                    // 2. In Transit (Loaded) even if delivery is future
+                    // 3. Loading Today
                     return !isCompleted && (
                         (delDate === today) || 
-                        (loadDate <= today && delDate > today)
+                        (loadDate === today) ||
+                        (s.currentStatus === 'Loaded' && delDate >= today)
                     );
             }
         });
@@ -571,7 +585,6 @@ function ShipmentView({ user, token, onLogout }) {
         const delDate = getDateValue(s.deliveryDate);
         
         // Filter out junk/test data with no dates
-        // If there is no loading date, it shouldn't appear in Active/Upcoming/Delayed
         if (!loadDate) return 'Invalid'; 
 
         const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
@@ -584,14 +597,17 @@ function ShipmentView({ user, token, onLogout }) {
         if (delDate && delDate < today) return 'Delayed';
         
         // B. Loading Date has passed, but status is still 'Pending' (Late Start)
+        // BUG FIX: Ensure we use strict comparison for passed dates
         if (loadDate && loadDate < today && s.currentStatus === 'Pending') return 'Delayed';
 
         // 3. Upcoming Tab
+        // BUG FIX: Exclude 'Loaded' items from Upcoming. Upcoming should only be Pending future loads.
         if (loadDate && loadDate > today && s.currentStatus === 'Pending') return 'Upcoming';
         
         // 4. In Transit (Explicitly Loaded but not yet delivery date)
-        if (s.currentStatus === 'Loaded' && delDate > today) return 'In Transit';
-
+        // Note: 'In Transit' is not a separate tab, it usually falls under 'Active' or 'Upcoming' depending on design.
+        // If the user wants to see it in Active, we let it fall through.
+        
         // 5. Active Tab (Fallback)
         return 'Active';
     };
