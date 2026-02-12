@@ -167,7 +167,7 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
               {isUpcoming ? (
                 <div className="new-badge scheduled">SCHEDULED</div>
               ) : isInTransit ? (
-                <div className="new-badge transit">IN TRANSIT</div>
+                <div className="new-badge transit">TO DELIVER</div>
               ) : (
                 isNew && <div className="new-badge">NEW</div>
               )}

@@ -119,36 +119,45 @@ function PayrollView() {
     
     // Load Periods
     useEffect(() => {
-        api.get('/payroll/periods')
-           .then(res => {
-               setPeriods(res.data);
-               // Auto-select latest OPEN period
-               const openPeriod = res.data.find(p => p.status === 'OPEN');
-               if (openPeriod) {
-                   setSelectedPeriod(openPeriod.periodID);
-               }
-           })
-           .catch(err => console.error(err));
-    }, []);
-
-    // Fetch Data when Period Changes
-    useEffect(() => {
-        if (selectedPeriod) fetchPayrollSummary(selectedPeriod);
-    }, [selectedPeriod]);
-
-    useEffect(() => {
         const loadPeriods = async () => {
             try {
                 const res = await api.get('/payroll/periods');
-                setPeriods(res.data);
+                const allPeriods = res.data;
+                setPeriods(allPeriods);
                 
-                // ✅ Logic: Try to find the latest OPEN period. 
-                // If all are closed, default to the most recent one (index 0).
-                const openPeriod = res.data.find(p => p.status === 'OPEN');
-                const defaultPeriod = openPeriod || res.data[0];
+                // Logic: Prioritize CURRENT period (based on today's date)
+                const today = new Date();
+                today.setHours(0,0,0,0);
 
-                if (defaultPeriod) {
-                    setSelectedPeriod(defaultPeriod.periodID);
+                let targetPeriod = null;
+
+                // 1. Try to find the period that contains "Today"
+                const currentPeriod = allPeriods.find(p => {
+                    const start = new Date(p.startDate);
+                    const end = new Date(p.endDate);
+                    return today >= start && today <= end;
+                });
+
+                if (currentPeriod) {
+                    targetPeriod = currentPeriod;
+                } else {
+                    // 2. Fallback: Find the latest "Open" period that is in the past or present (not future)
+                    // We filter out periods that haven't started yet to avoid showing future generated months by default
+                    const pastOrActiveOpen = allPeriods.filter(p => {
+                        const start = new Date(p.startDate);
+                        return p.status === 'OPEN' && start <= today;
+                    });
+
+                    if (pastOrActiveOpen.length > 0) {
+                        targetPeriod = pastOrActiveOpen[0]; // First one is usually latest due to backend sort
+                    } else {
+                        // 3. Last Resort: Just take the first one (Backend usually sorts DESC by date)
+                        targetPeriod = allPeriods[0];
+                    }
+                }
+
+                if (targetPeriod) {
+                    setSelectedPeriod(targetPeriod.periodID);
                 }
             } catch (err) {
                 console.error("Failed to load periods", err);
@@ -156,6 +165,11 @@ function PayrollView() {
         };
         loadPeriods();
     }, []);
+
+    // Fetch Data when Period Changes
+    useEffect(() => {
+        if (selectedPeriod) fetchPayrollSummary(selectedPeriod);
+    }, [selectedPeriod]);
 
     // 2. AUTO-FETCH DATA WHEN PERIOD CHANGES
     // This runs immediately after 'setSelectedPeriod' above, and whenever user changes dropdown
