@@ -246,7 +246,7 @@ function KPIView() {
             const res = await api.post('/kpi/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                    Authorization: `Bearer ${sessionStorage.getItem('token')}`
                 }
             });
 

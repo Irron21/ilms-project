@@ -4,7 +4,7 @@ import { Icons, FeedbackModal, PaginationControls } from '@shared';
 import { MONTH_NAMES, getYearOptions } from '@constants';
 
 function UserManagement({ activeTab = "users" }) { 
-  const token = localStorage.getItem('token'); 
+  const token = sessionStorage.getItem('token'); 
   const rowsPerPage = 10;
 
   // Pagination

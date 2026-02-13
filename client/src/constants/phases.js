@@ -36,6 +36,7 @@ export const EXPORT_COLUMNS = [
   { key: 'helperFee', label: 'Helper Base Fee', checked: false },
   { key: 'allowance', label: 'Allowance (Per Person)', checked: false },
   { key: 'dateCreated', label: 'Date Created', checked: false },
+  { key: 'loaded', label: 'Time: Loaded', checked: false },
   { key: 'arrival', label: 'Time: Arrival', checked: false },
   { key: 'handover', label: 'Time: Handover Invoice', checked: false },
   { key: 'startUnload', label: 'Time: Start Unload', checked: false },
