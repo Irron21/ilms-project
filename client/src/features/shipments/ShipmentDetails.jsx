@@ -559,21 +559,9 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         </div>
       </div>
       
-      {confirmStep && (
-        <FeedbackModal 
-          type="warning"
-          title="Confirm Status Update"
-          message={`Are you sure you want to mark "${confirmStep.label}" as completed?`}
-          subMessage="This will update the shipment progress."
-          confirmLabel="Confirm"
-          onClose={() => setConfirmStep(null)}
-          onConfirm={() => executeStepUpdate(confirmStep.dbStatus)}
-        />
-      )}
-
       {/* Remarks Modal */}
       {remarksModal.show && (
-        <div className="modal-backdrop" style={{ zIndex: 1000 }}>
+        <div className="modal-backdrop" style={{ zIndex: 9000 }}>
           <div className="modal-card" style={{margin:"0 25px"}}onClick={(e) => e.stopPropagation()}>
             <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
             <h3 style={{margin:0}}>Add Remarks</h3>
@@ -599,6 +587,18 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
             </div>
           </div>
         </div>
+      )}
+
+      {confirmStep && (
+        <FeedbackModal 
+          type="warning"
+          title="Confirm Status Update"
+          message={`Are you sure you want to mark "${confirmStep.label}" as completed?`}
+          subMessage="This will update the shipment progress."
+          confirmLabel="Confirm"
+          onClose={() => setConfirmStep(null)}
+          onConfirm={() => executeStepUpdate(confirmStep.dbStatus)}
+        />
       )}
     </div>
   );

@@ -17,27 +17,15 @@ USE k2mac_ilms_db;
 
 
 CREATE TABLE Users (
-
   userID INT NOT NULL AUTO_INCREMENT,
-
   firstName VARCHAR(100) NOT NULL,
-
   lastName VARCHAR(100) NOT NULL,
-
   role VARCHAR(20) NOT NULL,
-
-  email VARCHAR(100) NULL,
-
   phone VARCHAR(20) NULL,
-
   dob DATE NULL,
-
   dateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
-
   isArchived TINYINT(1) DEFAULT '0',
-
   PRIMARY KEY (userID)
-
 );
 
 
@@ -183,6 +171,8 @@ CREATE TABLE ShipmentStatusLog (
   status VARCHAR(50) NULL,
 
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  remarks VARCHAR(50) NULL, 
 
   PRIMARY KEY (statusLogID),
 
@@ -371,20 +361,13 @@ CREATE TABLE KPI_Monthly_Reports (
 
 
 -- 1. Users
-
-INSERT INTO Users (userID, firstName, lastName, role, email) VALUES 
-
-(1, 'System', 'Admin', 'Admin', 'admin@k2mac.com'),
-
-(2, 'Ops', 'Manager', 'Operations', 'ops@k2mac.com'),
-
-(3, 'Juan', 'Driver', 'Driver', 'juan@k2mac.com'),
-
-(4, 'Pedro', 'Helper', 'Helper', 'pedro@k2mac.com'),
-
-(5, 'Mark', 'Trucker', 'Driver', 'mark@k2mac.com'),
-
-(6, 'Jose', 'Porter', 'Helper', 'jose@k2mac.com');
+INSERT INTO Users (userID, firstName, lastName, role) VALUES 
+(1, 'System', 'Admin', 'Admin'),
+(2, 'Ops', 'Manager', 'Operations'),
+(3, 'Juan', 'Driver', 'Driver'),
+(4, 'Pedro', 'Helper', 'Helper'),
+(5, 'Mark', 'Trucker', 'Driver'),
+(6, 'Jose', 'Porter', 'Helper');
 
 
 

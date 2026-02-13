@@ -1139,7 +1139,7 @@ function ShipmentView({ user, token, onLogout }) {
                                                                 {phase}
                                                                 {meta?.remarks && (
                                                                     <div className="step-remark-container">
-                                                                        <Icons.MessageSquare size={12} className="remark-icon" />
+                                                                        <Icons.MessageSquare size={14} className="remark-icon" />
                                                                         <div className="remark-tooltip">
                                                                             {meta.remarks}
                                                                         </div>
@@ -1287,6 +1287,7 @@ function ShipmentView({ user, token, onLogout }) {
                                         min={getTodayString()} 
                                         value={currentForm.loadingDate} 
                                         onChange={handleBatchChange} 
+                                        style={{fontFamily:"'Segoe UI', sans-serif"}}
                                     />
                                 </div>
                                 <div className="form-group">
@@ -1299,7 +1300,7 @@ function ShipmentView({ user, token, onLogout }) {
                                         min={currentForm.loadingDate} 
                                         value={currentForm.deliveryDate} 
                                         onChange={handleBatchChange}
-                                        style={{ backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
+                                        style={{ fontFamily:"'Segoe UI', sans-serif", backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
                                     />
                                 </div>
                             </div>                         
@@ -1359,7 +1360,6 @@ function ShipmentView({ user, token, onLogout }) {
                 onPageChange={setCurrentPage} 
             />
             
-            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
                     <h4>Assigned Crew</h4>
@@ -1468,7 +1468,7 @@ function ShipmentView({ user, token, onLogout }) {
             
             {/* Z-Index Fix: No Data Modal should be ON TOP of Export Modal */}
             {showNoDataModal && (
-                <div className="modal-overlay-desktop" style={{zIndex: 1000}}>
+                <div className="modal-overlay-desktop" style={{zIndex: 9000}}>
                     <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
                         <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
                         <p style={{marginBottom: '20px', color: '#666', fontSize: '14px'}}>
@@ -1511,6 +1511,7 @@ function ShipmentView({ user, token, onLogout }) {
                     </div>
                 </div>
             )}
+            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
         </div>
     );
 }
