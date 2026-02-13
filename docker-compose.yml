@@ -10,6 +10,7 @@ services:
   server:
     build: ./server
     restart: always
+    command: npm run dev
     expose:
       - "4000"
     environment:
@@ -20,6 +21,10 @@ services:
       - DB_NAME=${DB_NAME}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
+      - DB_PORT=3306
+    volumes:
+      - ./server:/app
+      - /app/node_modules
     depends_on:
       db:
         condition: service_healthy 

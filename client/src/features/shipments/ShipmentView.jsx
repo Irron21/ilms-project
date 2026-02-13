@@ -2,12 +2,13 @@ import React from 'react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal, PaginationControls } from '@shared';
-import { PHASE_ORDER, EXPORT_COLUMNS, MONTH_NAMES, getTodayString, getDateValue, formatDateDisplay, getMonthValue, formatMonthDisplay } from '@constants';
+import { PHASE_ORDER, STORE_PHASES, WAREHOUSE_PHASES, EXPORT_COLUMNS, MONTH_NAMES, getTodayString, getDateValue, formatDateDisplay, getMonthValue, formatMonthDisplay } from '@constants';
 
 function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [activeTab, setActiveTab] = useState('Active');
+    const [phaseTab, setPhaseTab] = useState('store'); // 'warehouse' or 'store'
     const [statusFilter, setStatusFilter] = useState('All');
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
     const [filterMonth, setFilterMonth] = useState('All');
@@ -16,6 +17,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [dateFilter, setDateFilter] = useState(''); 
     const [routeFilter, setRouteFilter] = useState('');
     const [crewFilter, setCrewFilter] = useState('');
+    const [idFilter, setIdFilter] = useState('');
     const [delayTypeFilter, setDelayTypeFilter] = useState('All'); // 'All', 'Loading', 'Delivery'
     const [showArchived, setShowArchived] = useState(false); 
     const [sortConfig, setSortConfig] = useState({ key: 'loadingDate', direction: 'desc' });
@@ -342,12 +344,10 @@ function ShipmentView({ user, token, onLogout }) {
             return;
         }
 
-        const hasData = shipments.some(s => {
-            const shipDate = s.loadingDate ? s.loadingDate.substring(0, 10) : s.creationTimestamp.substring(0, 10);
-            return shipDate >= dateRange.start && shipDate <= dateRange.end;
-        });
-
-        if (!hasData) { setShowNoDataModal(true); return; }
+        // Logic Change: 
+        // We do NOT filter by 'shipments' state here because 'shipments' state only contains what is loaded in the UI (pagination/filters).
+        // The export is a server-side query that might find data even if it's not currently in the 'shipments' array.
+        // So we proceed to the API call directly.
 
         try {
             const selectedKeys = columnConfig.filter(c => c.checked).map(c => c.key);
@@ -375,7 +375,12 @@ function ShipmentView({ user, token, onLogout }) {
             link.parentNode.removeChild(link);
             setShowExportModal(false); 
         } catch (error) {
-            setFeedbackModal({ type: 'error', title: 'Export Failed', message: "Could not download file.", onClose: () => setFeedbackModal(null) });
+            // Check if it's a 404 (No Data)
+            if (error.response && error.response.status === 404) {
+                 setShowNoDataModal(true);
+            } else {
+                 setFeedbackModal({ type: 'error', title: 'Export Failed', message: "Could not download file.", onClose: () => setFeedbackModal(null) });
+            }
         }
     };
 
@@ -413,10 +418,10 @@ function ShipmentView({ user, token, onLogout }) {
                 case 'Delayed': 
                     // Delayed if:
                     // 1. Delivery Date passed AND not completed
-                    // 2. Loading Date passed AND status is Pending
+                    // 2. Loading Date passed AND status is not Loaded (still at warehouse or pending)
                     return !isCompleted && (
                         (delDate && delDate < today) || 
-                        (loadDate && loadDate < today && s.currentStatus === 'Pending')
+                        (loadDate && loadDate < today && s.currentStatus !== 'Loaded')
                     );
                 case 'Upcoming': 
                     // Upcoming if:
@@ -596,9 +601,9 @@ function ShipmentView({ user, token, onLogout }) {
         // A. Delivery Date has passed
         if (delDate && delDate < today) return 'Delayed';
         
-        // B. Loading Date has passed, but status is still 'Pending' (Late Start)
+        // B. Loading Date has passed, but status is not yet 'Loaded'
         // BUG FIX: Ensure we use strict comparison for passed dates
-        if (loadDate && loadDate < today && s.currentStatus === 'Pending') return 'Delayed';
+        if (loadDate && loadDate < today && s.currentStatus !== 'Loaded') return 'Delayed';
 
         // 3. Upcoming Tab
         // BUG FIX: Exclude 'Loaded' items from Upcoming. Upcoming should only be Pending future loads.
@@ -625,6 +630,7 @@ function ShipmentView({ user, token, onLogout }) {
         const todayStr = getTodayString();
         const filterNameLower = routeFilter.toLowerCase();
         const filterCrewLower = crewFilter.toLowerCase();
+        const filterIdLower = idFilter.toLowerCase();
         const isDelayedTab = activeTab === 'Delayed';
         const isLoadingFilter = delayTypeFilter === 'Loading';
         const isDeliveryFilter = delayTypeFilter === 'Delivery';
@@ -652,17 +658,20 @@ function ShipmentView({ user, token, onLogout }) {
             // 3. Delayed Type Filter (Optimized)
             if (isDelayedTab) {
                  const loadDateVal = s.loadingDate ? String(s.loadingDate).substring(0, 10) : '';
-                 // Loading Delay: Pending + Past Load Date
-                 const isLoadingDelay = loadDateVal && loadDateVal < todayStr && s.currentStatus === 'Pending';
+                 // Loading Delay: Not Loaded + Past Load Date
+                 const isLoadingDelay = loadDateVal && loadDateVal < todayStr && s.currentStatus !== 'Loaded';
                  
                  if (isLoadingFilter && !isLoadingDelay) return false;
                  if (isDeliveryFilter && isLoadingDelay) return false;
             }
 
-            // 4. Route Filter
+            // 4. ID Filter
+            if (idFilter && !String(s.shipmentID).toLowerCase().includes(filterIdLower)) return false;
+
+            // 5. Route Filter
             if (routeFilter && (!s.destLocation || !s.destLocation.toLowerCase().includes(filterNameLower))) return false;
             
-            // 5. Crew Filter
+            // 6. Crew Filter
             if (crewFilter) {
                  if (!s.crewDetails) return false;
                  const names = s.crewDetails.split('|').map(c => c.split(':')[1]?.trim().toLowerCase());
@@ -671,7 +680,7 @@ function ShipmentView({ user, token, onLogout }) {
 
             return true;
         });
-    }, [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter, delayTypeFilter]);
+    }, [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter, idFilter, delayTypeFilter]);
 
     const sortedShipments = useMemo(() => [...finalFiltered].sort((a, b) => {
         const { key, direction } = sortConfig;
@@ -722,10 +731,19 @@ function ShipmentView({ user, token, onLogout }) {
 
     const getTimelineNodeState = (phase, dbStatus) => {
         if (dbStatus === 'Completed') return 'completed';
+        
+        // Use full PHASE_ORDER for calculation
         const phases = PHASE_ORDER;
         const currentIndex = phases.indexOf(dbStatus); 
         const phaseIndex = phases.indexOf(phase);
-        if (dbStatus === 'Pending') { if (phase === 'Loaded') return 'active'; return 'pending'; }
+        
+        // Handle initial state
+        if (dbStatus === 'Pending') { 
+            // The first warehouse phase is 'Arrival at Warehouse'
+            if (phase === 'Arrival at Warehouse') return 'active'; 
+            return 'pending'; 
+        }
+
         if (phaseIndex <= currentIndex) return 'completed'; 
         if (phaseIndex === currentIndex + 1) return 'active'; 
         return 'pending'; 
@@ -733,12 +751,23 @@ function ShipmentView({ user, token, onLogout }) {
     const getPhaseMeta = (phase) => {
         const log = activeLogs.find(l => l.phaseName === phase);
         if (!log) return null;
+        
+        // Fix 8-hour UTC offset for Philippine Time (UTC+8)
         const d = new Date(log.timestamp);
+        // If the timestamp doesn't have a timezone, it might be interpreted as local.
+        // But if it's 8 hours behind, we need to add 8 hours.
+        // We'll check if the string contains 'Z' or '+'. If not, we assume it's UTC from DB.
+        const isUTC = typeof log.timestamp === 'string' && !log.timestamp.includes('Z') && !log.timestamp.includes('+');
+        if (isUTC) {
+            d.setHours(d.getHours() + 8);
+        }
+
         return {
             time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             date: d.toLocaleDateString(),
             actorName: log.actorName || '',
-            actorRole: log.actorRole || ''
+            actorRole: log.actorRole || '',
+            remarks: log.remarks || null
         };
     };
 
@@ -894,6 +923,19 @@ function ShipmentView({ user, token, onLogout }) {
                         
                         <div className="filter-group">
                              <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Shipment ID</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search ID"
+                                    value={idFilter}
+                                    onChange={(e) => { setIdFilter(e.target.value); setCurrentPage(1); }}
+                                    style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '90px', outline: 'none'}}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="filter-group">
+                             <div style={{display:'flex', flexDirection:'column'}}>
                                 <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Route</label>
                                 <input 
                                     type="text" 
@@ -1037,16 +1079,73 @@ function ShipmentView({ user, token, onLogout }) {
                                 {(isOpen || isClosing) && (
                                     <tr className="expanded-row-container"><td colSpan="10">
                                         <div className={`timeline-wrapper ${isClosing ? 'closing' : ''}`}>
-                                            <div className="timeline-content">
-                                            {PHASE_ORDER.map((phase, index) => {
+                                            <div className="timeline-inner-container">
+                                                <div className="timeline-header-tabs">
+                                                    <div className="phase-toggle-buttons">
+                                                        <button 
+                                                            className={`phase-toggle-btn ${phaseTab === 'warehouse' ? 'active' : ''}`}
+                                                            onClick={() => setPhaseTab('warehouse')}
+                                                            title="Warehouse"
+                                                        >
+                                                            Warehouse
+                                                        </button>
+                                                        <button 
+                                                            className={`phase-toggle-btn ${phaseTab === 'store' ? 'active' : ''}`}
+                                                            onClick={() => setPhaseTab('store')}
+                                                            title="Store"
+                                                        >
+                                                            Store
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="timeline-content">
+                                                {phaseTab === 'store' && !s.deliveryDate && (
+                                                    <div className={`store-locked-overlay ${isClosing ? 'closing' : ''}`}>
+                                                        <div className="lock-content">
+                                                            <Icons.Lock size={24} />
+                                                            <span>Pending Delivery Schedule</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {phaseTab === 'store' && s.deliveryDate && (() => {
+                                                    const startRouteIndex = PHASE_ORDER.indexOf('Start Route');
+                                                    const currentStatusIndex = s.currentStatus === 'Completed' ? 999 : PHASE_ORDER.indexOf(s.currentStatus);
+                                                    const isWarehouseComplete = currentStatusIndex >= startRouteIndex;
+                                                    const isDeliveryReady = s.deliveryDate <= getTodayString();
+                                                    
+                                                    // Hide overlay if warehouse is done AND delivery date is today/past
+                                                    if (isWarehouseComplete && isDeliveryReady) return null;
+
+                                                    return (
+                                                     <div className={`store-locked-overlay delivery-info-overlay ${isClosing ? 'closing' : ''}`}>
+                                                         <div className="lock-content delivery-info-content">
+                                                             <Icons.Lock size={17}/>
+                                                             <span>Scheduled Delivery: {formatDateDisplay(s.deliveryDate)}</span>
+                                                         </div>
+                                                     </div>
+                                                    );
+                                                })()}
+                                                
+                                                {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phase, index, array) => {
                                                 const state = getTimelineNodeState(phase, s.currentStatus);
                                                 const meta = getPhaseMeta(phase);
                                                 return (
                                                     <div key={phase} className={`timeline-step ${state}`}>
-                                                        {index !== PHASE_ORDER.length - 1 && <div className="step-line"></div>}
+                                                        {index !== array.length - 1 && <div className="step-line"></div>}
                                                         <div className="step-dot"></div>
                                                         <div className="step-content-desc">
-                                                            <div className="step-title">{phase}</div>
+                                                            <div className="step-title" style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                                                {phase}
+                                                                {meta?.remarks && (
+                                                                    <div className="step-remark-container">
+                                                                        <Icons.MessageSquare size={12} className="remark-icon" />
+                                                                        <div className="remark-tooltip">
+                                                                            {meta.remarks}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                             {meta ? (
                                                                 <>
                                                                     <div className="step-time">{meta.time}</div>
@@ -1059,6 +1158,7 @@ function ShipmentView({ user, token, onLogout }) {
                                                     </div>
                                                 );
                                             })}
+                                                </div>
                                             </div>
                                         </div>
                                     </td></tr>
@@ -1271,16 +1371,9 @@ function ShipmentView({ user, token, onLogout }) {
                     ))}
                 </div>
             )}
-            {showNoDataModal && (
-                <div className="modal-overlay-desktop">
-                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
-                        <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
-                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
-                    </div>
-                </div>
-            )}
+            {/* Z-Index Fix: Render Export Modal BEFORE No Data Modal or increase z-index of No Data Modal */}
             {showExportModal && (
-                <div className="modal-overlay-desktop">
+                <div className="modal-overlay-desktop" style={{zIndex: 999}}>
                     <div className="modal-form-card" style={{width: '500px'}}>
                         <div className="modal-header">
                             <h2>Extract Data</h2>
@@ -1369,6 +1462,19 @@ function ShipmentView({ user, token, onLogout }) {
                                 <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download Report</button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+            
+            {/* Z-Index Fix: No Data Modal should be ON TOP of Export Modal */}
+            {showNoDataModal && (
+                <div className="modal-overlay-desktop" style={{zIndex: 1000}}>
+                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
+                        <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
+                        <p style={{marginBottom: '20px', color: '#666', fontSize: '14px'}}>
+                           No data available for the selected period ({formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}).
+                        </p>
+                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
                     </div>
                 </div>
             )}

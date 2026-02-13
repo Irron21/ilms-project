@@ -43,6 +43,26 @@
 .btn-success:hover { background: #219150; }
 .btn-danger:hover { background: #C0392B; }
 
+/* INPUTS */
+.remarks-textarea {
+    width: 100%;
+    min-height: 90px;
+    padding: 10px;
+    border: 1px solid #E0E0E0;
+    border-radius: 8px;
+    background: #FAFAFA;
+    font-size: 14px;
+    margin: 10px 0 20px 0;
+    resize: vertical;
+    font-family: inherit;
+    color: #333;
+}
+.remarks-textarea:focus {
+    outline: none;
+    border-color: #BDBDBD;
+    background: #FFFFFF;
+}
+
 /* --- MOBILE RESPONSIVENESS --- */
 @media (max-width: 480px) {
     .modal-card {
@@ -63,6 +83,13 @@
 
     .modal-message {
         font-size: 14px;
+    }
+    
+    .remarks-textarea {
+        min-height: 80px;
+        margin-bottom: 15px;
+        font-size: 13px;
+        padding: 10px;
     }
 
     .modal-actions {

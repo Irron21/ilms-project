@@ -134,7 +134,7 @@ CREATE TABLE Shipments (
 
   creationTimestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-  currentStatus VARCHAR(20) DEFAULT 'Pending',
+  currentStatus VARCHAR(50) DEFAULT 'Pending',
 
   delayReason VARCHAR(255) NULL,
 

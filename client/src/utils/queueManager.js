@@ -22,7 +22,8 @@ export const queueManager = {
           await api.put(`/shipments/${item.shipmentID}/status`, {
             status: item.status,
             userID: item.userID,
-            clientTimestamp: item.timestamp
+            clientTimestamp: item.timestamp,
+            remarks: item.remarks || null // Pass remarks if present
           });
         }
       } catch (err) {

@@ -14,10 +14,15 @@ const kpiRoutes = require('./routes/kpiRoutes');
 const app = express();
 const PORT = process.env.PORT || 4000;
 const logRoutes = require('./routes/logRoutes');
-const { ErrorReporting } = require('@google-cloud/error-reporting');
+// const { ErrorReporting } = require('@google-cloud/error-reporting');
 let errors;
 if (process.env.NODE_ENV === 'production') {
-    errors = new ErrorReporting();
+    try {
+        const { ErrorReporting } = require('@google-cloud/error-reporting');
+        errors = new ErrorReporting();
+    } catch (e) {
+        console.warn("Google Cloud Error Reporting not found, skipping.");
+    }
 }
 
 // Trust Proxy (Required for Rate Limiting behind Nginx)
