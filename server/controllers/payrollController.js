@@ -223,9 +223,17 @@ exports.getPayrollSummary = (req, res) => {
     const sql = `
         SELECT 
             u.userID, u.firstName, u.lastName, u.role,
-            COUNT(sp.payrollID) as tripCount,
-            COALESCE(SUM(sp.baseFee), 0) as totalBasePay,
-            COALESCE(SUM(sp.allowance), 0) as totalAllowance,
+            COUNT(DISTINCT sp.payrollID) as tripCount,
+            COALESCE(SUM(DISTINCT sp.baseFee), 0) as totalBasePay,
+            COALESCE(SUM(DISTINCT sp.allowance), 0) as totalAllowance,
+            
+            -- Shipment-specific adjustments (Sum of all adjustments for this crew in this period's shipments)
+            COALESCE((
+                SELECT SUM(CASE WHEN sa.type = 'BONUS' THEN sa.amount ELSE -sa.amount END)
+                FROM ShipmentAdjustments sa
+                JOIN ShipmentPayroll sp2 ON sa.shipmentID = sp2.shipmentID AND sa.crewID = sp2.crewID
+                WHERE sp2.crewID = u.userID AND sp2.periodID = ?
+            ), 0) as totalShipmentAdjustments,
             
             COALESCE((SELECT SUM(amount) FROM PayrollAdjustments pa 
                 WHERE pa.userID = u.userID AND pa.periodID = ? AND pa.type = 'BONUS' AND pa.status != 'VOID'), 0) as totalBonus,  
@@ -246,11 +254,11 @@ exports.getPayrollSummary = (req, res) => {
         ORDER BY u.lastName ASC
     `;
 
-    db.query(sql, [periodID, periodID, periodID, periodID, periodID], (err, results) => {
+    db.query(sql, [periodID, periodID, periodID, periodID, periodID, periodID], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         const finalResults = results.map(row => ({
             ...row,
-            netSalary: (Number(row.totalBasePay) + Number(row.totalBonus)) - Number(row.totalDeductions)
+            netSalary: (Number(row.totalBasePay) + Number(row.totalShipmentAdjustments) + Number(row.totalBonus)) - Number(row.totalDeductions)
         }));
         res.json(finalResults);
     });
@@ -267,7 +275,13 @@ exports.getEmployeeTrips = (req, res) => {
             s.destLocation as routeCluster,          
             v.type as vehicleType,               
             sp.baseFee,
-            sp.allowance
+            sp.allowance,
+            -- Subquery to get sum of adjustments for this specific shipment/crew
+            COALESCE((
+                SELECT SUM(CASE WHEN type = 'BONUS' THEN amount ELSE -amount END)
+                FROM ShipmentAdjustments
+                WHERE shipmentID = s.shipmentID AND crewID = ?
+            ), 0) as adjustmentAmount
         FROM ShipmentPayroll sp
         JOIN Shipments s ON sp.shipmentID = s.shipmentID
         LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID 
@@ -278,9 +292,53 @@ exports.getEmployeeTrips = (req, res) => {
         ORDER BY s.deliveryDate DESC
     `;
 
-    db.query(sql, [periodID, userID], (err, results) => {
+    db.query(sql, [userID, periodID, userID], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(results);
+    });
+};
+
+// GET MULTIPLE ADJUSTMENTS FOR A SHIPMENT
+exports.getShipmentAdjustments = (req, res) => {
+    const { shipmentID, crewID } = req.params;
+    const sql = "SELECT * FROM ShipmentAdjustments WHERE shipmentID = ? AND crewID = ? ORDER BY created_at DESC";
+    db.query(sql, [shipmentID, crewID], (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+};
+
+// ADD SHIPMENT ADJUSTMENT
+exports.addShipmentAdjustment = (req, res) => {
+    const { shipmentID, crewID, amount, type, reason } = req.body;
+    const adminID = req.user ? req.user.userID : 1;
+
+    if (!shipmentID || !crewID || !amount || !type || !reason) {
+        return res.status(400).json({ error: "All fields are required" });
+    }
+
+    const sql = "INSERT INTO ShipmentAdjustments (shipmentID, crewID, amount, type, reason) VALUES (?, ?, ?, ?, ?)";
+    db.query(sql, [shipmentID, crewID, amount, type, reason], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        logActivity(adminID, 'ADD_SHIPMENT_ADJUSTMENT', `Added ${type} of ₱${amount} to Shipment #${shipmentID} (Crew #${crewID}): ${reason}`, () => {
+            res.json({ message: "Adjustment added successfully", adjustmentID: result.insertId });
+        });
+    });
+};
+
+// DELETE SHIPMENT ADJUSTMENT
+exports.deleteShipmentAdjustment = (req, res) => {
+    const { adjustmentID } = req.params;
+    const adminID = req.user ? req.user.userID : 1;
+
+    const sql = "DELETE FROM ShipmentAdjustments WHERE adjustmentID = ?";
+    db.query(sql, [adjustmentID], (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        
+        logActivity(adminID, 'DELETE_SHIPMENT_ADJUSTMENT', `Removed shipment adjustment ID #${adjustmentID}`, () => {
+            res.json({ message: "Adjustment removed successfully" });
+        });
     });
 };
 
@@ -374,7 +432,7 @@ exports.exportPayroll = async (req, res) => {
             // C. Fetch Data
             const sqlShipments = `
                 SELECT sp.crewID, s.shipmentID, s.deliveryDate, s.destName, s.destLocation, 
-                       v.type as vehicleType, sp.baseFee, sp.allowance
+                       v.type as vehicleType, sp.baseFee, sp.allowance, sp.adjustmentAmount, sp.adjustmentReason
                 FROM ShipmentPayroll sp
                 JOIN Shipments s ON sp.shipmentID = s.shipmentID
                 LEFT JOIN Vehicles v ON s.vehicleID = v.vehicleID
@@ -413,6 +471,8 @@ exports.exportPayroll = async (req, res) => {
                     if(k === 'vehicleType') return 'TYPE';
                     if(k === 'rate') return 'BASE FEE';
                     if(k === 'allowance') return 'ALLOWANCE';
+                    if(k === 'adjustment') return 'ADJUSTMENT';
+                    if(k === 'reason') return 'REASON';
                     return k.toUpperCase();
                 });
                 masterRows.push(headerRow);
@@ -420,6 +480,7 @@ exports.exportPayroll = async (req, res) => {
                 // DATA
                 let totalRate = 0;
                 let totalAllowance = 0;
+                let totalShipmentAdj = 0;
 
                 empShipments.forEach(s => {
                     const row = [];
@@ -432,20 +493,36 @@ exports.exportPayroll = async (req, res) => {
                         if(k === 'vehicleType') row.push(s.vehicleType || '-');
                         if(k === 'rate') row.push(Number(s.baseFee) || 0);
                         if(k === 'allowance') row.push(Number(s.allowance) || 0);
+                        if(k === 'adjustment') row.push(Number(s.adjustmentAmount) || 0);
+                        if(k === 'reason') row.push(s.adjustmentReason || '-');
                     });
                     masterRows.push(row);
                     totalRate += (Number(s.baseFee) || 0);
                     totalAllowance += (Number(s.allowance) || 0);
+                    totalShipmentAdj += (Number(s.adjustmentAmount) || 0);
                 });
+
+                // FOOTER for shipments
+                const footerRow = [];
+                selectedColumns.forEach(k => {
+                    if(k === 'rate') footerRow.push(totalRate);
+                    else if(k === 'allowance') footerRow.push(totalAllowance);
+                    else if(k === 'adjustment') footerRow.push(totalShipmentAdj);
+                    else footerRow.push('');
+                });
+                masterRows.push(footerRow);
 
                 // SUMMARY
                 const bonusTotal = empAdjustments.filter(a => a.type === 'BONUS').reduce((sum, a) => sum + Number(a.amount), 0);
                 const deductTotal = empAdjustments.filter(a => a.type === 'DEDUCTION').reduce((sum, a) => sum + Number(a.amount), 0);
-                const netPay = (totalRate + bonusTotal) - deductTotal;
+                const netPay = (totalRate + totalShipmentAdj + bonusTotal) - deductTotal;
 
                 masterRows.push([]); 
                 masterRows.push(['', '--- PAYROLL SUMMARY ---']);
                 masterRows.push(['', 'Total Base Fees:', totalRate]);
+                if (totalShipmentAdj !== 0) {
+                    masterRows.push(['', 'Shipment Adjustments:', totalShipmentAdj]);
+                }
                 masterRows.push(['', 'Total Bonuses:', bonusTotal]);
                 masterRows.push(['', 'Less: Deductions/Advances:', `(${deductTotal})`]);
                 masterRows.push(['', '-----------------------', '----------']);

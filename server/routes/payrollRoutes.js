@@ -3,6 +3,9 @@ const router = express.Router();
 const payrollController = require('../controllers/payrollController');
 const verifyToken = require('../middleware/authMiddleware'); 
 
+router.get('/shipment-adjustments/:shipmentID/:crewID', verifyToken, payrollController.getShipmentAdjustments);
+router.post('/shipment-adjustment', verifyToken, payrollController.addShipmentAdjustment);
+router.delete('/shipment-adjustment/:adjustmentID', verifyToken, payrollController.deleteShipmentAdjustment);
 router.get('/export', payrollController.exportPayroll);
 router.get('/summary/:periodID', payrollController.getPayrollSummary);
 router.get('/trips/:periodID/:userID', payrollController.getEmployeeTrips);

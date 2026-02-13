@@ -107,7 +107,7 @@ function EmployeeLedger({ employee, periodID, isLocked, onClose, onUpdate }) {
                         </div>
                         <div>
                             <h2 style={{margin:0, fontSize:'20px', color:'#2d3436'}}>{employee.firstName} {employee.lastName}</h2>
-                            <p style={{margin:0, fontSize:'13px', color:'#636e72'}}>Adjustments & Bonuses Ledger</p>
+                            <p style={{margin:0, fontSize:'13px', color:'#636e72'}}>Payroll Adjustments Ledger</p>
                         </div>
                     </div>
                     <button onClick={onClose} style={{background:'none', border:'none', cursor:'pointer', padding:'8px'}}><Icons.X size={24} color="#b2bec3"/></button>

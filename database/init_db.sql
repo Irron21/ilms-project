@@ -235,19 +235,14 @@ CREATE TABLE PayrollRates (
 
 
 CREATE TABLE ShipmentPayroll (
-
   payrollID INT NOT NULL AUTO_INCREMENT,
-
   shipmentID INT NOT NULL,
-
   crewID INT NOT NULL,
-
   baseFee DECIMAL(10,2) NULL,
-
   allowance DECIMAL(10,2) NULL,
-
   periodID INT NULL,
-
+  adjustmentAmount DECIMAL(10,2) DEFAULT '0.00',
+  adjustmentReason VARCHAR(255) NULL,
   PRIMARY KEY (payrollID),
 
   FOREIGN KEY (shipmentID) REFERENCES Shipments (shipmentID) ON DELETE CASCADE,

@@ -201,34 +201,37 @@
 
 /* --- ✅ DEFINED COLUMN WIDTHS (Total = 100%) --- */
 /* 1. Employee Name (Wide) */
-.payroll-table th:nth-child(1) { width: 17%; text-align: left; }
+.payroll-table th:nth-child(1) { width: 15%; text-align: left; }
 
 /* 2. Role (Narrow) */
-.payroll-table th:nth-child(2) { width: 9%; text-align: left; }
+.payroll-table th:nth-child(2) { width: 8%; text-align: left; }
 
 /* 3. Trips (Narrow) */
-.payroll-table th:nth-child(3) { width: 6%; text-align: center; }
+.payroll-table th:nth-child(3) { width: 5%; text-align: center; }
 
 /* 4. Base Pay */
-.payroll-table th:nth-child(4) { width: 9%; text-align: right; }
+.payroll-table th:nth-child(4) { width: 8%; text-align: right; }
 
 /* 5. Deductions */
-.payroll-table th:nth-child(5) { width: 9%; text-align: right; }
+.payroll-table th:nth-child(5) { width: 8%; text-align: right; }
 
 /* 6. Bonus */
-.payroll-table th:nth-child(6) { width: 9%; text-align: right; }
+.payroll-table th:nth-child(6) { width: 8%; text-align: right; }
 
 /* 7. Net Salary (Highlighted) */
-.payroll-table th:nth-child(7) { width: 11%; text-align: right; }
+.payroll-table th:nth-child(7) { width: 10%; text-align: right; }
 
 /* 8. Allowance */
-.payroll-table th:nth-child(8) { width: 9%; text-align: right; }
+.payroll-table th:nth-child(8) { width: 8%; text-align: right; }
 
 /* 9. Paid */
-.payroll-table th:nth-child(9) { width: 9%; text-align: right; }
+.payroll-table th:nth-child(9) { width: 8%; text-align: right; }
 
 /* 10. Status (Fixed Width for Buttons) */
-.payroll-table th:nth-child(10) { width: 12%; text-align: center; }
+.payroll-table th:nth-child(10) { width: 10%; text-align: center; }
+
+/* 11. Actions (Fixed Width for Icons) */
+.payroll-table th:nth-child(11) { width: 12%; text-align: center; }
 
 
 /* --- ROW & CELL STYLES --- */
@@ -265,6 +268,9 @@
 .payroll-table td:nth-child(8),
 .payroll-table td:nth-child(9) { text-align: right; }
 .payroll-table td:nth-child(10) { text-align: center; overflow: visible; /* Allows tooltips to pop out */ }
+.payroll-table td:nth-child(11) { 
+    text-align: center; 
+}
 
 .payroll-table tbody tr:last-child td {
     border-bottom: none;
@@ -413,7 +419,40 @@
     accent-color: #43B2DA; width: 16px; height: 16px; cursor: pointer;
 }
 
-/* Modal Reuse Styles */
+/* Action Buttons */
+.icon-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    background: white;
+    color: #7f8c8d;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0;
+}
+
+.icon-action-btn:hover {
+    background-color: #f8f9fa;
+    border-color: #bdc3c7;
+    color: #2c3e50;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.icon-action-btn svg {
+    display: block;
+}
+
+/* Badge for Pending Payment */
+.badge-pending {
+    background: #f5f6f7;
+    color: #7f8c8d;
+    border: 1px solid #e0e0e0;
+}
+
 .modal-overlay-desktop {
     position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
     background-color: rgba(0, 0, 0, 0.5); display: flex;
@@ -489,10 +528,10 @@
 }
 
 .payment-body {
-    padding: 30px;
+    padding: 20px;
     display: flex;
     flex-direction: column;
-    gap: 25px;
+    gap: 15px;
     flex: 1;        
     overflow: hidden; 
 }
@@ -526,7 +565,7 @@
     background: #f8f9fa;
     border: 1px solid #e9ecef;
     border-radius: 12px;
-    padding: 20px 25px;
+    padding: 20px;
     flex-shrink: 0; 
 }
 
