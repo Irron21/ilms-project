@@ -705,8 +705,6 @@ function PayrollView() {
                 />
             </div>
             
-            {feedbackModal && <FeedbackModal {...feedbackModal} />}
-
             {showRatesManager && (
                 <RatesManager onClose={() => setShowRatesManager(false)} />
             )}
@@ -813,14 +811,15 @@ function PayrollView() {
                                 ))}
                             </div>
 
-                            <div className="modal-actions">
+                            <div className="modal-actions" style={{marginTop:'25px'}}>
                                 <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-                                <button className="submit-btn" onClick={handleExport}>Download Excel</button>
+                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download .xlsx</button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
         </div>
     );
 }

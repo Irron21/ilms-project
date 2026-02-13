@@ -4,7 +4,7 @@ import { Icons, FeedbackModal, PaginationControls } from '@shared';
 import { MONTH_NAMES, getYearOptions } from '@constants';
 
 function UserManagement({ activeTab = "users" }) { 
-  const token = localStorage.getItem('token'); 
+  const token = sessionStorage.getItem('token'); 
   const rowsPerPage = 10;
 
   // Pagination
@@ -46,7 +46,7 @@ function UserManagement({ activeTab = "users" }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [currentVehicle, setCurrentVehicle] = useState(null);
   
-  const [userForm, setUserForm] = useState({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' });
+  const [userForm, setUserForm] = useState({ firstName: '', lastName: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' });
   const [truckForm, setTruckForm] = useState({ plateNo: '', type: '6-Wheeler', status: 'Working' });
   const [resetData, setResetData] = useState({ userID: null, name: '', newPassword: '' });
 
@@ -183,11 +183,27 @@ function UserManagement({ activeTab = "users" }) {
       );
   };
 
-  const handleUserInputChange = (e) => { const { name, value } = e.target; e.target.setCustomValidity(''); if (name === 'phone' && (!/^\d*$/.test(value) || value.length > 11)) return; setUserForm(prev => ({ ...prev, [name]: value })); };
+  const handleUserInputChange = (e) => {
+    const { name, value } = e.target;
+    e.target.setCustomValidity('');
+
+    if (name === 'phone') {
+      // Allow only numbers and limit to 11 digits
+      if (!/^\d*$/.test(value) || value.length > 11) return;
+    }
+
+    setUserForm(prev => ({ ...prev, [name]: value }));
+  };
   
   const handleCreateSubmit = async (e) => { 
       e.preventDefault(); 
       
+      // PH Phone Validation
+      if (!userForm.phone.startsWith('0') || userForm.phone.length !== 11) {
+          setFeedbackModal({ type: 'error', title: 'Invalid Phone', message: 'Phone must be 11 digits and start with 0.', onClose: () => setFeedbackModal(null) });
+          return;
+      }
+
       if (!isPasswordValid(userForm.password)) {
           setFeedbackModal({ type: 'error', title: 'Invalid Password', message: 'Please meet all password requirements.', onClose: () => setFeedbackModal(null) });
           return;
@@ -208,7 +224,24 @@ function UserManagement({ activeTab = "users" }) {
       } 
   };
   
-  const handleUpdateSubmit = async (e) => { e.preventDefault(); try { await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditModal(false); fetchUsers(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
+  const handleUpdateSubmit = async (e) => { 
+    e.preventDefault(); 
+    
+    // PH Phone Validation
+    if (!userForm.phone.startsWith('0') || userForm.phone.length !== 11) {
+        setFeedbackModal({ type: 'error', title: 'Invalid Phone', message: 'Phone must be 11 digits and start with 0.', onClose: () => setFeedbackModal(null) });
+        return;
+    }
+
+    try { 
+        await api.put(`/users/${currentUser.userID}`, userForm, { headers: { Authorization: `Bearer ${token}` } }); 
+        setShowEditModal(false); 
+        fetchUsers(); 
+        setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); 
+    } catch (err) { 
+        alert('Failed'); 
+    } 
+  };
   const handleTruckSubmit = async (e) => { e.preventDefault(); try { await api.post('/vehicles/create', truckForm, { headers: { Authorization: `Bearer ${token}` } }); setShowTruckModal(false); fetchVehicles(); setFeedbackModal({ type: 'success', title: 'Vehicle Created', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
   const handleUpdateTruck = async (e) => { e.preventDefault(); try { await api.put(`/vehicles/${currentVehicle.vehicleID}`, truckForm, { headers: { Authorization: `Bearer ${token}` } }); setShowEditTruckModal(false); fetchVehicles(); setFeedbackModal({ type: 'success', title: 'Updated', message: 'Success', onClose: () => setFeedbackModal(null) }); } catch (err) { alert('Failed'); } };
   const initiateDelete = (type, id, name) => { setFeedbackModal({ type: 'warning', title: `Delete ${type}`, message: `Delete ${name}?`, confirmLabel: "Delete", onConfirm: () => performDelete(type, id) }); };
@@ -334,7 +367,7 @@ function UserManagement({ activeTab = "users" }) {
                     <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Search</label>
                     <input 
                         type="text" 
-                        placeholder="Name or ID..." 
+                        placeholder="Name or ID" 
                         value={searchTerm} 
                         onChange={(e) => { setSearchTerm(e.target.value); setUserPage(1); }} 
                         style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '150px', outline: 'none', padding:'2px 0'}}
@@ -345,11 +378,11 @@ function UserManagement({ activeTab = "users" }) {
                 </button>
                 <div className="count-badge">{filteredUsers.length} Users</div>
             </div>
-            {!showArchived && <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', email: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' }); setShowCreateModal(true); }}> + Create User </button>}
+            {!showArchived && <button className="create-user-btn" onClick={() => { setUserForm({ firstName: '', lastName: '', phone: '', dob: '', role: 'Admin', password: '', confirmPassword: '' }); setShowCreateModal(true); }}> + Create User </button>}
         </div>
         <div className="table-wrapper">
           <table className="user-table">
-            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone</th><th>Email</th><th>Role</th>
+            <thead><tr><th>Employee ID</th><th>Name</th><th>Phone</th><th>Role</th><th>Date of Birth</th>
             <th className="sortable-header">
                 <div onClick={() => handleSort('date')} className="th-content">Date Added {renderSortArrow()}</div>
             </th>
@@ -359,8 +392,9 @@ function UserManagement({ activeTab = "users" }) {
                 <tr key={u.userID}>
                   <td style={{fontWeight:'700', color:'#555'}}>{u.employeeID || 'N/A'}</td>
                   <td>{u.firstName} {u.lastName}</td><td>{u.phone || '-'}</td>
-                  <td style={{ whiteSpace: 'normal', wordBreak: 'break-all', minWidth: '150px' }}>{u.email || '-'}</td>
-                  <td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td><td>{new Date(u.dateCreated).toLocaleDateString()}</td>
+                  <td><span className={`role-tag ${u.role.toLowerCase()}`}>{u.role}</span></td>
+                  <td>{u.dob ? new Date(u.dob).toLocaleDateString() : '-'}</td>
+                  <td>{new Date(u.dateCreated).toLocaleDateString()}</td>
                   <td className="action-cells">
                   {showArchived ? (<button className="icon-btn" onClick={() => initiateRestore('user', u.userID)} title="Restore"><Icons.Restore/></button>) : 
                   (<><button className="icon-btn" onClick={() => initiateResetPassword(u)} title="Reset Password"><Icons.Key size={18} /></button><button className="icon-btn" onClick={() => { setCurrentUser(u); setUserForm({ ...u, dob: u.dob ? new Date(u.dob).toISOString().split('T')[0] : '', password: '', confirmPassword: '' }); setShowEditModal(true); }}><Icons.Edit/></button><button className="icon-btn" onClick={() => initiateDelete('user', u.userID, `${u.firstName} ${u.lastName}`)}><Icons.Trash/></button></>)}
@@ -381,7 +415,7 @@ function UserManagement({ activeTab = "users" }) {
         <div className="user-mgmt-container">
           <div className="header-actions">
               
-              <div className="filter-group-inline" style={{ gap: '12px' }}>
+              <div className="filter-group-inline">
                   <div className="filter-group-bordered">
                       <div style={{display:'flex', flexDirection:'column'}}>
                           <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Year</label>
@@ -456,8 +490,7 @@ function UserManagement({ activeTab = "users" }) {
   return (
     <>
       {activeTab === 'trucks' ? renderTruckView() : activeTab === 'logs' ? renderLogsView() : renderUserView()}
-      
-      {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
+
       {showCreateModal && (<div className="modal-backdrop"><form className="user-modal-card" onSubmit={handleCreateSubmit}>
         <div className="modal-header" style={{marginBottom:'15px'}}>
           <h3 style={{margin:0, textAlign:'left'}}>Create User</h3>
@@ -473,17 +506,22 @@ function UserManagement({ activeTab = "users" }) {
             <input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required />
           </div>
           <div className="form-group">
-            <label>Email</label>
-            <input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required />
-          </div>
-          <div className="form-group">
             <label>Phone</label>
-            <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required />
+            <input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required placeholder='09*********' />
           </div>
           <div className="form-group">
-            <label>DOB</label>
-            <input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required />
+            <label>Date of Birth</label>
+            <input 
+              style={{fontFamily:"'Segoe UI', sans-serif"}}
+              type="date" 
+              name="dob" 
+              value={userForm.dob} 
+              onChange={handleUserInputChange} 
+              max={new Date().toISOString().split('T')[0]} 
+              required 
+            />
           </div>
+          </div>         
           <div className="form-group">
             <label>Role</label>
             <select name="role" value={userForm.role} onChange={handleUserInputChange}>
@@ -491,14 +529,34 @@ function UserManagement({ activeTab = "users" }) {
               <option value="Driver">Driver</option><option value="Helper">Helper</option>
             </select>
           </div>
+           <div className="form-grid">
           <div className="form-group">
             <label>Password</label>
             <input type="password" name="password" value={userForm.password} onChange={handleUserInputChange} required />
             {renderPasswordFeedback(userForm.password)}
           </div>
           <div className="form-group">
-            <label>Confirm</label>
-            <input type="password" name="confirmPassword" value={userForm.confirmPassword} onChange={handleUserInputChange} required />
+            <label>Confirm Password</label>
+            <input 
+              type="password" 
+              name="confirmPassword" 
+              value={userForm.confirmPassword} 
+              onChange={handleUserInputChange} 
+              required 
+            />
+            {userForm.confirmPassword && (
+              <div style={{ fontSize: '11px', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {userForm.password === userForm.confirmPassword ? (
+                  <span style={{ color: '#27ae60', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Icons.Check size={10} /> Passwords match
+                  </span>
+                ) : (
+                  <span style={{ color: '#e74c3c', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'currentColor' }}></div> Passwords mismatch
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           </div>
           <div className="modal-footer">
@@ -511,13 +569,15 @@ function UserManagement({ activeTab = "users" }) {
     
       {showEditModal && (<div className="modal-backdrop"><form className="user-modal-card" onSubmit={handleUpdateSubmit}><div className="modal-header" style={{marginBottom:'15px'}}>
           <h3 style={{margin:0, textAlign:'left'}}>Edit User</h3><button type="button" className="close-btn" onClick={() => setShowEditModal(false)}>×</button>
-        </div><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Email</label><input type="email" name="email" value={userForm.email} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>DOB</label><input type="date" name="dob" value={userForm.dob} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
+        </div><div className="form-grid"><div className="form-group"><label>First Name</label><input type="text" name="firstName" value={userForm.firstName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Last Name</label><input type="text" name="lastName" value={userForm.lastName} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Phone</label><input type="text" name="phone" value={userForm.phone} onChange={handleUserInputChange} required /></div><div className="form-group"><label>Date of Birth</label><input type="date" style={{fontFamily:"'Segoe UI', sans-serif"}} name="dob" value={userForm.dob} onChange={handleUserInputChange} max={new Date().toISOString().split('T')[0]} required /></div><div className="form-group"><label>Role</label><select name="role" value={userForm.role} onChange={handleUserInputChange}><option value="Admin">Admin</option><option value="Operations">Operations</option><option value="Driver">Driver</option><option value="Helper">Helper</option></select></div></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
       {showTruckModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 350}} onSubmit={handleTruckSubmit}><div className="modal-header" style={{marginBottom:'15px'}}>
           <h3 style={{margin:0, textAlign:'left'}}>Add Vehicle</h3><button type="button" className="close-btn" onClick={() => setShowTruckModal(false)}>×</button>
         </div>
           <div className="form-group"><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /></div><div className="form-group"><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select></div><div className="form-group"><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Save</button></div></form></div>)}
       {showEditTruckModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 350}} onSubmit={handleUpdateTruck}><h3>Edit Vehicle</h3><div className="form-group"><label>Plate</label><input value={truckForm.plateNo} onChange={e => setTruckForm({...truckForm, plateNo: e.target.value})} required /></div><div className="form-group"><label>Type</label><select value={truckForm.type} onChange={e => setTruckForm({...truckForm, type: e.target.value})}><option value="6-Wheeler">6-Wheeler</option><option value="10-Wheeler">10-Wheeler</option><option value="4-Wheeler">4-Wheeler</option><option value="AUV">AUV</option><option value="Forward">Forward</option><option value="H100">H100</option><option value="L300">L300</option></select></div><div className="form-group"><label>Status</label><select value={truckForm.status} onChange={e => setTruckForm({...truckForm, status: e.target.value})}><option value="Working">Working</option><option value="Maintenance">Maintenance</option></select></div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowEditTruckModal(false)}>Cancel</button><button type="submit" className="btn-save">Update</button></div></form></div>)}
       {showResetModal && (<div className="modal-backdrop"><form className="user-modal-card" style={{width: 400}} onSubmit={handleResetSubmit}><div className="modal-header" style={{marginBottom:'15px'}}><h3 style={{margin:0, textAlign:'left'}}>Reset Password</h3><button type="button" className="close-btn" onClick={() => setShowResetModal(false)}>×</button></div><p style={{fontSize:'13px', color:'#666', margin:'0 0 15px 0'}}>Enter a new password for <strong>{resetData.name}</strong>.</p><div className="form-group"><label>New Password</label><input type="text" value={resetData.newPassword} onChange={e => setResetData({...resetData, newPassword: e.target.value})} placeholder="Enter new password..." required autoFocus />{renderPasswordFeedback(resetData.newPassword)}</div><div className="modal-footer"><button type="button" className="btn-cancel" onClick={() => setShowResetModal(false)}>Cancel</button><button type="submit" className="btn-save" style={{backgroundColor:'#f39c12'}}>Reset Password</button></div></form></div>)}
+      
+      {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
     </>
   );
 }

@@ -246,7 +246,7 @@ function KPIView() {
             const res = await api.post('/kpi/upload', formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
-                    Authorization: `Bearer ${localStorage.getItem('token')}`
+                    Authorization: `Bearer ${sessionStorage.getItem('token')}`
                 }
             });
 
@@ -646,16 +646,6 @@ function KPIView() {
                 </div>
             </div>
             
-            {feedbackModal && (
-                <FeedbackModal 
-                    {...feedbackModal} 
-                    onClose={() => {
-                        if (feedbackModal.onClose) feedbackModal.onClose();
-                        else setFeedbackModal(null);
-                    }} 
-                />
-            )}
-
              {showModal && (
                 <div className="modal-backdrop">
                     <div className="modal-card" onClick={e => e.stopPropagation()}>
@@ -690,6 +680,15 @@ function KPIView() {
                         <div className="modal-footer"><button className="btn-close" onClick={() => setShowManageModal(false)}>Done</button></div>
                     </div>
                 </div>
+            )}
+            {feedbackModal && (
+                <FeedbackModal 
+                    {...feedbackModal} 
+                    onClose={() => {
+                        if (feedbackModal.onClose) feedbackModal.onClose();
+                        else setFeedbackModal(null);
+                    }} 
+                />
             )}
         </div>
     );

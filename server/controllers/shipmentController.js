@@ -276,7 +276,7 @@ exports.getShipmentResources = (req, res) => {
 // 2. Update Status
 exports.updateStatus = (req, res) => {
     const shipmentID = req.params.id;
-    const { status, userID, deliveryDate, clientTimestamp } = req.body;
+    const { status, userID, deliveryDate, clientTimestamp, remarks } = req.body;
 
     if (!shipmentID || shipmentID === 'undefined') {
         return res.status(400).json({ error: "Shipment ID is missing" });
@@ -284,9 +284,10 @@ exports.updateStatus = (req, res) => {
 
     // --- Date Validation Guard ---
     // Prevent updates to statuses based on loading/delivery dates
+    const warehouseStatuses = ['Arrival at Warehouse', 'Start Loading', 'End Loading', 'Document Released', 'Start Route'];
     const deliveryStatuses = ['Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure', 'Completed'];
     
-    if (status === 'Loaded' || deliveryStatuses.includes(status)) {
+    if (status === 'Loaded' || warehouseStatuses.includes(status) || deliveryStatuses.includes(status)) {
         const checkSql = "SELECT loadingDate, deliveryDate FROM Shipments WHERE shipmentID = ?";
         db.query(checkSql, [shipmentID], (err, rows) => {
             if (err) return res.status(500).json({ error: "DB Check failed: " + err.message });
@@ -300,14 +301,14 @@ exports.updateStatus = (req, res) => {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
 
-                // 1. Loading Date Check
-                if (status === 'Loaded' && loadingDate) {
+                // 1. Loading Date Check (Loaded and Warehouse steps)
+                if ((status === 'Loaded' || warehouseStatuses.includes(status)) && loadingDate) {
                     const loadDateObj = new Date(loadingDate);
                     loadDateObj.setHours(0, 0, 0, 0);
                     if (today < loadDateObj) {
                         return res.status(403).json({ 
                             error: "Business Rule Violation", 
-                            message: `Loading confirmation is restricted until the loading date (${loadingDate}).` 
+                            message: `Warehouse steps and loading confirmation are restricted until the loading date (${loadingDate}).` 
                         });
                     }
                 }
@@ -333,10 +334,19 @@ exports.updateStatus = (req, res) => {
     function proceedWithUpdate() {
         let updateShipmentSql = "UPDATE Shipments SET currentStatus = ? WHERE shipmentID = ?";
         let params = [status, shipmentID];
-        const eventDate = clientTimestamp ? new Date(clientTimestamp) : (deliveryDate ? new Date(deliveryDate) : new Date());
         
-        // Safety check for invalid eventDate
-        const validTimestamp = isNaN(eventDate.getTime()) ? new Date() : eventDate;
+        // Handle timezone shift for Philippine Time (UTC+8)
+        // The client sends a UTC timestamp (Date.now()). 
+        // We explicitly format it as a UTC string 'YYYY-MM-DD HH:mm:ss' for the DB.
+        // This avoids any ambiguity with server local time or driver timezone settings.
+        let eventDateObj = clientTimestamp ? new Date(clientTimestamp) : (deliveryDate ? new Date(deliveryDate) : new Date());
+        
+        if (isNaN(eventDateObj.getTime())) {
+            eventDateObj = new Date();
+        }
+
+        // Force UTC String Generation
+        const validTimestamp = eventDateObj.toISOString().slice(0, 19).replace('T', ' ');
 
         // Update Delivery Date if Completed
         let computedDate = null;
@@ -346,7 +356,7 @@ exports.updateStatus = (req, res) => {
             params = [status, computedDate, shipmentID];
         }
 
-        const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (?, ?, ?, ?, ?)";
+        const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp, remarks) VALUES (?, ?, ?, ?, ?, ?)";
 
         db.query(updateShipmentSql, params, (err, result) => {
             if (err) {
@@ -354,7 +364,7 @@ exports.updateStatus = (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
 
-            db.query(insertLogSql, [shipmentID, userID, status, status, validTimestamp], (err, result) => {
+            db.query(insertLogSql, [shipmentID, userID, status, status, validTimestamp, remarks || null], (err, result) => {
                 if (err) {
                     // Check for Foreign Key Constraint Failure (Shipment doesn't exist)
                     if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') {
@@ -386,6 +396,7 @@ exports.getShipmentLogs = (req, res) => {
         SELECT 
             l.phaseName, 
             l.timestamp,
+            l.remarks,
             CONCAT(u.firstName, ' ', u.lastName) AS actorName,
             u.role AS actorRole
         FROM ShipmentStatusLog l
@@ -399,7 +410,16 @@ exports.getShipmentLogs = (req, res) => {
             console.error("Error fetching logs:", err);
             return res.status(500).json({ error: "Database error" });
         }
-        res.json(results);
+        
+        // Append 'Z' to timestamps to explicitly indicate UTC
+        // The DB stores UTC, but mysql2 returns strings like "YYYY-MM-DD HH:MM:SS" (no Z).
+        // By adding Z, we ensure the client parses it as UTC and converts to local time correctly.
+        const normalizedResults = results.map(row => ({
+            ...row,
+            timestamp: row.timestamp ? (row.timestamp.replace(' ', 'T') + 'Z') : null
+        }));
+
+        res.json(normalizedResults);
     });
 };
 
@@ -634,13 +654,27 @@ exports.exportShipments = (req, res) => {
         COALESCE(MAX(spDriver.allowance), MAX(pr.foodAllowance)) AS allowance,
 
         -- Timestamps
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Arrival at Warehouse' LIMIT 1) as arrivalWarehouse,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Start Loading' LIMIT 1) as startLoading,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'End Loading' LIMIT 1) as endLoading,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Document Released' LIMIT 1) as documentReleased,
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Start Route' LIMIT 1) as startRoute,
+        
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Arrival' LIMIT 1) as arrival,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Handover Invoice' LIMIT 1) as handover,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Start Unload' LIMIT 1) as startUnload,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Finish Unload' LIMIT 1) as finishUnload,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Invoice Receive' LIMIT 1) as invoiceReceive,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Departure' LIMIT 1) as departure,
-        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Completed' LIMIT 1) as completed
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Completed' LIMIT 1) as completed,
+
+        -- Remarks for Store Steps (Grouped)
+        (SELECT GROUP_CONCAT(CONCAT(phaseName, ': ', remarks) SEPARATOR ' | ') 
+         FROM ShipmentStatusLog 
+         WHERE shipmentID = s.shipmentID 
+           AND remarks IS NOT NULL 
+           AND remarks != '' 
+           AND phaseName IN ('Arrival', 'Handover Invoice', 'Start Unload', 'Finish Unload', 'Invoice Receive', 'Departure')) as storeRemarks
 
       FROM Shipments s
       JOIN Vehicles v ON s.vehicleID = v.vehicleID
@@ -660,16 +694,39 @@ exports.exportShipments = (req, res) => {
       -- Join Rates
       LEFT JOIN PayrollRates pr ON (s.destLocation LIKE CONCAT('%', pr.routeCluster, '%') AND v.type = pr.vehicleType)
       
-      WHERE s.creationTimestamp BETWEEN ? AND ?
+      -- Filter by Overlap (Duration) if both dates exist, otherwise single date fallback
+      WHERE 
+        -- Case 1: Overlap (Shipment Duration overlaps with Selected Period)
+        (s.loadingDate IS NOT NULL AND s.deliveryDate IS NOT NULL AND s.loadingDate <= ? AND s.deliveryDate >= ?)
+        OR 
+        -- Case 2: Only Loading Date exists (Check if in range)
+        (s.loadingDate IS NOT NULL AND s.deliveryDate IS NULL AND s.loadingDate BETWEEN ? AND ?)
+        OR 
+        -- Case 3: No Loading Date (Check Creation Timestamp)
+        (s.loadingDate IS NULL AND s.creationTimestamp BETWEEN ? AND ?)
       
       GROUP BY s.shipmentID
-      ORDER BY s.creationTimestamp DESC
+      ORDER BY s.loadingDate DESC, s.creationTimestamp DESC
     `;
 
-    const start = `${startDate} 00:00:00`;
-    const end = `${endDate} 23:59:59`;
+    // Ensure full day coverage
+    const start = `${startDate}`;  // YYYY-MM-DD
+    const end = `${endDate}`;      // YYYY-MM-DD
+    
+    const startDateTime = `${start} 00:00:00`;
+    const endDateTime = `${end} 23:59:59`;
 
-    db.query(query, [start, end], (err, rows) => {
+    // Param Order:
+    // 1. Overlap: loadingDate <= end AND deliveryDate >= start
+    // 2. Loading Only: loadingDate BETWEEN start AND end
+    // 3. Creation Only: creationTimestamp BETWEEN start AND end
+    const queryParams = [
+        end, start,         // Overlap
+        start, end,         // Loading Only
+        startDateTime, endDateTime // Creation Only
+    ];
+
+    db.query(query, queryParams, (err, rows) => {
         if (err) {
             console.error("Export Query Error:", err);
             if (!res.headersSent) return res.status(500).json({ message: "Database error" });
@@ -681,45 +738,62 @@ exports.exportShipments = (req, res) => {
         }
 
         try {
-            // 3. Map Data Respecting User Order
-            const excelData = rows.map(row => {
-                const finalRow = {}; // This object preserves insertion order in modern JS
-                const fmtDate = (d) => d ? new Date(d).toLocaleString() : '-';
-                const fmtMoney = (m) => m ? Number(m).toFixed(2) : '0.00';
+            // 3. Map Data (Transposed: Headers in First Column)
+            const fmtDate = (d) => d ? new Date(d).toLocaleString() : '-';
+            const fmtMoney = (m) => m ? Number(m).toFixed(2) : '0.00';
 
-                // Iterate through the ORDERED array from frontend
-                selectedColumns.forEach(colKey => {
-                    switch (colKey) {
-                        case 'shipmentID': finalRow['Shipment ID'] = row.shipmentID; break;
-                        case 'destName': finalRow['Destination Name'] = row.destName; break;
-                        case 'destLocation': finalRow['Destination Address'] = row.destLocation; break;
-                        case 'loadingDate': finalRow['Loading Date'] = row.loadingDate; break;
-                        case 'deliveryDate': finalRow['Delivery Date'] = row.deliveryDate; break;
-                        case 'plateNo': finalRow['Truck Plate'] = row.plateNo; break;
-                        case 'truckType': finalRow['Truck Type'] = row.truckType; break;
-                        case 'currentStatus': finalRow['Status'] = row.currentStatus; break;
-                        case 'driverName': finalRow['Driver'] = `${row.driverNameFirst || ''} ${row.driverNameLast || ''}`.trim(); break;
-                        case 'helperName': finalRow['Helper'] = `${row.helperNameFirst || ''} ${row.helperNameLast || ''}`.trim(); break;
-                        case 'driverFee': finalRow['Driver Fee'] = fmtMoney(row.driverFee); break;
-                        case 'helperFee': finalRow['Helper Fee'] = fmtMoney(row.helperFee); break;
-                        case 'allowance': finalRow['Allowance'] = fmtMoney(row.allowance); break;
-                        case 'dateCreated': finalRow['Date Created'] = fmtDate(row.creationTimestamp); break;
-                        case 'arrival': finalRow['Arrival Time'] = fmtDate(row.arrival); break;
-                        case 'handover': finalRow['Handover Invoice'] = fmtDate(row.handover); break;
-                        case 'startUnload': finalRow['Start Unload'] = fmtDate(row.startUnload); break;
-                        case 'finishUnload': finalRow['Finish Unload'] = fmtDate(row.finishUnload); break;
-                        case 'invoiceReceive': finalRow['Invoice Receive'] = fmtDate(row.invoiceReceive); break;
-                        case 'departure': finalRow['Departure'] = fmtDate(row.departure); break;
-                        case 'completed': finalRow['Completion Time'] = fmtDate(row.completed); break;
-                    }
-                });
+            const colMap = {
+                'shipmentID': { label: 'Shipment ID', val: r => r.shipmentID },
+                'destName': { label: 'Destination Name', val: r => r.destName },
+                'destLocation': { label: 'Destination Address', val: r => r.destLocation },
+                'loadingDate': { label: 'Loading Date', val: r => r.loadingDate },
+                'deliveryDate': { label: 'Delivery Date', val: r => r.deliveryDate },
+                'plateNo': { label: 'Truck Plate', val: r => r.plateNo },
+                'truckType': { label: 'Truck Type', val: r => r.truckType },
+                'currentStatus': { label: 'Status', val: r => r.currentStatus },
+                'driverName': { label: 'Driver', val: r => `${r.driverNameFirst || ''} ${r.driverNameLast || ''}`.trim() },
+                'helperName': { label: 'Helper', val: r => `${r.helperNameFirst || ''} ${r.helperNameLast || ''}`.trim() },
+                'driverFee': { label: 'Driver Fee', val: r => fmtMoney(r.driverFee) },
+                'helperFee': { label: 'Helper Fee', val: r => fmtMoney(r.helperFee) },
+                'allowance': { label: 'Allowance', val: r => fmtMoney(r.allowance) },
+                'dateCreated': { label: 'Date Created', val: r => fmtDate(r.creationTimestamp) },
+                
+                // Warehouse Phases
+                'arrivalWarehouse': { label: 'Time: Arrival at Warehouse', val: r => fmtDate(r.arrivalWarehouse) },
+                'startLoading': { label: 'Time: Start Loading', val: r => fmtDate(r.startLoading) },
+                'endLoading': { label: 'Time: End Loading', val: r => fmtDate(r.endLoading) },
+                'documentReleased': { label: 'Time: Document Released', val: r => fmtDate(r.documentReleased) },
+                'startRoute': { label: 'Time: Start Route', val: r => fmtDate(r.startRoute) },
+                
+                // Store Phases
+                'arrival': { label: 'Arrival Time', val: r => fmtDate(r.arrival) },
+                'handover': { label: 'Handover Invoice', val: r => fmtDate(r.handover) },
+                'startUnload': { label: 'Start Unload', val: r => fmtDate(r.startUnload) },
+                'finishUnload': { label: 'Finish Unload', val: r => fmtDate(r.finishUnload) },
+                'invoiceReceive': { label: 'Invoice Receive', val: r => fmtDate(r.invoiceReceive) },
+                'departure': { label: 'Departure', val: r => fmtDate(r.departure) },
+                'completed': { label: 'Completion Time', val: r => fmtDate(r.completed) },
+                'remarks': { label: 'Remarks', val: r => r.storeRemarks || '-' }
+            };
 
-                return finalRow;
+            const transposedData = [];
+            
+            // Build Rows (Where each row starts with the Header Name)
+            selectedColumns.forEach(colKey => {
+                const config = colMap[colKey];
+                if (config) {
+                    const rowData = [config.label]; // Header is the first cell
+                    rows.forEach(r => rowData.push(config.val(r))); // Shipment values follow horizontally
+                    transposedData.push(rowData);
+                }
             });
 
             // 4. Generate & Send
-            const workSheet = XLSX.utils.json_to_sheet(excelData);
-            const colWidths = Object.keys(excelData[0] || {}).map(() => ({ wch: 20 }));
+            const workSheet = XLSX.utils.aoa_to_sheet(transposedData);
+            
+            // Optional: Set column widths (First col wider for headers)
+            const colWidths = [{ wch: 25 }]; 
+            for(let i=0; i<rows.length; i++) colWidths.push({ wch: 20 });
             workSheet['!cols'] = colWidths;
 
             const workBook = XLSX.utils.book_new();

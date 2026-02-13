@@ -18,8 +18,8 @@ function LoginPage({ onLoginSuccess }) {
       const response = await api.post('/login', { employeeID, password });
       const token = response.data.activeToken || response.data.token;
 
-      if (token) localStorage.setItem('token', token);
-      if (response.data.user) localStorage.setItem('user', JSON.stringify(response.data.user));
+      if (token) sessionStorage.setItem('token', token);
+      if (response.data.user) sessionStorage.setItem('user', JSON.stringify(response.data.user));
 
       if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
         let senderId = sessionStorage.getItem('tabId');

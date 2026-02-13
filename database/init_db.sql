@@ -17,27 +17,15 @@ USE k2mac_ilms_db;
 
 
 CREATE TABLE Users (
-
   userID INT NOT NULL AUTO_INCREMENT,
-
   firstName VARCHAR(100) NOT NULL,
-
   lastName VARCHAR(100) NOT NULL,
-
   role VARCHAR(20) NOT NULL,
-
-  email VARCHAR(100) NULL,
-
   phone VARCHAR(20) NULL,
-
   dob DATE NULL,
-
   dateCreated DATETIME DEFAULT CURRENT_TIMESTAMP,
-
   isArchived TINYINT(1) DEFAULT '0',
-
   PRIMARY KEY (userID)
-
 );
 
 
@@ -134,7 +122,7 @@ CREATE TABLE Shipments (
 
   creationTimestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 
-  currentStatus VARCHAR(20) DEFAULT 'Pending',
+  currentStatus VARCHAR(50) DEFAULT 'Pending',
 
   delayReason VARCHAR(255) NULL,
 
@@ -183,6 +171,8 @@ CREATE TABLE ShipmentStatusLog (
   status VARCHAR(50) NULL,
 
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+
+  remarks VARCHAR(50) NULL, 
 
   PRIMARY KEY (statusLogID),
 
@@ -371,20 +361,13 @@ CREATE TABLE KPI_Monthly_Reports (
 
 
 -- 1. Users
-
-INSERT INTO Users (userID, firstName, lastName, role, email) VALUES 
-
-(1, 'System', 'Admin', 'Admin', 'admin@k2mac.com'),
-
-(2, 'Ops', 'Manager', 'Operations', 'ops@k2mac.com'),
-
-(3, 'Juan', 'Driver', 'Driver', 'juan@k2mac.com'),
-
-(4, 'Pedro', 'Helper', 'Helper', 'pedro@k2mac.com'),
-
-(5, 'Mark', 'Trucker', 'Driver', 'mark@k2mac.com'),
-
-(6, 'Jose', 'Porter', 'Helper', 'jose@k2mac.com');
+INSERT INTO Users (userID, firstName, lastName, role) VALUES 
+(1, 'System', 'Admin', 'Admin'),
+(2, 'Ops', 'Manager', 'Operations'),
+(3, 'Juan', 'Driver', 'Driver'),
+(4, 'Pedro', 'Helper', 'Helper'),
+(5, 'Mark', 'Trucker', 'Driver'),
+(6, 'Jose', 'Porter', 'Helper');
 
 
 
@@ -655,3 +638,36 @@ INSERT INTO KPI_Monthly_Reports (reportMonth, scoreBooking, scoreTruck, scoreCal
 ('2025-12-01', 97.0, 99.0, 95.0, 99.0, 92.5, 91.0),
 
 ('2026-01-01', 94.0, 96.0, 89.0, 98.0, 88.0, 85.0);
+
+-- 8. Shipments
+-- UAT Seed Data Generated on 2026-02-12 14:11:29
+-- Resources: Vehicle=1, Driver=3, Helper=4
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (908442, 'UAT Delivery - Pampanga', 'Pampanga', 1, '2026-02-09', '2026-02-14', 'Pending', 'Documentation Issue', 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (908442, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (908442, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (908442, 3, 'Creation', 'Created', '2026-02-12 14:11:29');
+
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (660805, 'UAT Delivery - Lucena', 'Lucena', 1, '2026-02-07', '2026-02-11', 'Loaded', 'Client Warehouse Closed', 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (660805, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (660805, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (660805, 3, 'Creation', 'Created', '2026-02-12 14:11:29');
+
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (766082, 'UAT Delivery - Cavite', 'Cavite', 1, '2026-02-13', '2026-02-16', 'Pending', NULL, 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (766082, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (766082, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (766082, 3, 'Creation', 'Created', '2026-02-12 14:11:29');
+
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (450388, 'UAT Delivery - Rizal', 'Rizal', 1, '2026-02-13', '2026-02-17', 'Loaded', NULL, 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (450388, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (450388, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (450388, 3, 'Creation', 'Created', '2026-02-12 14:11:29');
+
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (764804, 'UAT Delivery - Taguig', 'Taguig', 1, '2026-02-17', '2026-02-22', 'Pending', NULL, 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (764804, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (764804, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (764804, 3, 'Creation', 'Created', '2026-02-12 14:11:29');
+
+INSERT INTO Shipments (shipmentID, destName, destLocation, vehicleID, loadingDate, deliveryDate, currentStatus, delayReason, userID, creationTimestamp) VALUES (815373, 'UAT Delivery - Ilocos', 'Ilocos', 1, '2026-02-02', '2026-02-04', 'Completed', NULL, 3, '2026-02-12 14:11:29');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (815373, 3, 'Driver');
+INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES (815373, 4, 'Helper');
+INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp) VALUES (815373, 3, 'Creation', 'Created', '2026-02-12 14:11:29');

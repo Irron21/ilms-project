@@ -2,21 +2,27 @@ import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal } from '@shared';
 import { queueManager } from '@utils/queueManager';
-import { getTodayString, getDateValue, formatDateDisplay } from '@constants';
+import { getTodayString, getDateValue, formatDateDisplay, STORE_PHASES, WAREHOUSE_PHASES } from '@constants';
 
-const STEPS = [
+const ALL_STEPS = [
+  // Warehouse steps
+  { label: 'Warehouse Arrival', dbStatus: 'Arrival at Warehouse', icon: <Icons.Clock /> },
+  { label: 'Start Loading', dbStatus: 'Start Loading', icon: <Icons.Package /> },
+  { label: 'End Loading', dbStatus: 'End Loading', icon: <Icons.PackageCheck /> },
+  { label: 'Document Released', dbStatus: 'Document Released', icon: <Icons.FileText /> },
+  { label: 'Start Route', dbStatus: 'Start Route', icon: <Icons.Send /> },
+  // Store steps
   { label: 'Arrival Time', dbStatus: 'Arrival', icon: <Icons.Clock /> },
   { label: 'Handover Invoice', dbStatus: 'Handover Invoice', icon: <Icons.FileText /> },
   { label: 'Start Unload', dbStatus: 'Start Unload', icon: <Icons.Package /> },
-  { label: 'Finish Unload', dbStatus: 'Finish Unload', icon: <Icons.Activity /> },
+  { label: 'Finish Unload', dbStatus: 'Finish Unload', icon: <Icons.PackageCheck /> },
   { label: 'Invoice Receive', dbStatus: 'Invoice Receive', icon: <Icons.Clipboard /> },
   { label: 'Departure', dbStatus: 'Departure', icon: <Icons.Send /> }
 ];
 
 const getStatusPriority = (status) => {
     if (status === 'Completed') return 100;
-    if (status === 'Loaded') return 0.5; // Loaded is between Pending and Arrival
-    const index = STEPS.findIndex(s => s.dbStatus === status);
+    const index = ALL_STEPS.findIndex(s => s.dbStatus === status);
     return index === -1 ? 0 : index + 1;
 };
 
@@ -52,11 +58,16 @@ const getPendingOfflineData = (shipmentID) => {
 
 const ShipmentDetails = memo(({ shipment, onBack, token, user }) => { 
   const [showOverlay, setShowOverlay] = useState(true);
+  const [phaseTab, setPhaseTab] = useState('warehouse'); // Default to warehouse for mobile workers
   const [confirmStep, setConfirmStep] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [offlineVisible, setOfflineVisible] = useState(!navigator.onLine);
   const containerRef = useRef(null);
   const touchStartRef = useRef(null);
+
+  // Remarks State
+  const [stepRemarks, setStepRemarks] = useState({});
+  const [remarksModal, setRemarksModal] = useState({ show: false, step: null, text: '' });
 
   // Initialize status/logs once, but update if parent prop changes significantly
   const [localStatus, setLocalStatus] = useState(() => {
@@ -216,7 +227,8 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           shipmentID: shipment.shipmentID,
           status: dbStatus,
           timestamp: now,
-          userID: user?.userID || 1
+          userID: user?.userID || 1,
+          remarks: stepRemarks[dbStatus] || null // Include remarks if present
       });
 
       if (isFinishing) {
@@ -241,12 +253,35 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
       setConfirmStep(step);
   };
 
+  const handleOpenRemarks = (step) => {
+    setRemarksModal({
+      show: true,
+      step: step,
+      text: stepRemarks[step.dbStatus] || ''
+    });
+  };
+
+  const handleSaveRemark = () => {
+    setStepRemarks(prev => ({
+      ...prev,
+      [remarksModal.step.dbStatus]: remarksModal.text
+    }));
+    setRemarksModal({ show: false, step: null, text: '' });
+  };
+
   const getStepTimestamp = (dbStatus) => {
     if (!logs || logs.length === 0) return null;
     const log = logs.find(l => l.phaseName === dbStatus || l.phase === dbStatus || l.newStatus === dbStatus);
 
     if (log) {
       const date = new Date(log.timestamp);
+      
+      // Fix 8-hour UTC offset for Philippine Time (UTC+8)
+      const isUTC = typeof log.timestamp === 'string' && !log.timestamp.includes('Z') && !log.timestamp.includes('+');
+      if (isUTC) {
+          date.setHours(date.getHours() + 8);
+      }
+
       return {
         text: `${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • ${date.toLocaleDateString()}`,
         isPending: !!log.isPending
@@ -255,29 +290,46 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
     return null;
   };
 
-  const getStepState = (currentDbStatus, stepIndex) => {
+  const getStepState = (currentDbStatus, stepIndex, currentTab) => {
     // Priority-based state
     const currentPriority = getStatusPriority(currentDbStatus);
-    const stepPriority = stepIndex + 1; // STEPS are indices 0-5, priorities are 1-6
+    
+    // We need to calculate priority relative to the ALL_STEPS array
+    // but the UI only shows a subset based on currentTab.
+    
+    // Find the step in ALL_STEPS
+    const phaseName = (currentTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES)[stepIndex];
+    const stepPriority = getStatusPriority(phaseName);
 
-    if (stepPriority <= currentPriority) return 'done';
-    if (stepPriority === Math.floor(currentPriority) + 1) return 'active';
+    if (currentPriority >= stepPriority) return 'done';
+    if (currentPriority === stepPriority - 1) return 'active';
     return 'pending';
   };
 
   const isCompleted = localStatus === 'Completed';
-  const isPendingLoad = getStatusPriority(localStatus) < 0.5;
   const today = getTodayString();
   const deliveryDate = getDateValue(shipment.deliveryDate);
   const loadingDate = getDateValue(shipment.loadingDate);
   
-  // Explicitly In Transit if Loaded but not yet delivery date
-  const isInTransit = localStatus === 'Loaded' && deliveryDate > today;
+  // Explicitly In Transit if we have started the route but not yet arrived at store
+  const isInTransit = localStatus === 'Start Route' || 
+                      (WAREHOUSE_PHASES.includes(localStatus) && localStatus !== 'Pending' && localStatus !== 'Arrival at Warehouse' && deliveryDate > today);
   
-  // Block delivery steps if not delivery date
-  const isBlockedByDate = (stepIndex) => {
-    return today < deliveryDate; // Block delivery steps if too early
+  // Block steps if not yet the correct date
+  const isBlockedByDate = (priority) => {
+    // Warehouse steps (priority 1-5 now that Loaded is removed)
+    if (priority <= 5) {
+      return today < loadingDate;
+    }
+    // Store steps (priority 6+)
+    return today < deliveryDate;
   };
+
+  // FIX: Force re-render/unlock when localStatus changes to 'Start Route' or higher
+  // Ensure that if status >= Start Route (priority 5), the store tab logic respects it
+  const currentPriority = getStatusPriority(localStatus);
+  const startRoutePriority = getStatusPriority('Start Route');
+  const isWarehouseComplete = currentPriority >= startRoutePriority;
 
   const canConfirmLoad = today >= loadingDate;
 
@@ -287,12 +339,6 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         {isOffline && offlineVisible && (
           <div className="offline-banner">
              You are Offline. Changes will save automatically when online.
-          </div>
-        )}
-        {isInTransit && (
-          <div className="transit-banner">
-             <Icons.Clock size={16} />
-             <span>Goods Loaded. Ready for Delivery on {formatDateDisplay(shipment.deliveryDate)}</span>
           </div>
         )}
       </div>
@@ -331,14 +377,11 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           {partnerName && (
             <div className="info-item item-partner">
               <div className="info-icon-box">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
+                <Icons.Truck size={18} />
               </div>
               <div className="info-content">
-                <span className="info-label">{user.role === 'Driver' ? 'Helper' : 'Driver'}</span>
-                <span className="info-value" style={{fontWeight: 600}}>{partnerName}</span>
+                <span className="info-label">Truck Plate</span>
+                <span className="info-value" style={{fontWeight: 400}}>{shipment.plateNo || 'N/A'}</span>
               </div>
             </div>
           )}
@@ -351,7 +394,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                </svg>
             </div>
             <div className="info-content">
-               <span className="info-label">Destination</span>
+               <span className="info-label">Store</span>
                <span className="info-value">{shipment.destName || 'N/A'}</span>
             </div>
           </div>
@@ -364,7 +407,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                 </svg>
               </div>
               <div className="info-content">
-                <span className="info-label">Address</span>
+                <span className="info-label">Location</span>
                 <span className="info-value">{shipment.destLocation}</span>
               </div>
             </div>
@@ -399,35 +442,25 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         </div>
       </div>
 
-      <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`} style={{ position: 'relative' }}>
-        {isPendingLoad && (
-          <div className="completion-overlay confirm-load-overlay">
-            <div className={`lockout-badge ${!canConfirmLoad ? 'locked-load' : ''}`} style={{ borderColor: '#2980b9' }}>
-              <div className="lockout-icon"><Icons.Truck size={40} stroke="#2980b9" /></div>
-              <span style={{ color: '#2980b9' }}>READY TO DELIVER</span>
-              {!canConfirmLoad ? (
-                <span className="tap-hint">Available on {formatDateDisplay(shipment.loadingDate)}</span>
-              ) : (
-                <button 
-                  className="confirm-load-btn" 
-                  onClick={() => executeStepUpdate('Loaded')}
-                  style={{
-                    marginTop: '10px',
-                    padding: '8px 20px',
-                    background: '#2980b9',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '20px',
-                    fontWeight: '600'
-                  }}
-                >
-                  Confirm Loaded
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+      <div className="steps-header-mob">
+        <h3 className="steps-title-mob">Shipment Progress</h3>
+        <div className="phase-toggle-mob">
+          <button 
+            className={`phase-toggle-btn-mob ${phaseTab === 'warehouse' ? 'active' : ''}`}
+            onClick={() => setPhaseTab('warehouse')}
+          >
+            Warehouse
+          </button>
+          <button 
+            className={`phase-toggle-btn-mob ${phaseTab === 'store' ? 'active' : ''}`}
+            onClick={() => setPhaseTab('store')}
+          >
+            Store
+          </button>
+        </div>
+      </div>
 
+      <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`} style={{ position: 'relative' }}>
         {isCompleted && showOverlay && (
           <div className="completion-overlay" onClick={() => setShowOverlay(false)}>
             <div className="lockout-badge">
@@ -437,19 +470,56 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           </div>
         )}
 
-        <div className={`steps-container ${(isCompleted && showOverlay) || isPendingLoad ? 'blurred-background' : ''}`}>
-          {STEPS.map((step, index) => {
-            const state = getStepState(localStatus, index);
-            const timeData = getStepTimestamp(step.dbStatus);
-            const isBlocked = state === 'active' && isBlockedByDate(index);
+        <div className={`steps-container ${isCompleted && showOverlay ? 'blurred-background' : ''}`}>
+          {phaseTab === 'store' && !isWarehouseComplete && (
+            <div className="completion-overlay" onClick={() => setShowOverlay(false)}>
+              <div className="blocked-content">
+              <Icons.Lock size={32} />
+                <h3>Store Phases Locked</h3>
+                <p>Complete warehouse loading phases first.</p>
+                <div className="blocked-date">
+                  Available on: <strong>{formatDateDisplay(shipment.deliveryDate)}</strong>
+                </div>
+            </div>
+          </div>
+          )}
+          
+          {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phaseName, index) => {
+            const step = ALL_STEPS.find(s => s.dbStatus === phaseName);
+            const dbStatus = step.dbStatus;
+            
+            const state = getStepState(localStatus, index, phaseTab);
+
+            const timeData = getStepTimestamp(dbStatus);
+            const stepPriority = getStatusPriority(dbStatus);
+            const isBlocked = state === 'active' && isBlockedByDate(stepPriority);
 
             return (
               <button
-                key={index}
+                key={dbStatus}
                 className={`step-button step-${state} ${isBlocked ? 'disabled-transit' : ''}`}
                 disabled={state !== 'active' || isCompleted || isBlocked} 
                 onClick={() => handleStepClick(step)} 
+                style={{position: 'relative'}} // Ensure relative positioning for absolute children
               >
+                {/* Remarks Button - Only for Store Phases */}
+                {phaseTab === 'store' && (
+                    <div 
+                        className="remarks-icon-btn"
+                        onClick={(e) => {
+                            e.stopPropagation(); // Prevent triggering the main button click
+                            handleOpenRemarks(step);
+                        }}
+                        style={{
+                            color: stepRemarks[dbStatus] ? 'var(--primary-orange)' : undefined, // Highlight if remark exists
+                            background: stepRemarks[dbStatus] ? 'white' : undefined,
+                            boxShadow: stepRemarks[dbStatus] ? '0 2px 4px rgba(0,0,0,0.1)' : undefined
+                        }}
+                    >
+                        <Icons.MessageSquare size={16} />
+                    </div>
+                )}
+
                 <div className="step-content">
                   <span className="step-icon">{step.icon}</span>
                   <div className="step-text-group">
@@ -469,7 +539,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                           </>
                         ) : state === 'active' && isBlocked ? (
                            <span className="blocked-hint" style={{fontSize: '11px', color: '#e67e22'}}>
-                             Available on {index === 0 ? formatDateDisplay(shipment.loadingDate) : formatDateDisplay(shipment.deliveryDate)}
+                             Available on {formatDateDisplay(shipment.deliveryDate)}
                            </span>
                         ) : (
                           "\u00A0" 
@@ -489,6 +559,36 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         </div>
       </div>
       
+      {/* Remarks Modal */}
+      {remarksModal.show && (
+        <div className="modal-backdrop" style={{ zIndex: 9000 }}>
+          <div className="modal-card" style={{margin:"0 25px"}}onClick={(e) => e.stopPropagation()}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+            <h3 style={{margin:0}}>Add Remarks</h3>
+            <p className="modal-sub-text" style={{margin:0}}>{remarksModal.step?.label}</p>
+          </div>
+            <textarea
+              className="remarks-textarea"
+              placeholder="Type issues or events here..."
+              value={remarksModal.text}
+              onChange={(e) => setRemarksModal(prev => ({ ...prev, text: e.target.value }))}
+              style={{marginBottom:0}}
+            />
+            <div className="modal-actions">
+              <button
+                className="btn-secondary"
+                onClick={() => setRemarksModal({ show: false, step: null, text: '' })}
+              >
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={handleSaveRemark}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirmStep && (
         <FeedbackModal 
           type="warning"
