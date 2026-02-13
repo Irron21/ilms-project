@@ -3,10 +3,10 @@ import { LoginPage, DesktopApp, MobileApp } from '@pages';
 
 function App() {
   const [user, setUser] = useState(() => {
-    const raw = localStorage.getItem('user');
+    const raw = sessionStorage.getItem('user');
     try { return raw ? JSON.parse(raw) : null; } catch { return null; }
   });
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [token, setToken] = useState(() => sessionStorage.getItem('token'));
   const [tabId] = useState(() => {
     let id = sessionStorage.getItem('tabId');
     if (!id) {
@@ -25,8 +25,8 @@ function App() {
   const handleLogout = () => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
   };
 
   useEffect(() => {

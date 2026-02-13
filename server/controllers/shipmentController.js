@@ -634,6 +634,7 @@ exports.exportShipments = (req, res) => {
         COALESCE(MAX(spDriver.allowance), MAX(pr.foodAllowance)) AS allowance,
 
         -- Timestamps
+        (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Loaded' LIMIT 1) as loaded,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Arrival' LIMIT 1) as arrival,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Handover Invoice' LIMIT 1) as handover,
         (SELECT timestamp FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND phaseName = 'Start Unload' LIMIT 1) as startUnload,
@@ -704,6 +705,7 @@ exports.exportShipments = (req, res) => {
                         case 'helperFee': finalRow['Helper Fee'] = fmtMoney(row.helperFee); break;
                         case 'allowance': finalRow['Allowance'] = fmtMoney(row.allowance); break;
                         case 'dateCreated': finalRow['Date Created'] = fmtDate(row.creationTimestamp); break;
+                        case 'loaded': finalRow['Time: Loaded'] = fmtDate(row.loaded); break;
                         case 'arrival': finalRow['Arrival Time'] = fmtDate(row.arrival); break;
                         case 'handover': finalRow['Handover Invoice'] = fmtDate(row.handover); break;
                         case 'startUnload': finalRow['Start Unload'] = fmtDate(row.startUnload); break;
