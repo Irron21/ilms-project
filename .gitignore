@@ -38,3 +38,5 @@ nginx-proxy/ssl/*
 /scripts/
 
 server/scripts/
+
+repomix-output.xml

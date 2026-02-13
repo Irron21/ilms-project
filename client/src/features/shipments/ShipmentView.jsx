@@ -2,12 +2,13 @@ import React from 'react';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal, PaginationControls } from '@shared';
-import { PHASE_ORDER, EXPORT_COLUMNS, MONTH_NAMES, getTodayString, getDateValue, formatDateDisplay, getMonthValue, formatMonthDisplay } from '@constants';
+import { PHASE_ORDER, STORE_PHASES, WAREHOUSE_PHASES, EXPORT_COLUMNS, MONTH_NAMES, getTodayString, getDateValue, formatDateDisplay, getMonthValue, formatMonthDisplay } from '@constants';
 
 function ShipmentView({ user, token, onLogout }) {
     // --- STATE ---
     const [shipments, setShipments] = useState([]);
     const [activeTab, setActiveTab] = useState('Active');
+    const [phaseTab, setPhaseTab] = useState('store'); // 'warehouse' or 'store'
     const [statusFilter, setStatusFilter] = useState('All');
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
     const [filterMonth, setFilterMonth] = useState('All');
@@ -16,6 +17,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [dateFilter, setDateFilter] = useState(''); 
     const [routeFilter, setRouteFilter] = useState('');
     const [crewFilter, setCrewFilter] = useState('');
+    const [idFilter, setIdFilter] = useState('');
     const [delayTypeFilter, setDelayTypeFilter] = useState('All'); // 'All', 'Loading', 'Delivery'
     const [showArchived, setShowArchived] = useState(false); 
     const [sortConfig, setSortConfig] = useState({ key: 'loadingDate', direction: 'desc' });
@@ -51,7 +53,8 @@ function ShipmentView({ user, token, onLogout }) {
         driverID: '', 
         helperID: '', 
         loadingDate: getTodayString(), 
-        deliveryDate: '' 
+        deliveryDate: '',
+        drops: [{ destName: '', destLocation: '' }]
     });
     
     const [routeRules, setRouteRules] = useState({}); 
@@ -63,35 +66,95 @@ function ShipmentView({ user, token, onLogout }) {
 
     const [batchData, setBatchData] = useState([]); 
     const [batchIndex, setBatchIndex] = useState(0); 
+    const [dropIndex, setDropIndex] = useState(0);
+    const [selectedDropIndex, setSelectedDropIndex] = useState(0);
     const [loadingBatch, setLoadingBatch] = useState(false);
 
     const handleBatchChange = (e) => {
         const { name, value } = e.target;
         const updatedBatch = [...batchData];
-        updatedBatch[batchIndex] = { ...updatedBatch[batchIndex], [name]: value };
+        const current = { ...updatedBatch[batchIndex], [name]: value };
         
-        if (name === 'destLocation') {
-            const allRoutes = Object.keys(routeRules);
-            if (!value || value.length === 0) {
-                setFilteredRoutes([]);
-                setIsVehicleDisabled(true);
-            } else {
-                const matches = allRoutes.filter(r => r.toLowerCase().includes(value.toLowerCase()));
-                const exactMatchKey = allRoutes.find(r => r.toLowerCase() === value.toLowerCase());
-                setFilteredRoutes(exactMatchKey && matches.length === 1 ? [] : matches);
-                if (exactMatchKey && routeRules[exactMatchKey]) {
-                    const allowedTypes = routeRules[exactMatchKey];
-                    const validVehicles = allVehicles.filter(v => allowedTypes.includes(v.type) && v.status === 'Working');
-                    setFilteredVehicles(validVehicles);
-                    setIsVehicleDisabled(false);
-                } else {
-                    setFilteredVehicles([]);
+        // If we update the main destName, sync it to the first drop
+        if (name === 'destName') {
+            const newDrops = [...current.drops];
+            if (newDrops.length > 0) {
+                newDrops[0] = { ...newDrops[0], destName: value };
+                current.drops = newDrops;
+            }
+        }
+
+        updatedBatch[batchIndex] = current;
+        setBatchData(updatedBatch);
+    };
+
+    const handleDropChange = (dropIdx, field, value) => {
+        const updatedBatch = [...batchData];
+        const current = { ...updatedBatch[batchIndex] };
+        const updatedDrops = [...current.drops];
+        updatedDrops[dropIdx] = { ...updatedDrops[dropIdx], [field]: value };
+        current.drops = updatedDrops;
+
+        // Sync first drop back to main fields for display/legacy
+        if (dropIdx === 0) {
+            if (field === 'destName') current.destName = value;
+            if (field === 'destLocation') {
+                current.destLocation = value;
+                
+                // Vehicle filtering logic remains tied to the first drop's route
+                const allRoutes = Object.keys(routeRules);
+                if (!value || value.length === 0) {
+                    setFilteredRoutes([]);
                     setIsVehicleDisabled(true);
+                } else {
+                    const matches = allRoutes.filter(r => r.toLowerCase().includes(value.toLowerCase()));
+                    const exactMatchKey = allRoutes.find(r => r.toLowerCase() === value.toLowerCase());
+                    setFilteredRoutes(exactMatchKey && matches.length === 1 ? [] : matches);
+                    if (exactMatchKey && routeRules[exactMatchKey]) {
+                        const allowedTypes = routeRules[exactMatchKey];
+                        const validVehicles = allVehicles.filter(v => allowedTypes.includes(v.type) && v.status === 'Working');
+                        setFilteredVehicles(validVehicles);
+                        setIsVehicleDisabled(false);
+                    } else {
+                        setFilteredVehicles([]);
+                        setIsVehicleDisabled(true);
+                    }
                 }
             }
         }
 
+        updatedBatch[batchIndex] = current;
         setBatchData(updatedBatch);
+    };
+
+    const addDrop = () => {
+        const updatedBatch = [...batchData];
+        const current = { ...updatedBatch[batchIndex] };
+        current.drops = [...current.drops, { destName: '', destLocation: current.drops[current.drops.length - 1]?.destLocation || '' }];
+        updatedBatch[batchIndex] = current;
+        setBatchData(updatedBatch);
+        setDropIndex(current.drops.length - 1);
+    };
+
+    const removeDrop = (dropIdx) => {
+        const updatedBatch = [...batchData];
+        const current = { ...updatedBatch[batchIndex] };
+        if (current.drops.length <= 1) return;
+        current.drops = current.drops.filter((_, idx) => idx !== dropIdx);
+        
+        // If we removed the first drop, update the main fields to the new first drop
+        if (dropIdx === 0 && current.drops.length > 0) {
+            current.destName = current.drops[0].destName;
+            current.destLocation = current.drops[0].destLocation;
+        }
+
+        updatedBatch[batchIndex] = current;
+        setBatchData(updatedBatch);
+        
+        // Adjust dropIndex if it's now out of bounds or was the removed item
+        if (dropIndex >= current.drops.length) {
+            setDropIndex(current.drops.length - 1);
+        }
     };
 
     const addNewToBatch = () => {
@@ -99,6 +162,7 @@ function ShipmentView({ user, token, onLogout }) {
         
         if (!current) {
             setBatchData([...batchData, getBlankShipment()]);
+            setDropIndex(0);
             return;
         }
 
@@ -111,6 +175,7 @@ function ShipmentView({ user, token, onLogout }) {
         const updated = [...batchData, newItem];
         setBatchData(updated);
         setBatchIndex(updated.length - 1); // Jump to new
+        setDropIndex(0); // Reset drop index for new shipment
         setIsVehicleDisabled(true); // Reset vehicle for new entry
     };
 
@@ -119,6 +184,7 @@ function ShipmentView({ user, token, onLogout }) {
         const updated = batchData.filter((_, idx) => idx !== batchIndex);
         setBatchData(updated);
         if (batchIndex >= updated.length) setBatchIndex(updated.length - 1);
+        setDropIndex(0); // Reset drop index
     };
 
     const handleBatchSubmit = async (e) => {
@@ -342,12 +408,10 @@ function ShipmentView({ user, token, onLogout }) {
             return;
         }
 
-        const hasData = shipments.some(s => {
-            const shipDate = s.loadingDate ? s.loadingDate.substring(0, 10) : s.creationTimestamp.substring(0, 10);
-            return shipDate >= dateRange.start && shipDate <= dateRange.end;
-        });
-
-        if (!hasData) { setShowNoDataModal(true); return; }
+        // Logic Change: 
+        // We do NOT filter by 'shipments' state here because 'shipments' state only contains what is loaded in the UI (pagination/filters).
+        // The export is a server-side query that might find data even if it's not currently in the 'shipments' array.
+        // So we proceed to the API call directly.
 
         try {
             const selectedKeys = columnConfig.filter(c => c.checked).map(c => c.key);
@@ -375,7 +439,12 @@ function ShipmentView({ user, token, onLogout }) {
             link.parentNode.removeChild(link);
             setShowExportModal(false); 
         } catch (error) {
-            setFeedbackModal({ type: 'error', title: 'Export Failed', message: "Could not download file.", onClose: () => setFeedbackModal(null) });
+            // Check if it's a 404 (No Data)
+            if (error.response && error.response.status === 404) {
+                 setShowNoDataModal(true);
+            } else {
+                 setFeedbackModal({ type: 'error', title: 'Export Failed', message: "Could not download file.", onClose: () => setFeedbackModal(null) });
+            }
         }
     };
 
@@ -396,44 +465,46 @@ function ShipmentView({ user, token, onLogout }) {
     }, [crewPopup.show]);
 
     const toggleRow = (id) => {
-        if (expandedShipmentID === id) { setClosingId(id); setTimeout(() => { setExpandedShipmentID(null); setClosingId(null); setActiveLogs([]); }, 300); }
-        else { setExpandedShipmentID(id); setClosingId(null); refreshLogs(id); }
+        if (expandedShipmentID === id) { setClosingId(id); setTimeout(() => { setExpandedShipmentID(null); setClosingId(null); setActiveLogs([]); setSelectedDropIndex(0); }, 300); }
+        else { setExpandedShipmentID(id); setClosingId(null); refreshLogs(id); setSelectedDropIndex(0); }
     };
 
     // --- TAB FILTERING ---
-    const tabFiltered = useMemo(() => {
+    const getShipmentCategory = (s) => {
         const today = getTodayString();
-        return shipments.filter(s => {
-            const loadDate = getDateValue(s.loadingDate);
-            const delDate = getDateValue(s.deliveryDate);
-            const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
+        const loadDate = getDateValue(s.loadingDate);
+        const delDate = getDateValue(s.deliveryDate);
+        
+        // Filter out junk/test data with no dates
+        if (!loadDate) return 'Invalid'; 
 
-            switch (activeTab) {
-                case 'Completed': return isCompleted;
-                case 'Delayed': 
-                    // Delayed if:
-                    // 1. Delivery Date passed AND not completed
-                    // 2. Loading Date passed AND status is Pending
-                    return !isCompleted && (
-                        (delDate && delDate < today) || 
-                        (loadDate && loadDate < today && s.currentStatus === 'Pending')
-                    );
-                case 'Upcoming': 
-                    // Upcoming if:
-                    // Loading Date is in future AND status is Pending
-                    return !isCompleted && loadDate > today && s.currentStatus === 'Pending';
-                case 'Active': default: 
-                    // Active if:
-                    // 1. Delivering Today
-                    // 2. In Transit (Loaded) even if delivery is future
-                    // 3. Loading Today
-                    return !isCompleted && (
-                        (delDate === today) || 
-                        (loadDate === today) ||
-                        (s.currentStatus === 'Loaded' && delDate >= today)
-                    );
-            }
-        });
+        const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
+
+        // 1. Completed Tab
+        if (isCompleted) return 'Completed';
+        
+        // 2. Delayed Tab Logic
+        const warehousePhasesExceptLast = WAREHOUSE_PHASES.slice(0, -1);
+        const isWarehousePhase = s.currentStatus === 'Pending' || warehousePhasesExceptLast.includes(s.currentStatus);
+        
+        // A. Loading Delay: Still at warehouse (before Start Route) AND loadingDate has passed
+        const isLoadingDelayed = isWarehousePhase && loadDate && loadDate < today;
+        
+        // B. Delivery Delay: Past warehouse phases AND deliveryDate has passed
+        const isDeliveryDelayed = !isWarehousePhase && delDate && delDate < today;
+
+        if (isLoadingDelayed || isDeliveryDelayed) return 'Delayed';
+
+        // 3. Upcoming Tab
+        // Upcoming should only be Pending future loads.
+        if (loadDate && loadDate > today && s.currentStatus === 'Pending') return 'Upcoming';
+        
+        // 4. Active Tab (Fallback)
+        return 'Active';
+    };
+
+    const tabFiltered = useMemo(() => {
+        return shipments.filter(s => getShipmentCategory(s) === activeTab);
     }, [shipments, activeTab]);
 
     const filterOptions = useMemo(() => {
@@ -479,19 +550,16 @@ function ShipmentView({ user, token, onLogout }) {
 
     const getDisplayStatus = (s) => {
         const dbStatus = s.currentStatus;
-        const today = getTodayString();
-        const delDate = getDateValue(s.deliveryDate);
-        const loadDate = getDateValue(s.loadingDate);
 
         if (dbStatus === 'Completed') return 'Completed';
-        
-        // In Transit check
-        if (dbStatus === 'Loaded' && delDate > today) return 'In Transit';
-
         if (dbStatus === 'Pending') return 'To Load'; 
-        const idx = PHASE_ORDER.indexOf(dbStatus);
-        if (idx !== -1 && idx < PHASE_ORDER.length - 1) return PHASE_ORDER[idx + 1];
-        if (idx === PHASE_ORDER.length - 1) return 'Completed';
+        
+        // IN TRANSIT: Strictly when the truck is moving
+        if (dbStatus === 'Start Route' || dbStatus === 'Departure') {
+            return 'In Transit';
+        }
+
+        // Otherwise, show the actual phase name (Arrival, Loading, etc.)
         return dbStatus; 
     };
 
@@ -500,19 +568,22 @@ function ShipmentView({ user, token, onLogout }) {
         const loadDate = s.loadingDate ? new Date(s.loadingDate) : null;
         const delDate = s.deliveryDate ? new Date(s.deliveryDate) : null;
         
-        // 1. Delivery Delay
-        if (delDate && delDate < today) {
-            const diffTime = Math.abs(today - delDate);
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        }
-
-        // 2. Loading Delay
-        if (loadDate && loadDate < today && s.currentStatus === 'Pending') {
+        const warehousePhasesExceptLast = WAREHOUSE_PHASES.slice(0, -1);
+        const isWarehousePhase = s.currentStatus === 'Pending' || warehousePhasesExceptLast.includes(s.currentStatus);
+        
+        // 1. Loading Delay: Still at warehouse (before Start Route) AND loadingDate passed
+        if (isWarehousePhase && loadDate && loadDate < today) {
             const diffTime = Math.abs(today - loadDate);
-            return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return { days: Math.ceil(diffTime / (1000 * 60 * 60 * 24)), type: 'Loading' };
         }
 
-        return 0;
+        // 2. Delivery Delay: Past warehouse phases AND deliveryDate passed
+        if (!isWarehousePhase && delDate && delDate < today) {
+            const diffTime = Math.abs(today - delDate);
+            return { days: Math.ceil(diffTime / (1000 * 60 * 60 * 24)), type: 'Delivery' }; 
+        }
+
+        return { days: 0, type: null };
     };
 
     const isAtRisk = (s) => {
@@ -579,39 +650,6 @@ function ShipmentView({ user, token, onLogout }) {
         )].sort((a,b) => a - b);
     }, [shipments, filterYear]);
 
-    const getShipmentCategory = (s) => {
-        const today = getTodayString();
-        const loadDate = getDateValue(s.loadingDate);
-        const delDate = getDateValue(s.deliveryDate);
-        
-        // Filter out junk/test data with no dates
-        if (!loadDate) return 'Invalid'; 
-
-        const isCompleted = s.currentStatus === 'Completed' || s.currentStatus === 'Cancelled';
-
-        // 1. Completed Tab
-        if (isCompleted) return 'Completed';
-        
-        // 2. Delayed Tab Logic
-        // A. Delivery Date has passed
-        if (delDate && delDate < today) return 'Delayed';
-        
-        // B. Loading Date has passed, but status is still 'Pending' (Late Start)
-        // BUG FIX: Ensure we use strict comparison for passed dates
-        if (loadDate && loadDate < today && s.currentStatus === 'Pending') return 'Delayed';
-
-        // 3. Upcoming Tab
-        // BUG FIX: Exclude 'Loaded' items from Upcoming. Upcoming should only be Pending future loads.
-        if (loadDate && loadDate > today && s.currentStatus === 'Pending') return 'Upcoming';
-        
-        // 4. In Transit (Explicitly Loaded but not yet delivery date)
-        // Note: 'In Transit' is not a separate tab, it usually falls under 'Active' or 'Upcoming' depending on design.
-        // If the user wants to see it in Active, we let it fall through.
-        
-        // 5. Active Tab (Fallback)
-        return 'Active';
-    };
-
     const handleSort = (key) => {
         let direction = 'desc'; // Default to Arrow Down (Arrival -> Departure)
         if (sortConfig.key === key && sortConfig.direction === 'desc') {
@@ -625,6 +663,7 @@ function ShipmentView({ user, token, onLogout }) {
         const todayStr = getTodayString();
         const filterNameLower = routeFilter.toLowerCase();
         const filterCrewLower = crewFilter.toLowerCase();
+        const filterIdLower = idFilter.toLowerCase();
         const isDelayedTab = activeTab === 'Delayed';
         const isLoadingFilter = delayTypeFilter === 'Loading';
         const isDeliveryFilter = delayTypeFilter === 'Delivery';
@@ -651,18 +690,20 @@ function ShipmentView({ user, token, onLogout }) {
 
             // 3. Delayed Type Filter (Optimized)
             if (isDelayedTab) {
-                 const loadDateVal = s.loadingDate ? String(s.loadingDate).substring(0, 10) : '';
-                 // Loading Delay: Pending + Past Load Date
-                 const isLoadingDelay = loadDateVal && loadDateVal < todayStr && s.currentStatus === 'Pending';
+                 const delayInfo = getDaysDelayed(s);
+                 const isLoadingDelay = delayInfo.type === 'Loading';
                  
                  if (isLoadingFilter && !isLoadingDelay) return false;
                  if (isDeliveryFilter && isLoadingDelay) return false;
             }
 
-            // 4. Route Filter
+            // 4. ID Filter
+            if (idFilter && !String(s.shipmentID).toLowerCase().includes(filterIdLower)) return false;
+
+            // 5. Route Filter
             if (routeFilter && (!s.destLocation || !s.destLocation.toLowerCase().includes(filterNameLower))) return false;
             
-            // 5. Crew Filter
+            // 6. Crew Filter
             if (crewFilter) {
                  if (!s.crewDetails) return false;
                  const names = s.crewDetails.split('|').map(c => c.split(':')[1]?.trim().toLowerCase());
@@ -671,7 +712,7 @@ function ShipmentView({ user, token, onLogout }) {
 
             return true;
         });
-    }, [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter, delayTypeFilter]);
+    }, [tabFiltered, activeTab, filterYear, filterMonth, statusFilter, routeFilter, crewFilter, idFilter, delayTypeFilter]);
 
     const sortedShipments = useMemo(() => [...finalFiltered].sort((a, b) => {
         const { key, direction } = sortConfig;
@@ -710,35 +751,92 @@ function ShipmentView({ user, token, onLogout }) {
 
     const getDisplayColor = (s) => {
         const dbStatus = s.currentStatus;
-        const today = getTodayString();
-        const delDate = getDateValue(s.deliveryDate);
-        const loadDate = getDateValue(s.loadingDate);
 
-        if (dbStatus === 'Completed') return '#27AE60';
-        if (dbStatus === 'Loaded' && delDate > today) return '#2980b9'; // Blue for In Transit
-        if (dbStatus === 'Pending') return '#F2C94C'; // Orange for Pending/To Load
+        if (dbStatus === 'Completed') return '#27AE60'; // Green
+        if (dbStatus === 'Pending') return '#F2C94C'; // Orange/Yellow
+        
+        // IN TRANSIT: Blue
+        if (dbStatus === 'Start Route' || dbStatus === 'Departure') {
+            return '#2980b9';
+        }
+
+        // IN PROGRESS: Orange/Yellow
         return '#F2C94C'; 
     };
 
-    const getTimelineNodeState = (phase, dbStatus) => {
-        if (dbStatus === 'Completed') return 'completed';
-        const phases = PHASE_ORDER;
-        const currentIndex = phases.indexOf(dbStatus); 
-        const phaseIndex = phases.indexOf(phase);
-        if (dbStatus === 'Pending') { if (phase === 'Loaded') return 'active'; return 'pending'; }
-        if (phaseIndex <= currentIndex) return 'completed'; 
-        if (phaseIndex === currentIndex + 1) return 'active'; 
-        return 'pending'; 
+    const getTimelineNodeState = (phase, dbStatus, drops = [], currentDropIndex = 0) => {
+        const isWarehousePhase = WAREHOUSE_PHASES.includes(phase);
+        
+        if (isWarehousePhase) {
+            if (dbStatus === 'Completed') return 'completed';
+            
+            // Use full PHASE_ORDER for calculation
+            const phases = PHASE_ORDER;
+            const currentIndex = phases.indexOf(dbStatus); 
+            const phaseIndex = phases.indexOf(phase);
+            
+            // Handle initial state
+            if (dbStatus === 'Pending') { 
+                // The first warehouse phase is 'Arrival at Warehouse'
+                if (phase === 'Arrival at Warehouse') return 'active'; 
+                return 'pending'; 
+            }
+
+            if (phaseIndex <= currentIndex) return 'completed'; 
+            if (phaseIndex === currentIndex + 1) return 'active'; 
+            return 'pending'; 
+        } else {
+            // Store phase
+            const currentDropID = drops[currentDropIndex]?.dropID;
+            
+            // 1. Check if this specific phase/drop is in logs
+            const hasLog = activeLogs.some(l => l.phaseName === phase && (Number(l.dropID) || null) === (Number(currentDropID) || null));
+            if (hasLog) return 'completed';
+            
+            // 2. Check if it's active
+            const storePhaseIdx = STORE_PHASES.indexOf(phase);
+            const isWarehouseComplete = activeLogs.some(l => l.phaseName === 'Start Route');
+            if (!isWarehouseComplete) return 'pending';
+            
+            if (storePhaseIdx === 0) {
+                if (currentDropIndex === 0) return 'active';
+                const prevDropID = drops[currentDropIndex - 1]?.dropID;
+                const prevDropDeparted = activeLogs.some(l => l.phaseName === 'Departure' && (Number(l.dropID) || null) === (Number(prevDropID) || null));
+                return prevDropDeparted ? 'active' : 'pending';
+            }
+            
+            const prevPhase = STORE_PHASES[storePhaseIdx - 1];
+            const prevDone = activeLogs.some(l => l.phaseName === prevPhase && (Number(l.dropID) || null) === (Number(currentDropID) || null));
+            return prevDone ? 'active' : 'pending';
+        }
     };
-    const getPhaseMeta = (phase) => {
-        const log = activeLogs.find(l => l.phaseName === phase);
+    const getPhaseMeta = (phase, drops = [], currentDropIndex = 0) => {
+        const currentDropID = drops[currentDropIndex]?.dropID;
+        const isWarehousePhase = WAREHOUSE_PHASES.includes(phase);
+        
+        const log = activeLogs.find(l => 
+            l.phaseName === phase && 
+            (isWarehousePhase ? !l.dropID : (Number(l.dropID) || null) === (Number(currentDropID) || null))
+        );
+
         if (!log) return null;
+        
+        // Fix 8-hour UTC offset for Philippine Time (UTC+8)
         const d = new Date(log.timestamp);
+        // If the timestamp doesn't have a timezone, it might be interpreted as local.
+        // But if it's 8 hours behind, we need to add 8 hours.
+        // We'll check if the string contains 'Z' or '+'. If not, we assume it's UTC from DB.
+        const isUTC = typeof log.timestamp === 'string' && !log.timestamp.includes('Z') && !log.timestamp.includes('+');
+        if (isUTC) {
+            d.setHours(d.getHours() + 8);
+        }
+
         return {
             time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             date: d.toLocaleDateString(),
             actorName: log.actorName || '',
-            actorRole: log.actorRole || ''
+            actorRole: log.actorRole || '',
+            remarks: log.remarks || null
         };
     };
 
@@ -894,6 +992,19 @@ function ShipmentView({ user, token, onLogout }) {
                         
                         <div className="filter-group">
                              <div style={{display:'flex', flexDirection:'column'}}>
+                                <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Shipment ID</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Search ID"
+                                    value={idFilter}
+                                    onChange={(e) => { setIdFilter(e.target.value); setCurrentPage(1); }}
+                                    style={{border:'none', borderBottom: '1px solid #eee', background: 'transparent', fontSize:'13px', width: '90px', outline: 'none'}}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="filter-group">
+                             <div style={{display:'flex', flexDirection:'column'}}>
                                 <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Route</label>
                                 <input 
                                     type="text" 
@@ -978,7 +1089,7 @@ function ShipmentView({ user, token, onLogout }) {
                             const displayColor = getDisplayColor(s);
                             const isFlashing = flashingIds.includes(s.shipmentID);
                             const isDelayedRow = activeTab === 'Delayed';
-                            const daysDelayed = isDelayedRow ? getDaysDelayed(s) : 0;
+                            const delayInfo = isDelayedRow ? getDaysDelayed(s) : { days: 0, type: null };
                             const atRisk = activeTab === 'Active' && isAtRisk(s);
 
                             return (
@@ -990,7 +1101,10 @@ function ShipmentView({ user, token, onLogout }) {
                                             <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
                                             {isDelayedRow ? (
                                                 <div className="status-cell-delayed">
-                                                    <span style={{color: '#c0392b', fontWeight: 'bold'}}>Delayed (+{daysDelayed}d)</span>
+                                                    <div style={{display:'flex', flexDirection:'column'}}>
+                                                        <span style={{color: '#c0392b', fontWeight: 'bold', fontSize: '13px'}}>Delayed (+{delayInfo.days}d)</span>
+                                                        <span style={{fontSize: '10px', color: '#999', fontWeight: '700', textTransform: 'uppercase'}}>{delayInfo.type} Delay</span>
+                                                    </div>
                                                     <span 
                                                         className="delay-reason-link" 
                                                         onClick={(e) => { e.stopPropagation(); updateDelayReason(s.shipmentID, s.delayReason); }}
@@ -1003,7 +1117,7 @@ function ShipmentView({ user, token, onLogout }) {
                                                 <>
                                                     {displayStatus}
                                                     {atRisk && (
-                                                        <span className="tooltip-container" style={{marginLeft:'6px', color:'#e67e22'}}>
+                                                        <span className="tooltip-container" style={{marginLeft:'6px', marginTop:'6px', color:'#e67e22'}}>
                                                             <Icons.Clock size={14} />
                                                             <span className="tooltip-text">Due Today</span>
                                                         </span>
@@ -1012,8 +1126,55 @@ function ShipmentView({ user, token, onLogout }) {
                                             )}
                                         </div>
                                     </td>
-                                    <td>{s.destName}</td>
-                                    <td>{s.destLocation}</td>
+                                    <td>
+                                        {(() => {
+                                            const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                                const [dropID, rest] = d.split(':');
+                                                const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                                return { 
+                                                    dropID: parseInt(dropID), 
+                                                    name: match ? match[1] : (rest || d),
+                                                    location: match ? match[2] : '',
+                                                    index 
+                                                };
+                                            }) || [];
+                                            const isExpanded = expandedShipmentID === s.shipmentID;
+                                            const currentName = (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.name : s.destName;
+
+                                            return (
+                                                <div style={{display: 'flex', flexDirection: 'column'}}>
+                                                    <span>{currentName}</span>
+                                                    {s.dropCount > 1 && !isExpanded && (
+                                                        <span style={{fontSize: '10px', color: '#7f8c8d', fontWeight: '600'}}>
+                                                            <Icons.Truck size={10} style={{marginRight: '2px'}}/> 
+                                                            +{s.dropCount - 1} more drops
+                                                        </span>
+                                                    )}
+                                                    {isExpanded && s.dropCount > 1 && (
+                                                        <span style={{fontSize: '10px', color: 'var(--primary-orange)', fontWeight: '700'}}>
+                                                            Drop {selectedDropIndex + 1} of {s.dropCount}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
+                                    <td>
+                                        {(() => {
+                                            const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                                const [dropID, rest] = d.split(':');
+                                                const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                                return { 
+                                                    dropID: parseInt(dropID), 
+                                                    name: match ? match[1] : (rest || d),
+                                                    location: match ? match[2] : '',
+                                                    index 
+                                                };
+                                            }) || [];
+                                            const isExpanded = expandedShipmentID === s.shipmentID;
+                                            return (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.location : s.destLocation;
+                                        })()}
+                                    </td>
                                     <td style={{fontWeight:'600'}}>{formatDateDisplay(s.loadingDate)}</td>
                                     <td style={{ color: isDelayedRow ? '#c0392b' : 'black', fontWeight: isDelayedRow ? '700' : '400' }}>
                                         {formatDateDisplay(s.deliveryDate)}
@@ -1034,19 +1195,121 @@ function ShipmentView({ user, token, onLogout }) {
                                     </td>
                                     <td><button className={`expand-btn ${isOpen && !isClosing ? 'open' : ''}`} onClick={() => toggleRow(s.shipmentID)}>▼</button></td>
                                 </tr>
-                                {(isOpen || isClosing) && (
+                                {(isOpen || isClosing) && (() => {
+                                    const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                        const [dropID, rest] = d.split(':');
+                                        const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                        return { 
+                                            dropID: parseInt(dropID), 
+                                            name: match ? match[1] : (rest || d),
+                                            location: match ? match[2] : '',
+                                            index 
+                                        };
+                                    }) || [];
+
+                                    return (
                                     <tr className="expanded-row-container"><td colSpan="10">
                                         <div className={`timeline-wrapper ${isClosing ? 'closing' : ''}`}>
-                                            <div className="timeline-content">
-                                            {PHASE_ORDER.map((phase, index) => {
-                                                const state = getTimelineNodeState(phase, s.currentStatus);
-                                                const meta = getPhaseMeta(phase);
+                                            <div className="timeline-inner-container">
+                                                
+                                                <div className="timeline-header-tabs">
+                                                    <div className="phase-toggle-buttons">
+                                                        <button 
+                                                            className={`phase-toggle-btn ${phaseTab === 'warehouse' ? 'active' : ''}`}
+                                                            onClick={() => setPhaseTab('warehouse')}
+                                                            title="Warehouse"
+                                                        >
+                                                            Warehouse
+                                                        </button>
+                                                        <button 
+                                                            className={`phase-toggle-btn ${phaseTab === 'store' ? 'active' : ''}`}
+                                                            onClick={() => setPhaseTab('store')}
+                                                            title="Store"
+                                                        >
+                                                            Store
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                {s.dropCount > 1 && (
+                                                    <div className="drops-info-banner">
+                                                        <div className="drop-banner-nav">
+                                                            <button 
+                                                                className="drop-nav-arrow"
+                                                                disabled={selectedDropIndex === 0}
+                                                                onClick={() => setSelectedDropIndex(prev => Math.max(0, prev - 1))}
+                                                            >
+                                                                ‹
+                                                            </button>
+                                                            
+                                                            <div className="current-drop-display">
+                                                                <span className="drop-display-label">Drop:</span>
+                                                                <span className="drop-display-number">{selectedDropIndex + 1}</span>
+                                                            </div>
+
+                                                            <button 
+                                                                className="drop-nav-arrow"
+                                                                disabled={selectedDropIndex === rowDrops.length - 1}
+                                                                onClick={() => setSelectedDropIndex(prev => Math.min(rowDrops.length - 1, prev + 1))}
+                                                            >
+                                                                ›
+                                                            </button>
+
+                                                            {phaseTab !== 'store' && (
+                                                                <div className="switch-hint-overlay" onClick={() => setPhaseTab('store')}>
+                                                                    <span>Switch to <br></br>Store Phase</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                <div className="timeline-content">
+                                                {phaseTab === 'store' && !s.deliveryDate && (
+                                                    <div className={`store-locked-overlay ${isClosing ? 'closing' : ''}`}>
+                                                        <div className="lock-content">
+                                                            <Icons.Lock size={24} />
+                                                            <span>Pending Delivery Schedule</span>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {phaseTab === 'store' && s.deliveryDate && (() => {
+                                                    const startRouteIndex = PHASE_ORDER.indexOf('Start Route');
+                                                    const currentStatusIndex = s.currentStatus === 'Completed' ? 999 : PHASE_ORDER.indexOf(s.currentStatus);
+                                                    const isWarehouseComplete = currentStatusIndex >= startRouteIndex;
+                                                    const isDeliveryReady = s.deliveryDate <= getTodayString();
+                                                    
+                                                    // Hide overlay if warehouse is done AND delivery date is today/past
+                                                    if (isWarehouseComplete && isDeliveryReady) return null;
+
+                                                    return (
+                                                     <div className={`store-locked-overlay delivery-info-overlay ${isClosing ? 'closing' : ''}`}>
+                                                         <div className="lock-content delivery-info-content">
+                                                             <Icons.Lock size={17}/>
+                                                             <span>Scheduled Delivery: {formatDateDisplay(s.deliveryDate)}</span>
+                                                         </div>
+                                                     </div>
+                                                    );
+                                                })()}
+                                                
+                                                {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phase, index, array) => {
+                                                const state = getTimelineNodeState(phase, s.currentStatus, rowDrops, selectedDropIndex);
+                                                const meta = getPhaseMeta(phase, rowDrops, selectedDropIndex);
                                                 return (
                                                     <div key={phase} className={`timeline-step ${state}`}>
-                                                        {index !== PHASE_ORDER.length - 1 && <div className="step-line"></div>}
+                                                        {index !== array.length - 1 && <div className="step-line"></div>}
                                                         <div className="step-dot"></div>
                                                         <div className="step-content-desc">
-                                                            <div className="step-title">{phase}</div>
+                                                            <div className="step-title" style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                                                {phase}
+                                                                {meta?.remarks && (
+                                                                    <div className="step-remark-container">
+                                                                        <Icons.MessageSquare size={14} className="remark-icon" />
+                                                                        <div className="remark-tooltip">
+                                                                            {meta.remarks}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
                                                             {meta ? (
                                                                 <>
                                                                     <div className="step-time">{meta.time}</div>
@@ -1059,10 +1322,11 @@ function ShipmentView({ user, token, onLogout }) {
                                                     </div>
                                                 );
                                             })}
+                                                </div>
                                             </div>
                                         </div>
                                     </td></tr>
-                                )}
+                                )})()}
                             </React.Fragment>
                         )}) : (<tr><td colSpan="10" className="empty-state">No shipments found in {activeTab}.</td></tr>)}
                     </tbody>
@@ -1088,7 +1352,10 @@ function ShipmentView({ user, token, onLogout }) {
                                     type="button" 
                                     className="nav-arrow-btn"
                                     disabled={batchIndex === 0}
-                                    onClick={() => setBatchIndex(prev => prev - 1)}
+                                    onClick={() => {
+                                        setBatchIndex(prev => prev - 1);
+                                        setDropIndex(0);
+                                    }}
                                     title="Previous"
                                 >
                                     ‹
@@ -1097,7 +1364,10 @@ function ShipmentView({ user, token, onLogout }) {
                                     type="button" 
                                     className="nav-arrow-btn"
                                     disabled={batchIndex === batchData.length - 1}
-                                    onClick={() => setBatchIndex(prev => prev + 1)}
+                                    onClick={() => {
+                                        setBatchIndex(prev => prev + 1);
+                                        setDropIndex(0);
+                                    }}
                                     title="Next"
                                 >
                                     ›
@@ -1128,37 +1398,100 @@ function ShipmentView({ user, token, onLogout }) {
                                         autoFocus
                                     />
                                 </div>
-                                <div className="form-group">
-                                    <label>Destination Name</label>
-                                    <input 
-                                        type="text" 
-                                        name="destName"
-                                        required 
-                                        value={currentForm.destName} 
-                                        onChange={handleBatchChange} 
-                                    />
-                                </div>
+                                <div style={{flex: 1}}></div>
                             </div>
 
-                            <div className="form-row">
-                                <div className="form-group">
-                                    <label>Route / Cluster</label>
-                                    <input 
-                                        type="text" 
-                                        name="destLocation" 
-                                        value={currentForm.destLocation} 
-                                        onChange={handleBatchChange} 
-                                        list={filteredRoutes.length > 0 ? "route-list" : ""} 
-                                        className="form-input" 
-                                        placeholder="Search..." 
-                                        autoComplete="off" 
-                                        required 
-                                    />
-                                    <datalist id="route-list">
-                                        {filteredRoutes.map((r, i) => <option key={i} value={r} />)}
-                                    </datalist>
+                            <div className="drops-section">
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                    <label style={{fontWeight: '700', fontSize: '13px', color: '#2c3e50', textTransform: 'uppercase', letterSpacing: '0.5px'}}>
+                                        Destinations & Routes
+                                    </label>
+                                    <button type="button" className="add-another-btn" onClick={addDrop}>
+                                        <Icons.Plus size={12}/> Add Drop
+                                    </button>
+                                </div>
+                                <div style={{fontSize: '11px', color: '#7f8c8d', marginBottom: '12px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                                    <Icons.AlertCircle size={12} /> The order of drops determines the crew's delivery sequence (Drop 1 is the first stop).
                                 </div>
 
+                                <div className="drop-nav-row" style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', background: '#fff', padding: '8px 12px', borderRadius: '6px', border: '1px solid #eef0f2'}}>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+                                        <span style={{fontSize: '11px', fontWeight: '700', color: '#34495e', background: '#ebf5fb', padding: '2px 8px', borderRadius: '4px'}}>
+                                            {dropIndex === 0 ? 'First Drop' : dropIndex === currentForm.drops.length - 1 ? 'Last Drop' : `Drop ${dropIndex + 1}`} (Stop {dropIndex + 1} of {currentForm.drops.length})
+                                        </span>
+                                    </div>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '5px'}}>
+                                        <button 
+                                            type="button" 
+                                            className="nav-arrow-btn" 
+                                            disabled={dropIndex === 0}
+                                            onClick={() => setDropIndex(prev => prev - 1)}
+                                            style={{width: '24px', height: '24px', fontSize: '14px'}}
+                                        >
+                                            ‹
+                                        </button>
+                                        <button 
+                                            type="button" 
+                                            className="nav-arrow-btn" 
+                                            disabled={dropIndex === currentForm.drops.length - 1}
+                                            onClick={() => setDropIndex(prev => prev + 1)}
+                                            style={{width: '24px', height: '24px', fontSize: '14px'}}
+                                        >
+                                            ›
+                                        </button>
+                                        {currentForm.drops.length > 1 && (
+                                            <button 
+                                                type="button" 
+                                                className="remove-item-btn" 
+                                                onClick={() => removeDrop(dropIndex)}
+                                                style={{fontSize: '11px', marginLeft: '5px'}}
+                                            >
+                                                Delete
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {currentForm.drops[dropIndex] && (
+                                    <div style={{background: 'white', padding: '15px', borderRadius: '6px', border: '1px solid #eef0f2', position: 'relative'}}>
+                                        <div style={{display: 'flex', gap: '15px'}}>
+                                            <div className="form-group" style={{flex: 1, marginBottom: 0}}>
+                                                <label style={{fontSize: '11px', color: '#666', marginBottom: '4px'}}>Store Name</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={currentForm.drops[dropIndex].destName} 
+                                                    onChange={(e) => handleDropChange(dropIndex, 'destName', e.target.value)}
+                                                    placeholder="e.g. Store 123"
+                                                    required
+                                                    style={{padding: '8px 12px', fontSize: '13px'}}
+                                                />
+                                            </div>
+                                            <div className="form-group" style={{flex: 1, marginBottom: 0}}>
+                                                <label style={{fontSize: '11px', color: '#666', marginBottom: '4px'}}>Route / Cluster</label>
+                                                <input 
+                                                    type="text" 
+                                                    value={currentForm.drops[dropIndex].destLocation} 
+                                                    onChange={(e) => handleDropChange(dropIndex, 'destLocation', e.target.value)}
+                                                    list="route-list"
+                                                    placeholder="Search Route..."
+                                                    required
+                                                    style={{padding: '8px 12px', fontSize: '13px'}}
+                                                    autoComplete="off"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                                
+                                <datalist id="route-list">
+                                     {Object.keys(routeRules).map((r, i) => <option key={i} value={r} />)}
+                                 </datalist>
+                                 <p style={{fontSize: '10px', color: '#7f8c8d', marginTop: '10px', fontStyle: 'italic', marginBottom: 0}}>
+                                     * The route of the first drop determines vehicle eligibility.
+                                 </p>
+                             </div>
+
+                            <div className="form-row">
                                 <div className="form-group">
                                     <label style={{color: isVehicleDisabled ? '#999' : 'black'}}>Vehicle Assignment</label>
                                     <select 
@@ -1176,19 +1509,9 @@ function ShipmentView({ user, token, onLogout }) {
                                         ))}
                                     </select>
                                 </div>
+
                             </div>
                             <div className="form-row">
-                                <div className="form-group">
-                                    <label>Loading Date</label>
-                                    <input 
-                                        type="date" 
-                                        name="loadingDate" 
-                                        required 
-                                        min={getTodayString()} 
-                                        value={currentForm.loadingDate} 
-                                        onChange={handleBatchChange} 
-                                    />
-                                </div>
                                 <div className="form-group">
                                     <label style={{color: !currentForm.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
                                     <input 
@@ -1199,7 +1522,19 @@ function ShipmentView({ user, token, onLogout }) {
                                         min={currentForm.loadingDate} 
                                         value={currentForm.deliveryDate} 
                                         onChange={handleBatchChange}
-                                        style={{ backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
+                                        style={{ fontFamily:"'Segoe UI', sans-serif", backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
+                                    />
+                                </div>
+                                <div className="form-group">
+                                    <label>Loading Date</label>
+                                    <input 
+                                        type="date" 
+                                        name="loadingDate" 
+                                        required 
+                                        min={getTodayString()} 
+                                        value={currentForm.loadingDate} 
+                                        onChange={handleBatchChange} 
+                                        style={{fontFamily:"'Segoe UI', sans-serif"}}
                                     />
                                 </div>
                             </div>                         
@@ -1259,7 +1594,6 @@ function ShipmentView({ user, token, onLogout }) {
                 onPageChange={setCurrentPage} 
             />
             
-            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
                     <h4>Assigned Crew</h4>
@@ -1271,16 +1605,9 @@ function ShipmentView({ user, token, onLogout }) {
                     ))}
                 </div>
             )}
-            {showNoDataModal && (
-                <div className="modal-overlay-desktop">
-                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
-                        <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
-                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
-                    </div>
-                </div>
-            )}
+            {/* Z-Index Fix: Render Export Modal BEFORE No Data Modal or increase z-index of No Data Modal */}
             {showExportModal && (
-                <div className="modal-overlay-desktop">
+                <div className="modal-overlay-desktop" style={{zIndex: 999}}>
                     <div className="modal-form-card" style={{width: '500px'}}>
                         <div className="modal-header">
                             <h2>Extract Data</h2>
@@ -1372,6 +1699,19 @@ function ShipmentView({ user, token, onLogout }) {
                     </div>
                 </div>
             )}
+            
+            {/* Z-Index Fix: No Data Modal should be ON TOP of Export Modal */}
+            {showNoDataModal && (
+                <div className="modal-overlay-desktop" style={{zIndex: 9000}}>
+                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
+                        <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
+                        <p style={{marginBottom: '20px', color: '#666', fontSize: '14px'}}>
+                           No data available for the selected period ({formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}).
+                        </p>
+                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
+                    </div>
+                </div>
+            )}
 
             {/* --- DELAY REASON MODAL --- */}
             {showDelayReasonModal && (
@@ -1405,6 +1745,7 @@ function ShipmentView({ user, token, onLogout }) {
                     </div>
                 </div>
             )}
+            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
         </div>
     );
 }

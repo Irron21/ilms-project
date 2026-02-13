@@ -89,14 +89,14 @@ function DesktopApp({ user, token, onLogout }) {
           <button className={`rail-btn ${view === 'shipments' ? 'active' : ''}`} onClick={() => setView('shipments')}>
             <Icons.Truck />
           </button>
-          <button className={`rail-btn ${view === 'analytics' ? 'active' : ''}`} onClick={() => setView('analytics')}>
-            <Icons.Analytics />
-          </button>
-          {user.role === 'Admin' && (
-            <>
+          {user.role === 'Admin' && ( 
+            <>                        
               <button className={`rail-btn ${view === 'payroll' ? 'active' : ''}`} onClick={() => setView('payroll')}>
                 <Icons.Wallet />
               </button>
+              <button className={`rail-btn ${view === 'analytics' ? 'active' : ''}`} onClick={() => setView('analytics')}>
+                <Icons.Analytics />
+              </button>   
               <button className={`rail-btn ${view === 'users' ? 'active' : ''}`} onClick={() => setView('users')}>
                 <Icons.List />
               </button>
@@ -117,7 +117,7 @@ function DesktopApp({ user, token, onLogout }) {
               <div className="menu-header">
                 <div className="menu-avatar"><Icons.Profile /></div>
                 <div className="menu-info">
-                  <span className="menu-name">{user.firstName || 'Admin'} {user.lastName || 'User'}</span>
+                  <span className="menu-name">{user.fullName || `${user.firstName || 'Admin'} ${user.lastName || 'User'}`}</span>
                   <span className="menu-role-sub">{user.role}</span>
                 </div>
               </div>

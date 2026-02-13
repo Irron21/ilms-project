@@ -1,10 +1,13 @@
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, memo, useRef } from 'react';
 import { Icons } from '@shared';
-import { getTodayString, getDateValue, formatDateDisplay } from '@constants';
+import { getTodayString, getDateValue, formatDateDisplay, WAREHOUSE_PHASES } from '@constants';
 import '@styles/features/shipments.css';
 
 const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => {
+  const warehousePhasesExceptLast = WAREHOUSE_PHASES.slice(0, -1);
   const [isAtBottom, setIsAtBottom] = useState(false);
+  const [hasOverflow, setHasOverflow] = useState(false);
+  const containerRef = useRef(null);
   const [seenShipments, setSeenShipments] = useState(() => {
     try {
       const saved = localStorage.getItem('acknowledgedShipments');
@@ -16,9 +19,10 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
     localStorage.setItem('acknowledgedShipments', JSON.stringify(seenShipments));
   }, [seenShipments]);
 
+  // Scroll handler to toggle the safe zone/arrow visibility
   const handleScroll = (e) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.target;
-    setIsAtBottom(scrollHeight - scrollTop <= clientHeight + 20);
+    const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 20; // Added buffer
+    setIsAtBottom(bottom);
   };
 
   const isNewlyAssigned = (timestamp, id) => {
@@ -48,19 +52,17 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
   };
 
   const getCardStyle = (shipment) => {
-    const today = getTodayString();
-    const delDate = getDateValue(shipment.deliveryDate);
-    const loadDate = getDateValue(shipment.loadingDate);
     const status = shipment.currentStatus;
 
     if (status === 'Completed') return { class: 'card-green', label: 'COMPLETED' };
+    if (status === 'Pending') return { class: 'card-blue', label: 'TO LOAD' };
     
-    // In Transit: Explicitly Loaded but not yet delivery day
-    if (status === 'Loaded' && delDate > today) {
+    // IN TRANSIT: Only when moving (Start Route or Departure from a drop)
+    if (status === 'Start Route' || status === 'Departure') {
         return { class: 'card-blue', label: 'IN TRANSIT' };
     }
 
-    if (status === 'Pending') return { class: 'card-blue', label: 'TO LOAD' };
+    // IN PROGRESS: Loading in warehouse or currently at a store (Arrival, Unloading, etc.)
     return { class: 'card-yellow', label: 'IN PROGRESS' };
   };
 
@@ -72,16 +74,26 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
     if (activeTab === 'COMPLETED') return s.currentStatus === 'Completed';
 
     if (s.currentStatus !== 'Completed') {
-      if (activeTab === 'DELAYED') return delDate && delDate < today;
+      const isWarehousePhase = s.currentStatus === 'Pending' || warehousePhasesExceptLast.includes(s.currentStatus);
+
+      if (activeTab === 'DELAYED') {
+        const isLoadingDelayed = isWarehousePhase && loadDate && loadDate < today;
+        const isDeliveryDelayed = !isWarehousePhase && delDate && delDate < today;
+        return isLoadingDelayed || isDeliveryDelayed;
+      }
       if (activeTab === 'UPCOMING') return loadDate > today && s.currentStatus === 'Pending';
       if (activeTab === 'ACTIVE') {
-        // Active if:
-        // 1. Loading date is today or passed (and not delayed/completed)
-        // 2. OR it has been explicitly loaded (even if early)
-        // 3. AND delivery date is today or in the future
-        const isStarted = (loadDate && loadDate <= today) || s.currentStatus === 'Loaded';
-        const isNotYetDelayed = !delDate || delDate >= today;
-        return isStarted && isNotYetDelayed;
+        const isLoadingDelayed = isWarehousePhase && loadDate && loadDate < today;
+        const isDeliveryDelayed = !isWarehousePhase && delDate && delDate < today;
+        if (isLoadingDelayed || isDeliveryDelayed) return false;
+
+        // Active if not delayed and:
+        // 1. Delivering Today
+        // 2. Loading Today
+        // 3. In Transit (Started Route or past warehouse)
+        return (delDate === today) || 
+               (loadDate === today) ||
+               (!isWarehousePhase && delDate >= today);
       }
     }
     return false;
@@ -95,6 +107,20 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
       return dateB - dateA; 
     });
   }
+
+  useEffect(() => {
+    const checkOverflow = () => {
+      if (containerRef.current) {
+         // Check if scrollHeight is significantly larger than clientHeight
+         const isOverflowing = containerRef.current.scrollHeight > containerRef.current.clientHeight;
+         setHasOverflow(isOverflowing);
+      }
+    };
+    
+    checkOverflow();
+    window.addEventListener('resize', checkOverflow);
+    return () => window.removeEventListener('resize', checkOverflow);
+  }, [filteredShipments, activeTab]);
 
   const getBannerContent = () => {
     const count = filteredShipments.length;
@@ -145,7 +171,7 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
         <span className={`tab delayed ${activeTab === 'DELAYED' ? 'active' : ''}`} onClick={() => setActiveTab('DELAYED')}>DELAYED</span>
       </div>
 
-      <div className="dashboard-container" onScroll={handleScroll}>
+      <div className="dashboard-container" onScroll={handleScroll} ref={containerRef}>
         {filteredShipments.length === 0 && (
           <div className="empty-state">No {activeTab.toLowerCase()} shipments found.</div>
         )}
@@ -158,11 +184,20 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
           const isInTransit = style.label === 'IN TRANSIT';
           const cardClass = isDelayed ? 'card-yellow' : style.class;
 
+          // Multi-drop progress calculation
+          const currentDropIndex = Math.min(shipment.dropCount - 1, (shipment.completedDropsCount || 0));
+          const drops = shipment.dropDetails ? shipment.dropDetails.split('|').map(d => {
+            const [id, rest] = d.split(':');
+            const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+            return { name: match ? match[1] : (rest || d) };
+          }) : [];
+          const currentDropName = (shipment.dropCount > 1 && drops[currentDropIndex]) ? drops[currentDropIndex].name : shipment.destName;
+
           return (
             <div
               key={shipment.shipmentID}
               className={`shipment-card ${cardClass} ${isUpcoming ? 'disabled-card upcoming-card' : ''} ${isInTransit ? 'transit-card' : ''}`}
-              onClick={(isUpcoming || isInTransit) ? undefined : () => handleCardClick(shipment)}
+              onClick={isUpcoming ? undefined : () => handleCardClick(shipment)}
             >
               {isUpcoming ? (
                 <div className="new-badge scheduled">SCHEDULED</div>
@@ -174,9 +209,19 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
               <div>
                 <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>
                 <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px" }}>
-                  <div className="card-client">{shipment.destName}</div>
+                  <div className="card-client" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
+                    {shipment.dropCount > 1 
+                      ? (style.label === 'IN TRANSIT' || style.label === 'IN PROGRESS' ? currentDropName : 'Multiple Stores')
+                      : shipment.destName}
+                  </div>
                   |
-                  <div className="card-location">{shipment.destLocation}</div>
+                  <div className="card-location" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
+                    {shipment.dropCount > 1 
+                      ? (style.label === 'IN TRANSIT' || style.label === 'IN PROGRESS' 
+                          ? `Drop ${currentDropIndex + 1} of ${shipment.dropCount}`
+                          : `${shipment.dropCount} Drops`)
+                      : shipment.destLocation}
+                  </div>
                 </div>
                 <div className="card-dates-row">
                   <div className="date-line" style={{ color: '#2980b9' }}>
@@ -195,8 +240,8 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
         })}
       </div>
 
-      <div className={`safe-zone-footer ${isAtBottom ? 'hidden' : ''}`}>
-        {filteredShipments.length > 3 && (
+      <div className={`safe-zone-footer ${isAtBottom || !hasOverflow ? 'hidden' : ''}`}>
+        {hasOverflow && (
           <div className={`scroll-arrow ${isAtBottom ? 'hidden' : ''}`}>
             <span>Scroll for More</span>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

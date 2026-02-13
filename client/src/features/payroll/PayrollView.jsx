@@ -14,6 +14,8 @@ const INITIAL_PAYROLL_COLS = [
     { key: 'route', label: 'Route', checked: true },
     { key: 'vehicleType', label: 'Vehicle Type', checked: true },
     { key: 'rate', label: 'Rate/Fee', checked: true },
+    { key: 'adjustment', label: 'Shipment Adj', checked: true },
+    { key: 'reason', label: 'Adj Reason', checked: true },
     { key: 'allowance', label: 'Allowance', checked: false },
 ];
 
@@ -593,27 +595,15 @@ function PayrollView() {
                                 <th>Net Salary</th>
                                 <th>Allowance</th>
                                 <th>Paid</th>
-                                <th>Status</th>                                 
+                                <th>Status</th>
+                                <th style={{textAlign: 'center'}}>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
                             {paginatedData.map((row) => (
-                                <tr key={row.userID} onClick={() => setSelectedEmployee(row)} style={{cursor: 'pointer'}}>
+                                <tr key={row.userID}>
                                     <td className="employee-name">
-                                        <span 
-                                            onClick={(e) => {
-                                                e.stopPropagation(); 
-                                                setViewingTrips(row);
-                                            }}
-                                            style={{
-                                                color: '#2980b9', 
-                                                fontWeight: '700', 
-                                                textDecoration: 'underline', 
-                                                cursor: 'pointer',
-                                                textUnderlineOffset: '3px'
-                                            }}
-                                            title="View Trip History"
-                                        >
+                                        <span style={{ fontWeight: '700' }}>
                                             {row.firstName} {row.lastName}
                                         </span>
                                     </td>
@@ -677,18 +667,38 @@ function PayrollView() {
                                       
                                       /* CASE 4: NEEDS PAYMENT */
                                       (
-                                          <button 
-                                              className="action-btn" 
-                                              style={{
-                                                  background:'#eaf6fa', color:'#3498db', padding:'4px 10px', 
-                                                  borderRadius:'15px', fontSize:'11px', fontWeight:'700', width:'auto',
-                                                  whiteSpace: 'nowrap', border: '1px solid #2191dcff'
-                                              }}
-                                              onClick={(e) => { e.stopPropagation(); setPayingEmployee(row); }}
-                                          >
-                                              PAY REMAINING
-                                          </button>
+                                          <span className="vehicle-badge" style={{background:'#f5f6f7', color:'#7f8c8d'}}>
+                                              PENDING
+                                          </span>
                                       )}
+                                    </td>
+                                    <td style={{textAlign: 'center'}}>
+                                        <div style={{display: 'flex', gap: '4px', justifyContent: 'center'}}>
+                                            <button 
+                                                className="icon-action-btn" 
+                                                onClick={() => setViewingTrips(row)}
+                                                title="Trip History"
+                                            >
+                                                <Icons.Truck size={18} />
+                                            </button>
+                                            <button 
+                                                className="icon-action-btn" 
+                                                onClick={() => setSelectedEmployee(row)}
+                                                title="Adjustments Ledger"
+                                            >
+                                                <Icons.Clipboard size={18} />
+                                            </button>
+                                            {Number(row.totalPaid) < Number(row.netSalary) && Number(row.netSalary) > 0 && (
+                                                <button 
+                                                    className="icon-action-btn" 
+                                                    onClick={() => setPayingEmployee(row)}
+                                                    title="Pay Remaining"
+                                                    style={{color: '#27ae60'}}
+                                                >
+                                                    <Icons.Cash size={18} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -705,8 +715,6 @@ function PayrollView() {
                 />
             </div>
             
-            {feedbackModal && <FeedbackModal {...feedbackModal} />}
-
             {showRatesManager && (
                 <RatesManager onClose={() => setShowRatesManager(false)} />
             )}
@@ -733,13 +741,16 @@ function PayrollView() {
             )}
 
             {viewingTrips && (
-              <ShipmentHistoryModal 
-                  employee={viewingTrips}
-                  periodID={selectedPeriod}
-                  periodName={getPeriodName()}
-                  onClose={() => setViewingTrips(null)}
-              />
-          )}
+                <ShipmentHistoryModal 
+                    employee={viewingTrips} 
+                    periodID={selectedPeriod} 
+                    periodName={getPeriodName()}
+                    onClose={() => {
+                        setViewingTrips(null);
+                        fetchPayrollSummary(selectedPeriod);
+                    }} 
+                />
+            )}
 
           {/* --- EXPORT MODAL --- */}
             {showExportModal && (
@@ -813,14 +824,15 @@ function PayrollView() {
                                 ))}
                             </div>
 
-                            <div className="modal-actions">
+                            <div className="modal-actions" style={{marginTop:'25px'}}>
                                 <button className="cancel-btn-secondary" onClick={() => setShowExportModal(false)}>Cancel</button>
-                                <button className="submit-btn" onClick={handleExport}>Download Excel</button>
+                                <button className="submit-btn" onClick={handleExport} style={{flex:1}}>Download .xlsx</button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
+            {feedbackModal && <FeedbackModal {...feedbackModal} onClose={() => setFeedbackModal(null)} />}
         </div>
     );
 }

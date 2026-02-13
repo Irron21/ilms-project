@@ -4,7 +4,7 @@ const logActivity = require('../utils/activityLogger');
 const { clearCache } = require('../utils/cacheHelper');
 
 // HELPER: Generate Prefix based on Role
-const generateEmployeeID = (role) => {
+const generateEmployeeID = (role, connection, callback) => {
     const prefixMap = {
         'Admin': 'ADM',
         'Operations': 'OPS',
@@ -12,10 +12,20 @@ const generateEmployeeID = (role) => {
         'Helper': 'HLP'
     };
     const prefix = prefixMap[role] || 'EMP';
-    // Format: PRE + Last 6 digits of timestamp + 2 random digits (e.g., DRV89123499)
-    const suffix = Date.now().toString().slice(-6);
-    const random = Math.floor(10 + Math.random() * 90);
-    return `${prefix}${suffix}${random}`;
+
+    // Find the highest current number for this prefix
+    const sql = "SELECT employeeID FROM UserLogins WHERE employeeID LIKE ? ORDER BY employeeID DESC LIMIT 1";
+    connection.query(sql, [`${prefix}-%`], (err, results) => {
+        let nextNum = 1;
+        if (!err && results.length > 0) {
+            const lastID = results[0].employeeID;
+            const lastNum = parseInt(lastID.split('-')[1]);
+            if (!isNaN(lastNum)) nextNum = lastNum + 1;
+        }
+        // Format as PRE-001
+        const suffix = nextNum.toString().padStart(3, '0');
+        callback(`${prefix}-${suffix}`);
+    });
 };
 
 // GET USERS
@@ -24,7 +34,7 @@ exports.getAllUsers = (req, res) => {
     const archiveValue = showArchived ? 1 : 0;
     const sql = `
         SELECT u.userID, ul.employeeID, u.firstName, u.lastName, 
-               u.email, u.phone, u.role, u.dob, u.dateCreated 
+               u.phone, u.role, u.dob, u.dateCreated 
         FROM Users u
         LEFT JOIN UserLogins ul ON u.userID = ul.userID
         WHERE u.isArchived = ? 
@@ -71,7 +81,7 @@ exports.restoreUser = (req, res) => {
 
 // CREATE USER (Updated ID Logic)
 exports.createUser = async (req, res) => {
-    const { firstName, lastName, email, phone, role, dob, password, employeeID } = req.body;
+    const { firstName, lastName, phone, role, dob, password, employeeID } = req.body;
     const adminID = req.user ? req.user.userID : 1; 
 
     let hashedPassword;
@@ -86,29 +96,37 @@ exports.createUser = async (req, res) => {
         connection.beginTransaction(err => {
             if (err) { connection.release(); return res.status(500).json({ error: "Transaction failed" }); }
 
-            const userSql = "INSERT INTO Users (firstName, lastName, email, phone, role, dob) VALUES (?, ?, ?, ?, ?, ?)";
-            connection.query(userSql, [firstName, lastName, email, phone, role, finalDob], (err, result) => {
+            const userSql = "INSERT INTO Users (firstName, lastName, phone, role, dob) VALUES (?, ?, ?, ?, ?)";
+            connection.query(userSql, [firstName, lastName, phone, role, finalDob], (err, result) => {
                 if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
                 
                 const newUserID = result.insertId;
                 
                 // Auto-generate ID if not provided, using Role Prefix
-                const finalEmployeeID = employeeID || generateEmployeeID(role);
+                if (employeeID) {
+                    insertLogin(newUserID, employeeID);
+                } else {
+                    generateEmployeeID(role, connection, (generatedID) => {
+                        insertLogin(newUserID, generatedID);
+                    });
+                }
                 
-                const loginSql = "INSERT INTO UserLogins (userID, employeeID, hashedPassword) VALUES (?, ?, ?)";
-                connection.query(loginSql, [newUserID, finalEmployeeID, hashedPassword], (err) => {
-                    if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
+                function insertLogin(userID, finalID) {
+                    const loginSql = "INSERT INTO UserLogins (userID, employeeID, hashedPassword) VALUES (?, ?, ?)";
+                    connection.query(loginSql, [userID, finalID, hashedPassword], (err) => {
+                        if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: err.message }); });
 
-                    const logDetails = `Created User - ${firstName} ${lastName} (${role}) [ID: ${finalEmployeeID}]`;
-                    logActivity(adminID, 'CREATE_USER', logDetails, async () => {
-                        await clearCache('cache:/api/users*');
-                        connection.commit(err => {
-                            if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
-                            connection.release();
-                            res.json({ message: "User created successfully", employeeID: finalEmployeeID });
+                        const logDetails = `Created User - ${firstName} ${lastName} (${role}) [ID: ${finalID}]`;
+                        logActivity(adminID, 'CREATE_USER', logDetails, async () => {
+                            await clearCache('cache:/api/users*');
+                            connection.commit(err => {
+                                if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Commit failed" }); });
+                                connection.release();
+                                res.json({ message: "User created successfully", employeeID: finalID });
+                            });
                         });
                     });
-                });
+                }
             });
         });
     });
@@ -117,11 +135,11 @@ exports.createUser = async (req, res) => {
 // UPDATE USER
 exports.updateUser = (req, res) => {
     const { id } = req.params;
-    const { firstName, lastName, email, phone, role, dob } = req.body;
+    const { firstName, lastName, phone, role, dob } = req.body;
     const adminID = req.user ? req.user.userID : 1;
 
-    const sql = "UPDATE Users SET firstName=?, lastName=?, email=?, phone=?, role=?, dob=? WHERE userID=?";
-    db.query(sql, [firstName, lastName, email, phone, role, dob, id], (err) => {
+    const sql = "UPDATE Users SET firstName=?, lastName=?, phone=?, role=?, dob=? WHERE userID=?";
+    db.query(sql, [firstName, lastName, phone, role, dob, id], (err) => {
         if (err) return res.status(500).json({ error: err.message });
 
         const logDetails = `Updated User - ${firstName} ${lastName} [ID: ${id}]`;
