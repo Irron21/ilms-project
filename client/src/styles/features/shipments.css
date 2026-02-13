@@ -1,3 +1,86 @@
+/* --- DROP CHIPS IN TIMELINE --- */
+.drops-info-banner {
+    padding: 12px 15px;
+    background: #f8f9fa;
+    border-right: 1px solid #e9ecef;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 130px;
+    flex-shrink: 0;
+    justify-content: center;
+}
+
+.drop-info-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid #e0e6ed;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+}
+
+.drop-info-chip:hover {
+    border-color: var(--primary-orange);
+    background: #fffcf9;
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+
+.drop-info-chip.active {
+    border-color: var(--primary-orange);
+    background: #fff9f4;
+    box-shadow: 0 2px 10px rgba(230, 126, 34, 0.1);
+}
+
+.drop-info-chip.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: var(--primary-orange);
+}
+
+.drop-index-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: #f1f3f5;
+    color: #495057;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.drop-info-chip.active .drop-index-indicator {
+    background: var(--primary-orange);
+    color: white;
+}
+
+.drop-name-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: #34495e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.drop-info-chip.active .drop-name-text {
+    color: #2c3e50;
+}
+
 /* --- LAYOUT WRAPPER --- */
 .shipment-view-layout {
     display: flex;
@@ -179,22 +262,23 @@
     display: flex;
     flex-direction: column;
     justify-content: center;
-    width: 110px;
+    width: 120px;
     flex-shrink: 0;
 }
 
 .phase-toggle-buttons {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 4px;
     background: #e9ecef;
     padding: 4px;
     border-radius: 8px;
-    width: 95px;
+    width: 105px;
 }
 
 .phase-toggle-btn {
-    padding: 12px 4px;
+    padding: 8px 4px;
+    margin: 4px 4px;
     font-size: 10px;
     font-weight: 800;
     text-transform: uppercase;
@@ -219,6 +303,7 @@
 
 .phase-toggle-btn:hover:not(.active) {
     color: #333;
+    background-color: rgb(246, 245, 245);
 }
 
 /* Ensure timeline content has relative positioning for the absolute overlay to work */
@@ -344,7 +429,7 @@
     backdrop-filter: blur(2px);
 }
 .modal-form-card {
-    background: white; width: 500px; padding: 30px;
+    background: white; width: 550px; padding: 30px;
     border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     animation: slideUpFade 0.3s ease-out;
 }
@@ -1401,29 +1486,28 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 30px;
-    margin-bottom: 15px;
+    padding: 0 20px;
+    margin-bottom: 12px;
 }
 
 .steps-title-mob {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 800;
-    color: #333;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    color: #2c3e50;
     margin: 0;
 }
 
 .phase-toggle-mob {
     display: flex;
     background: #f0f0f0;
-    padding: 3px;
-    border-radius: 8px;
+    padding: 10px;
+    border-radius: 12px;
     gap: 4px;
+    margin-right: 10px;
 }
 
 .phase-toggle-btn-mob {
-    padding: 6px 12px;
+    padding: 8px 12px;
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
@@ -1746,4 +1830,112 @@
     gap: 8px;
     flex-wrap: nowrap; /* Prevent stacking */
     white-space: nowrap;
+}
+
+.drops-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #eee;
+    padding: 12px;
+}
+
+.drop-banner-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    max-width: 400px;
+    position: relative;
+}
+
+.drop-nav-arrow {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 1px solid #d1d5db;
+    background: white;
+    color: #4b5563;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    z-index: 1;
+}
+
+.drop-nav-arrow:hover:not(:disabled) {
+    border-color: #9ca3af;
+    color: var(--primary-orange);
+}
+
+.drop-nav-arrow:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.current-drop-display {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0px;
+    background: white;
+    padding: 4px 12px;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    cursor: default;
+    transition: all 0.2s;
+    position: relative;
+    height: 42px;
+}
+
+.current-drop-display:hover {
+    border-color: #e5e7eb;
+}
+
+.drop-display-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: #9ca3af;
+    text-transform: uppercase;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.drop-display-number {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--primary-orange);
+    line-height: 1;
+}
+
+.switch-hint-overlay {
+    position: absolute;
+    top: -4px;
+    left: -4px;
+    right: -4px;
+    bottom: -4px;
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    z-index: 10;
+    transition: all 0.2s ease;
+}
+
+.switch-hint-overlay:hover {
+    border-color: var(--primary-orange);
+}
+
+.switch-hint-overlay span {
+    color: var(--primary-orange);
+    font-weight: 700;
+    font-size: 10px;
+    text-transform: uppercase;
+    text-align: center;
+    pointer-events: none;
+    letter-spacing: 0.5px;
 }

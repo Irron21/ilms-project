@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react';
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal } from '@shared';
 import { queueManager } from '@utils/queueManager';
@@ -43,7 +43,8 @@ const getPendingOfflineData = (shipmentID) => {
     const pendingLogs = myActions.map(action => ({
       phaseName: action.status,
       timestamp: action.timestamp || new Date().toISOString(),
-      isPending: true
+      isPending: true,
+      dropID: action.dropID
     }));
 
     return { 
@@ -58,12 +59,28 @@ const getPendingOfflineData = (shipmentID) => {
 
 const ShipmentDetails = memo(({ shipment, onBack, token, user }) => { 
   const [showOverlay, setShowOverlay] = useState(true);
-  const [phaseTab, setPhaseTab] = useState('warehouse'); // Default to warehouse for mobile workers
+  const [phaseTab, setPhaseTab] = useState('warehouse'); 
   const [confirmStep, setConfirmStep] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [offlineVisible, setOfflineVisible] = useState(!navigator.onLine);
   const containerRef = useRef(null);
   const touchStartRef = useRef(null);
+
+  // Multi-drop support
+  const [selectedDropIndex, setSelectedDropIndex] = useState(0);
+  const drops = useMemo(() => {
+     if (!shipment.dropDetails) return [];
+     return shipment.dropDetails.split('|').map((d, index) => {
+       const [dropID, rest] = d.split(':');
+       const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+       return {
+         dropID: parseInt(dropID),
+         name: match ? match[1] : (rest || d),
+         location: match ? match[2] : '',
+         index
+       };
+     });
+   }, [shipment.dropDetails]);
 
   // Remarks State
   const [stepRemarks, setStepRemarks] = useState({});
@@ -117,7 +134,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         setLogs(prev => {
             const pendingLogs = prev.filter(l => l.isPending);
             const distinctPending = pendingLogs.filter(p => 
-              !serverLogs.some(s => s.phaseName === p.phaseName)
+              !serverLogs.some(s => s.phaseName === p.phaseName && (Number(s.dropID) || null) === (Number(p.dropID) || null))
             );
             const nextLogs = [...serverLogs, ...distinctPending];
             
@@ -127,8 +144,15 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         });
 
         if (serverLogs.length > 0) {
-            const lastLog = serverLogs[serverLogs.length - 1];
-            const newStatus = lastLog.phaseName === 'Departure' || lastLog.phaseName === 'Completed' 
+            // The logs are ordered by timestamp DESC from server
+            const lastLog = serverLogs[0]; 
+            
+            // For multi-drop, Departure only means Completed if it's the last drop
+            const isLastDropDeparture = lastLog.phaseName === 'Departure' && 
+                                        drops.length > 0 && 
+                                        (Number(lastLog.dropID) === drops[drops.length - 1].dropID);
+
+            const newStatus = isLastDropDeparture || lastLog.phaseName === 'Completed' 
                 ? 'Completed' 
                 : lastLog.phaseName;
 
@@ -142,9 +166,8 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                 return targetStatus;
             });
         }
-
     } catch (err) { console.error("Error fetching logs:", err); }
-  }, [shipment.shipmentID, token]);
+  }, [shipment.shipmentID, token, drops]);
 
   useEffect(() => {
     const handleOnline = () => { 
@@ -205,16 +228,22 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
   };
 
   const executeStepUpdate = (dbStatus) => {
-      const isFinishing = dbStatus === 'Departure';
+      const isFinishing = dbStatus === 'Departure' && selectedDropIndex === drops.length - 1;
       const finalStatus = isFinishing ? 'Completed' : dbStatus;
       const now = Date.now(); 
+      const currentDropID = phaseTab === 'store' && drops[selectedDropIndex] ? drops[selectedDropIndex].dropID : null;
 
       setLocalStatus(finalStatus);
 
-      const newLog = { phaseName: dbStatus, timestamp: now, isPending: true };
+      const newLog = { 
+        phaseName: dbStatus, 
+        timestamp: now, 
+        isPending: true,
+        dropID: currentDropID 
+      };
       
       setLogs(prevLogs => {
-          if (prevLogs.some(l => l.phaseName === dbStatus)) return prevLogs;
+          if (prevLogs.some(l => l.phaseName === dbStatus && (Number(l.dropID) || null) === (Number(currentDropID) || null))) return prevLogs;
           const updated = [...prevLogs, newLog];
           if (isFinishing) {
              updated.push({ phaseName: 'Completed', timestamp: now, isPending: true });
@@ -228,7 +257,8 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           status: dbStatus,
           timestamp: now,
           userID: user?.userID || 1,
-          remarks: stepRemarks[dbStatus] || null // Include remarks if present
+          remarks: stepRemarks[dbStatus] || null,
+          dropID: currentDropID
       });
 
       if (isFinishing) {
@@ -271,7 +301,13 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
 
   const getStepTimestamp = (dbStatus) => {
     if (!logs || logs.length === 0) return null;
-    const log = logs.find(l => l.phaseName === dbStatus || l.phase === dbStatus || l.newStatus === dbStatus);
+    
+    const currentDropID = phaseTab === 'store' && drops[selectedDropIndex] ? drops[selectedDropIndex].dropID : null;
+    
+    const log = logs.find(l => 
+      (l.phaseName === dbStatus || l.phase === dbStatus || l.newStatus === dbStatus) &&
+      (phaseTab === 'warehouse' ? !l.dropID : (Number(l.dropID) || null) === (Number(currentDropID) || null))
+    );
 
     if (log) {
       const date = new Date(log.timestamp);
@@ -291,19 +327,39 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
   };
 
   const getStepState = (currentDbStatus, stepIndex, currentTab) => {
-    // Priority-based state
-    const currentPriority = getStatusPriority(currentDbStatus);
-    
-    // We need to calculate priority relative to the ALL_STEPS array
-    // but the UI only shows a subset based on currentTab.
-    
-    // Find the step in ALL_STEPS
+    const currentDropID = currentTab === 'store' && drops[selectedDropIndex] ? drops[selectedDropIndex].dropID : null;
     const phaseName = (currentTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES)[stepIndex];
-    const stepPriority = getStatusPriority(phaseName);
 
-    if (currentPriority >= stepPriority) return 'done';
-    if (currentPriority === stepPriority - 1) return 'active';
-    return 'pending';
+    // 1. Is it done? (Log exists for this specific drop/step)
+    const hasLog = logs.some(l => 
+      l.phaseName === phaseName && 
+      (currentTab === 'warehouse' ? !l.dropID : (Number(l.dropID) || null) === (Number(currentDropID) || null))
+    );
+    if (hasLog) return 'done';
+
+    // 2. Is it active? (Previous step is done)
+    if (currentTab === 'warehouse') {
+      if (stepIndex === 0) return 'active'; // First warehouse step always active if not done
+      const prevPhase = WAREHOUSE_PHASES[stepIndex - 1];
+      const prevDone = logs.some(l => l.phaseName === prevPhase && !l.dropID);
+      return prevDone ? 'active' : 'pending';
+    } else {
+      // Store phase
+      const isWarehouseComplete = logs.some(l => l.phaseName === 'Start Route');
+      if (!isWarehouseComplete) return 'pending';
+
+      if (stepIndex === 0) {
+        // First store step active if it's the first drop, OR if the previous drop is departed
+        if (selectedDropIndex === 0) return 'active';
+        const prevDropID = drops[selectedDropIndex - 1]?.dropID;
+        const prevDropDeparted = logs.some(l => l.phaseName === 'Departure' && (Number(l.dropID) || null) === (Number(prevDropID) || null));
+        return prevDropDeparted ? 'active' : 'pending';
+      }
+
+      const prevPhase = STORE_PHASES[stepIndex - 1];
+      const prevDone = logs.some(l => l.phaseName === prevPhase && (Number(l.dropID) || null) === (Number(currentDropID) || null));
+      return prevDone ? 'active' : 'pending';
+    }
   };
 
   const isCompleted = localStatus === 'Completed';
@@ -395,7 +451,9 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
             </div>
             <div className="info-content">
                <span className="info-label">Store</span>
-               <span className="info-value">{shipment.destName || 'N/A'}</span>
+               <span className="info-value">
+                 {drops.length > 0 ? drops[selectedDropIndex].name : (shipment.destName || 'N/A')}
+               </span>
             </div>
           </div>
 
@@ -408,7 +466,9 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
               </div>
               <div className="info-content">
                 <span className="info-label">Location</span>
-                <span className="info-value">{shipment.destLocation}</span>
+                <span className="info-value">
+                  {drops.length > 0 ? drops[selectedDropIndex].location : (shipment.destLocation || 'N/A')}
+                </span>
               </div>
             </div>
 
@@ -443,8 +503,33 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
       </div>
 
       <div className="steps-header-mob">
-        <h3 className="steps-title-mob">Shipment Progress</h3>
-        <div className="phase-toggle-mob">
+        {phaseTab === 'store' && drops.length > 1 ? (
+          <div className="drop-selector-mob-header">
+            <div className="drop-nav-mob">
+              <button 
+                className="drop-nav-arrow-mob"
+                disabled={selectedDropIndex === 0}
+                onClick={() => setSelectedDropIndex(prev => Math.max(0, prev - 1))}
+              >
+                ‹
+              </button>
+              
+              <div className="drop-current-mob">
+                <span className="drop-display-label-mob">Drop:</span>
+                <span className="drop-display-number-mob">{selectedDropIndex + 1}</span>
+              </div>
+
+              <button 
+                className="drop-nav-arrow-mob"
+                disabled={selectedDropIndex === drops.length - 1}
+                onClick={() => setSelectedDropIndex(prev => Math.min(drops.length - 1, prev + 1))}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+        ) : null}
+        <div className="phase-toggle-mob" style={{marginLeft:"auto"}}>
           <button 
             className={`phase-toggle-btn-mob ${phaseTab === 'warehouse' ? 'active' : ''}`}
             onClick={() => setPhaseTab('warehouse')}
@@ -459,6 +544,8 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           </button>
         </div>
       </div>
+
+      {/* Removed the separate drop-selector-mob div as it's now integrated in the header */}
 
       <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`} style={{ position: 'relative' }}>
         {isCompleted && showOverlay && (

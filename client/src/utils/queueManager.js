@@ -23,7 +23,8 @@ export const queueManager = {
             status: item.status,
             userID: item.userID,
             clientTimestamp: item.timestamp,
-            remarks: item.remarks || null // Pass remarks if present
+            remarks: item.remarks || null, // Pass remarks if present
+            dropID: item.dropID || null
           });
         }
       } catch (err) {

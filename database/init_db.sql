@@ -138,6 +138,26 @@ CREATE TABLE Shipments (
 
 
 
+CREATE TABLE ShipmentDrops (
+
+  dropID INT NOT NULL AUTO_INCREMENT,
+
+  shipmentID INT NOT NULL,
+
+  destName VARCHAR(150) NULL,
+
+  destLocation VARCHAR(255) NULL,
+
+  sequenceOrder INT DEFAULT 0,
+
+  PRIMARY KEY (dropID),
+
+  FOREIGN KEY (shipmentID) REFERENCES Shipments (shipmentID) ON DELETE CASCADE
+
+);
+
+
+
 CREATE TABLE ShipmentCrew (
 
   shipmentCrewID INT NOT NULL AUTO_INCREMENT,

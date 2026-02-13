@@ -24,7 +24,10 @@ exports.getActiveShipments = (req, res) => {
     const columns = `
         s.shipmentID, s.destName, s.destLocation, 
         s.loadingDate, s.deliveryDate, s.delayReason,
-        s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType
+        s.currentStatus, s.creationTimestamp, v.plateNo, v.type as truckType,
+        (SELECT COUNT(*) FROM ShipmentDrops WHERE shipmentID = s.shipmentID) as dropCount,
+        (SELECT COUNT(DISTINCT dropID) FROM ShipmentStatusLog WHERE shipmentID = s.shipmentID AND status = 'Departure') as completedDropsCount,
+        (SELECT GROUP_CONCAT(CONCAT(dropID, ':', destName, ' (', destLocation, ')') ORDER BY sequenceOrder ASC SEPARATOR '|') FROM ShipmentDrops WHERE shipmentID = s.shipmentID) as dropDetails
     `;
     const sortLogic = `ORDER BY s.loadingDate IS NULL ASC, s.loadingDate ASC, s.creationTimestamp DESC`;
 
@@ -276,7 +279,7 @@ exports.getShipmentResources = (req, res) => {
 // 2. Update Status
 exports.updateStatus = (req, res) => {
     const shipmentID = req.params.id;
-    const { status, userID, deliveryDate, clientTimestamp, remarks } = req.body;
+    const { status, userID, deliveryDate, clientTimestamp, remarks, dropID } = req.body;
 
     if (!shipmentID || shipmentID === 'undefined') {
         return res.status(400).json({ error: "Shipment ID is missing" });
@@ -356,7 +359,7 @@ exports.updateStatus = (req, res) => {
             params = [status, computedDate, shipmentID];
         }
 
-        const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp, remarks) VALUES (?, ?, ?, ?, ?, ?)";
+        const insertLogSql = "INSERT INTO ShipmentStatusLog (shipmentID, userID, phaseName, status, timestamp, remarks, dropID) VALUES (?, ?, ?, ?, ?, ?, ?)";
 
         db.query(updateShipmentSql, params, (err, result) => {
             if (err) {
@@ -364,7 +367,7 @@ exports.updateStatus = (req, res) => {
                 return res.status(500).json({ error: err.message });
             }
 
-            db.query(insertLogSql, [shipmentID, userID, status, status, validTimestamp, remarks || null], (err, result) => {
+            db.query(insertLogSql, [shipmentID, userID, status, status, validTimestamp, remarks || null, dropID || null], (err, result) => {
                 if (err) {
                     // Check for Foreign Key Constraint Failure (Shipment doesn't exist)
                     if (err.code === 'ER_NO_REFERENCED_ROW_2' || err.code === 'ER_NO_REFERENCED_ROW') {
@@ -394,7 +397,11 @@ exports.getShipmentLogs = (req, res) => {
 
     const sql = `
         SELECT 
-            l.phaseName, 
+            l.statusLogID,
+            l.shipmentID,
+            l.dropID,
+            l.phaseName,
+            l.status,
             l.timestamp,
             l.remarks,
             CONCAT(u.firstName, ' ', u.lastName) AS actorName,
@@ -489,6 +496,16 @@ exports.createBatchShipments = async (req, res) => {
                                 if (err.code === 'ER_DUP_ENTRY') reject(new Error(`Item ${itemNum}: Shipment ID ${shipmentID} already exists.`));
                                 else reject(err);
                             } else resolve();
+                        });
+                    });
+
+                    // Insert Drops
+                    const drops = s.drops || [{ destName: s.destName, destLocation: s.destLocation }];
+                    const dropValues = drops.map((d, index) => [shipmentID, d.destName, d.destLocation, index]);
+                    const sqlDrops = "INSERT INTO ShipmentDrops (shipmentID, destName, destLocation, sequenceOrder) VALUES ?";
+                    await new Promise((resolve, reject) => {
+                        connection.query(sqlDrops, [dropValues], (err) => {
+                            if (err) reject(err); else resolve();
                         });
                     });
 
@@ -596,7 +613,17 @@ exports.createShipment = (req, res) => {
                         });
                     }
 
-                    const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES ?";
+                    // Insert Drops
+                    const drops = req.body.drops || [{ destName, destLocation }];
+                    const dropValues = drops.map((d, index) => [shipmentID, d.destName, d.destLocation, index]);
+                    const sqlDrops = "INSERT INTO ShipmentDrops (shipmentID, destName, destLocation, sequenceOrder) VALUES ?";
+
+                    connection.query(sqlDrops, [dropValues], (err) => {
+                        if (err) {
+                            return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Drops Fail" }); });
+                        }
+
+                        const sqlCrew = "INSERT INTO ShipmentCrew (shipmentID, userID, role) VALUES ?";
                     const crewValues = [
                         [shipmentID, driverID, 'Driver'], 
                         [shipmentID, helperID, 'Helper']
@@ -611,18 +638,19 @@ exports.createShipment = (req, res) => {
                         connection.query(sqlLog, [shipmentID, userID], (err) => {
                             if (err) return connection.rollback(() => { connection.release(); res.status(500).json({ error: "Log fail" }); });
 
-                            logActivity(userID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
-                                connection.commit((err) => {
-                                    connection.release();
-                                    res.json({ message: "Success", shipmentID });
-                                });
+                        logActivity(userID, 'CREATE_SHIPMENT', `Created Shipment #${shipmentID}`, () => {
+                            connection.commit((err) => {
+                                connection.release();
+                                res.json({ message: "Success", shipmentID });
                             });
+                        });
                         });
                     });
                 });
             });
         });
-    }); // End Route Check
+    });
+});
 };
 
 exports.exportShipments = (req, res) => {
