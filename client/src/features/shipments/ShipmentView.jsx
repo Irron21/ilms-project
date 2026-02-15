@@ -70,6 +70,18 @@ function ShipmentView({ user, token, onLogout }) {
     const [selectedDropIndex, setSelectedDropIndex] = useState(0);
     const [loadingBatch, setLoadingBatch] = useState(false);
 
+    const getRouteSuggestions = (value) => {
+        const query = (value || '').trim().toLowerCase();
+        if (!query) return { matches: [], exactMatchKey: null };
+        const allRoutes = Object.keys(routeRules);
+        const matches = allRoutes.filter(r => r.toLowerCase().includes(query));
+        const exactMatchKey = allRoutes.find(r => r.toLowerCase() === query) || null;
+        if (exactMatchKey && matches.length === 1) {
+            return { matches: [], exactMatchKey };
+        }
+        return { matches, exactMatchKey };
+    };
+
     const handleBatchChange = (e) => {
         const { name, value } = e.target;
         const updatedBatch = [...batchData];
@@ -101,15 +113,12 @@ function ShipmentView({ user, token, onLogout }) {
             if (field === 'destLocation') {
                 current.destLocation = value;
                 
-                // Vehicle filtering logic remains tied to the first drop's route
-                const allRoutes = Object.keys(routeRules);
                 if (!value || value.length === 0) {
                     setFilteredRoutes([]);
                     setIsVehicleDisabled(true);
                 } else {
-                    const matches = allRoutes.filter(r => r.toLowerCase().includes(value.toLowerCase()));
-                    const exactMatchKey = allRoutes.find(r => r.toLowerCase() === value.toLowerCase());
-                    setFilteredRoutes(exactMatchKey && matches.length === 1 ? [] : matches);
+                    const { matches, exactMatchKey } = getRouteSuggestions(value);
+                    setFilteredRoutes(matches);
                     if (exactMatchKey && routeRules[exactMatchKey]) {
                         const allowedTypes = routeRules[exactMatchKey];
                         const validVehicles = allVehicles.filter(v => allowedTypes.includes(v.type) && v.status === 'Working');
@@ -189,6 +198,38 @@ function ShipmentView({ user, token, onLogout }) {
 
     const handleBatchSubmit = async (e) => {
         e.preventDefault();
+
+        for (let i = 0; i < batchData.length; i += 1) {
+            const shipment = batchData[i];
+            const drops = shipment.drops || [];
+
+            if (drops.length === 0) {
+                setFeedbackModal({
+                    type: 'error',
+                    title: 'Missing Drops',
+                    message: `Shipment ${i + 1} must have at least one drop.`,
+                    onClose: () => setFeedbackModal(null)
+                });
+                return;
+            }
+
+            for (let j = 0; j < drops.length; j += 1) {
+                const drop = drops[j] || {};
+                const hasName = !!drop.destName && drop.destName.trim().length > 0;
+                const hasRoute = !!drop.destLocation && drop.destLocation.trim().length > 0;
+
+                if (!hasName || !hasRoute) {
+                    setFeedbackModal({
+                        type: 'error',
+                        title: 'Incomplete Drop Details',
+                        message: `Fill Store and Route for Drop ${j + 1} in Shipment ${i + 1}, or delete that drop.`,
+                        onClose: () => setFeedbackModal(null)
+                    });
+                    return;
+                }
+            }
+        }
+
         setLoadingBatch(true);
         try {
             await api.post('/shipments/create-batch', batchData, { headers: { Authorization: `Bearer ${token}` } });
@@ -213,8 +254,9 @@ function ShipmentView({ user, token, onLogout }) {
         }
     };
 
-    // Helper for rendering form (looks at current index)
     const currentForm = batchData[batchIndex] || getBlankShipment();
+    const currentDrop = currentForm.drops[dropIndex] || { destName: '', destLocation: '' };
+    const { matches: routeSuggestions } = getRouteSuggestions(currentDrop.destLocation);
     
     const handleSelectAllColumns = () => {
         const allChecked = columnConfig.every(col => col.checked);
@@ -1253,13 +1295,12 @@ function ShipmentView({ user, token, onLogout }) {
                                                             >
                                                                 ›
                                                             </button>
-
-                                                            {phaseTab !== 'store' && (
-                                                                <div className="switch-hint-overlay" onClick={() => setPhaseTab('store')}>
-                                                                    <span>Switch to <br></br>Store Phase</span>
-                                                                </div>
-                                                            )}
                                                         </div>
+                                                        {phaseTab !== 'store' && (
+                                                            <div className="switch-hint-overlay" onClick={() => setPhaseTab('store')}>
+                                                                <span>Switch to <br></br>Store Phase</span>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                                 <div className="timeline-content">
@@ -1337,7 +1378,11 @@ function ShipmentView({ user, token, onLogout }) {
                 <div className="modal-overlay-desktop">
                     <div className="modal-form-card">
                         
-                        {/* 1. NEW BATCH NAVIGATION HEADER */}
+                        <div className="modal-header" style={{marginTop:0}}>
+                            <h2>Create Shipment</h2>
+                            <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
+                        </div>
+
                         <div className="batch-nav-header">
                             <div className="batch-indicators">
                                 <span className="batch-pill">Shipment {batchIndex + 1} of {batchData.length}</span>
@@ -1377,11 +1422,6 @@ function ShipmentView({ user, token, onLogout }) {
                                     <Icons.Plus size={12}/> Add Another
                                 </button>
                             </div>
-                        </div>
-
-                        <div className="modal-header" style={{marginTop:0}}>
-                            <h2>Create Shipment</h2>
-                            <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
                         </div>
 
                         {/* 2. FORM (Bound to currentForm) */}
@@ -1452,14 +1492,14 @@ function ShipmentView({ user, token, onLogout }) {
                                     </div>
                                 </div>
 
-                                {currentForm.drops[dropIndex] && (
+                                {currentDrop && (
                                     <div style={{background: 'white', padding: '15px', borderRadius: '6px', border: '1px solid #eef0f2', position: 'relative'}}>
                                         <div style={{display: 'flex', gap: '15px'}}>
                                             <div className="form-group" style={{flex: 1, marginBottom: 0}}>
                                                 <label style={{fontSize: '11px', color: '#666', marginBottom: '4px'}}>Store Name</label>
                                                 <input 
                                                     type="text" 
-                                                    value={currentForm.drops[dropIndex].destName} 
+                                                    value={currentDrop.destName} 
                                                     onChange={(e) => handleDropChange(dropIndex, 'destName', e.target.value)}
                                                     placeholder="e.g. Store 123"
                                                     required
@@ -1470,9 +1510,9 @@ function ShipmentView({ user, token, onLogout }) {
                                                 <label style={{fontSize: '11px', color: '#666', marginBottom: '4px'}}>Route / Cluster</label>
                                                 <input 
                                                     type="text" 
-                                                    value={currentForm.drops[dropIndex].destLocation} 
+                                                    value={currentDrop.destLocation} 
                                                     onChange={(e) => handleDropChange(dropIndex, 'destLocation', e.target.value)}
-                                                    list="route-list"
+                                                    list={currentDrop.destLocation && currentDrop.destLocation.trim().length > 0 ? "route-list" : undefined}
                                                     placeholder="Search Route..."
                                                     required
                                                     style={{padding: '8px 12px', fontSize: '13px'}}
@@ -1483,9 +1523,11 @@ function ShipmentView({ user, token, onLogout }) {
                                     </div>
                                 )}
                                 
-                                <datalist id="route-list">
-                                     {Object.keys(routeRules).map((r, i) => <option key={i} value={r} />)}
-                                 </datalist>
+                                {currentDrop.destLocation && currentDrop.destLocation.trim().length > 0 && routeSuggestions.length > 0 && (
+                                    <datalist id="route-list">
+                                        {routeSuggestions.map((r, i) => <option key={i} value={r} />)}
+                                    </datalist>
+                                )}
                                  <p style={{fontSize: '10px', color: '#7f8c8d', marginTop: '10px', fontStyle: 'italic', marginBottom: 0}}>
                                      * The route of the first drop determines vehicle eligibility.
                                  </p>
@@ -1513,19 +1555,6 @@ function ShipmentView({ user, token, onLogout }) {
                             </div>
                             <div className="form-row">
                                 <div className="form-group">
-                                    <label style={{color: !currentForm.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
-                                    <input 
-                                        type="date" 
-                                        name="deliveryDate"
-                                        required 
-                                        disabled={!currentForm.loadingDate} 
-                                        min={currentForm.loadingDate} 
-                                        value={currentForm.deliveryDate} 
-                                        onChange={handleBatchChange}
-                                        style={{ fontFamily:"'Segoe UI', sans-serif", backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
-                                    />
-                                </div>
-                                <div className="form-group">
                                     <label>Loading Date</label>
                                     <input 
                                         type="date" 
@@ -1537,6 +1566,19 @@ function ShipmentView({ user, token, onLogout }) {
                                         style={{fontFamily:"'Segoe UI', sans-serif"}}
                                     />
                                 </div>
+                                <div className="form-group">
+                                    <label style={{color: !currentForm.loadingDate ? '#999' : '#555'}}>Delivery Date</label>
+                                    <input 
+                                        type="date" 
+                                        name="deliveryDate"
+                                        required 
+                                        disabled={!currentForm.loadingDate} 
+                                        min={currentForm.loadingDate} 
+                                        value={currentForm.deliveryDate} 
+                                        onChange={handleBatchChange}
+                                        style={{ fontFamily:"'Segoe UI', sans-serif", backgroundColor: !currentForm.loadingDate ? '#f9f9f9' : 'white', cursor: !currentForm.loadingDate ? 'not-allowed' : 'pointer'}}
+                                    />
+                                </div>                           
                             </div>                         
                             <div className="form-row">
                                 <div className="form-group">
