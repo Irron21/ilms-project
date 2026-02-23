@@ -505,24 +505,35 @@ function PayrollView() {
                         </div>
                     </div>
                     <div style={{width:'1px', height:'35px', background:'#eee'}}></div>  
-                    {/* ✅ NEW: Generate Periods Button */}
                     <button 
                         onClick={confirmGeneratePeriods}
                         className='manage-rates-button'
                         title="Auto-Generate Next Year's Periods"
-                    >Generate
+                    >
+                        Generate
                     </button>
-                    {/* 2. UPDATE: Harvest Button (Disable if Locked) */}
-                    {selectedPeriod && !isPeriodLocked() && (
-                        <button 
-                            className="btn-alert" 
-                            onClick={confirmLockPeriod}
-                            style={{background: '#bec0c0ff', border: '2px solid #b7bdbdff', fontSize:'13px'}}
-                        >
-                            <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
-                            Lock Period
-                        </button>
-                    )}
+                    <button 
+                        className="btn-alert" 
+                        onClick={confirmLockPeriod}
+                        disabled={!selectedPeriod || isPeriodLocked()}
+                        style={{
+                            background: '#bec0c0ff',
+                            border: '2px solid #b7bdbdff',
+                            fontSize: '13px',
+                            opacity: !selectedPeriod || isPeriodLocked() ? 0.5 : 1,
+                            cursor: !selectedPeriod || isPeriodLocked() ? 'not-allowed' : 'pointer'
+                        }}
+                        title={
+                            !selectedPeriod
+                                ? 'Select a period first'
+                                : isPeriodLocked()
+                                    ? 'Period is already locked'
+                                    : 'Lock this period'
+                        }
+                    >
+                        <Icons.Lock size={14} style={{marginRight:'5px'}}/> 
+                        Lock Period
+                    </button>
                     
                     <button 
                       className="btn-generate" 

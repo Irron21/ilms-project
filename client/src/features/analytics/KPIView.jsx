@@ -218,6 +218,10 @@ function KPIView() {
     // Determine which dataset to show
     const displayData = viewMode === 'monthly' ? trendData : getQuarterlyData(trendData);
 
+    const headerLabel = (loading && !monthLabel)
+        ? 'Loading...'
+        : (monthLabel || 'Yearly Average');
+
     // File Upload Handler
     const handleFileUpload = async (e) => {
         const file = e.target.files[0];
@@ -400,10 +404,9 @@ function KPIView() {
 
     return (
         <div className="kpi-container">
-            {/* Header Section*/}
-             <div className="kpi-actions-bar">
+            <div className="kpi-actions-bar">
                 <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
-                    <h3 className="header-title">Overview for {monthLabel || '...'}</h3>
+                    <h3 className="header-title">Overview for {headerLabel}</h3>
                     {loading && <span className="mini-loader"></span>}
                 </div>
                 <div className="actions-right">
