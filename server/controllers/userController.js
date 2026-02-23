@@ -187,6 +187,7 @@ exports.deleteUser = (req, res) => {
         FROM Shipments s
         JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
         WHERE sc.userID = ? 
+        AND s.isArchived = 0
         AND s.currentStatus NOT IN ('Completed', 'Cancelled')
     `;
 

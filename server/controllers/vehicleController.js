@@ -111,8 +111,7 @@ exports.deleteVehicle = (req, res) => {
     const { id } = req.params;
     const adminID = req.user ? req.user.userID : 1;
 
-    // 1. Check for Active Shipments
-    const checkSql = `SELECT shipmentID FROM Shipments WHERE vehicleID = ? AND currentStatus NOT IN ('Completed', 'Cancelled')`;
+    const checkSql = `SELECT shipmentID FROM Shipments WHERE vehicleID = ? AND isArchived = 0 AND currentStatus NOT IN ('Completed', 'Cancelled')`;
 
     db.query(checkSql, [id], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });

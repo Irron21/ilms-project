@@ -953,8 +953,6 @@ function ShipmentView({ user, token, onLogout }) {
                                 setCurrentPage(1); 
                                 setStatusFilter('All'); 
                                 setDateFilter(''); 
-                                setRouteFilter(''); 
-                                setCrewFilter(''); 
                             }}
                         >
                             {tab}
