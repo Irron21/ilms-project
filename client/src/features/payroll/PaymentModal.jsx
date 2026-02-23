@@ -86,9 +86,18 @@ function PaymentModal({ employee, periodID, isLocked, netSalary, onClose, onUpda
         <div className="modal-backdrop">
             <div className="payment-modal-card">
 
-                <div className="payment-header">
+                    <div className="payment-header">
                     <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
-                        <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#cff1ddff', display:'flex', alignItems:'center', justifyContent:'center', color:'#1cca62ff'}}>
+                        <div style={{
+                            width:'48px',
+                            height:'48px',
+                            borderRadius:'50%',
+                            background: isLocked ? '#ecf0f1' : '#cff1ddff',
+                            display:'flex',
+                            alignItems:'center',
+                            justifyContent:'center',
+                            color: isLocked ? '#2d3436' : '#1cca62ff'
+                        }}>
                             <Icons.Cash size={24} />
                         </div>
                         <div>

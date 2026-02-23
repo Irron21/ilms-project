@@ -24,7 +24,7 @@ function ShipmentView({ user, token, onLogout }) {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const rowsPerPage = 7;
+    const rowsPerPage = 8;
     // UI State
     const [expandedShipmentID, setExpandedShipmentID] = useState(null);
     const [closingId, setClosingId] = useState(null);

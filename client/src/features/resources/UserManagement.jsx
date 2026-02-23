@@ -5,7 +5,7 @@ import { MONTH_NAMES, getYearOptions } from '@constants';
 
 function UserManagement({ activeTab = "users" }) { 
   const token = sessionStorage.getItem('token'); 
-  const rowsPerPage = 10;
+  const rowsPerPage = 9;
 
   // Pagination
   const [userPage, setUserPage] = useState(1);

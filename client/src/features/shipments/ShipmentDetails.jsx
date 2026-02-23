@@ -26,6 +26,28 @@ const getStatusPriority = (status) => {
     return index === -1 ? 0 : index + 1;
 };
 
+const LOG_CACHE_PREFIX = 'shipment_logs_';
+
+const getCachedLogs = (shipmentID) => {
+  try {
+    const raw = localStorage.getItem(LOG_CACHE_PREFIX + String(shipmentID));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    console.error('Error reading cached logs', e);
+    return [];
+  }
+};
+
+const setCachedLogs = (shipmentID, logs) => {
+  try {
+    localStorage.setItem(LOG_CACHE_PREFIX + String(shipmentID), JSON.stringify(logs || []));
+  } catch (e) {
+    console.error('Error writing cached logs', e);
+  }
+};
+
 const getPendingOfflineData = (shipmentID) => {
   try {
     const queueStr = localStorage.getItem('offline_shipment_queue') || localStorage.getItem('offlineQueue');
@@ -57,6 +79,23 @@ const getPendingOfflineData = (shipmentID) => {
   }
 };
 
+const deriveStatusFromLogs = (logs, drops) => {
+  if (!logs || logs.length === 0) return null;
+  const sorted = [...logs].sort((a, b) => {
+    const ta = new Date(a.timestamp).getTime();
+    const tb = new Date(b.timestamp).getTime();
+    return tb - ta;
+  });
+  const lastLog = sorted[0];
+  const isLastDropDeparture =
+    lastLog.phaseName === 'Departure' &&
+    drops &&
+    drops.length > 0 &&
+    (Number(lastLog.dropID) === drops[drops.length - 1].dropID);
+  if (isLastDropDeparture || lastLog.phaseName === 'Completed') return 'Completed';
+  return lastLog.phaseName;
+};
+
 const ShipmentDetails = memo(({ shipment, onBack, token, user }) => { 
   const [showOverlay, setShowOverlay] = useState(true);
   const [phaseTab, setPhaseTab] = useState('warehouse'); 
@@ -86,29 +125,44 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
   const [stepRemarks, setStepRemarks] = useState({});
   const [remarksModal, setRemarksModal] = useState({ show: false, step: null, text: '' });
 
-  // Initialize status/logs once, but update if parent prop changes significantly
+  const initialCachedLogs = useMemo(
+    () => getCachedLogs(shipment.shipmentID),
+    [shipment.shipmentID]
+  );
+  const initialOfflineData = useMemo(
+    () => getPendingOfflineData(shipment.shipmentID),
+    [shipment.shipmentID]
+  );
+
   const [localStatus, setLocalStatus] = useState(() => {
-    const offlineData = getPendingOfflineData(shipment.shipmentID);
-    return offlineData ? offlineData.status : shipment.currentStatus;
+    const fromLogs = deriveStatusFromLogs(initialCachedLogs, []);
+    let baseStatus = fromLogs || shipment.currentStatus;
+    if (initialOfflineData) {
+      const offlinePri = getStatusPriority(initialOfflineData.status);
+      const basePri = getStatusPriority(baseStatus);
+      if (offlinePri >= basePri) baseStatus = initialOfflineData.status;
+    }
+    return baseStatus;
   });
 
   const [logs, setLogs] = useState(() => {
-    const offlineData = getPendingOfflineData(shipment.shipmentID);
-    return offlineData ? offlineData.logs : [];
+    const offlineLogs = initialOfflineData ? initialOfflineData.logs : [];
+    const distinctPending = offlineLogs.filter(p => 
+      !initialCachedLogs.some(s => 
+        s.phaseName === p.phaseName &&
+        (Number(s.dropID) || null) === (Number(p.dropID) || null)
+      )
+    );
+    return [...initialCachedLogs, ...distinctPending];
   });
 
-  // Keep localStatus in sync with shipment.currentStatus ONLY if it represents a forward progression
   useEffect(() => {
-    const offlineData = getPendingOfflineData(shipment.shipmentID);
-    if (offlineData) return; // Don't sync if we have local pending changes
-
     const serverPriority = getStatusPriority(shipment.currentStatus);
     const localPriority = getStatusPriority(localStatus);
-    
     if (serverPriority > localPriority) {
       setLocalStatus(shipment.currentStatus);
     }
-  }, [shipment.currentStatus, shipment.shipmentID]);
+  }, [shipment.currentStatus, shipment.shipmentID, localStatus]);
 
   const partnerName = (() => {
     if (!shipment.crewDetails || !user) return null;
@@ -131,6 +185,8 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         const res = await api.get(url, config);
         const serverLogs = res.data;
 
+        setCachedLogs(shipment.shipmentID, serverLogs);
+
         setLogs(prev => {
             const pendingLogs = prev.filter(l => l.isPending);
             const distinctPending = pendingLogs.filter(p => 
@@ -144,18 +200,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         });
 
         if (serverLogs.length > 0) {
-            // The logs are ordered by timestamp DESC from server
-            const lastLog = serverLogs[0]; 
-            
-            // For multi-drop, Departure only means Completed if it's the last drop
-            const isLastDropDeparture = lastLog.phaseName === 'Departure' && 
-                                        drops.length > 0 && 
-                                        (Number(lastLog.dropID) === drops[drops.length - 1].dropID);
-
-            const newStatus = isLastDropDeparture || lastLog.phaseName === 'Completed' 
-                ? 'Completed' 
-                : lastLog.phaseName;
-
+            const newStatus = deriveStatusFromLogs(serverLogs, drops);
             setLocalStatus(current => {
                 const currentPri = getStatusPriority(current);
                 const newPri = getStatusPriority(newStatus);

@@ -699,12 +699,12 @@ function PayrollView() {
                                             >
                                                 <Icons.Clipboard size={18} />
                                             </button>
-                                            {Number(row.totalPaid) < Number(row.netSalary) && Number(row.netSalary) > 0 && (
+                                            {(Number(row.netSalary) > 0 || Number(row.totalPaid) > 0) && (
                                                 <button 
                                                     className="icon-action-btn" 
                                                     onClick={() => setPayingEmployee(row)}
-                                                    title="Pay Remaining"
-                                                    style={{color: '#27ae60'}}
+                                                    title={isPeriodLocked() ? "View Payments (Period Closed)" : (Number(row.totalPaid) < Number(row.netSalary) ? "Pay Remaining" : "View Payments")}
+                                                    style={{color: isPeriodLocked() ? '#2d3436' : '#27ae60'}}
                                                 >
                                                     <Icons.Cash size={18} />
                                                 </button>
@@ -756,6 +756,7 @@ function PayrollView() {
                     employee={viewingTrips} 
                     periodID={selectedPeriod} 
                     periodName={getPeriodName()}
+                    isLocked={isPeriodLocked()}
                     onClose={() => {
                         setViewingTrips(null);
                         fetchPayrollSummary(selectedPeriod);

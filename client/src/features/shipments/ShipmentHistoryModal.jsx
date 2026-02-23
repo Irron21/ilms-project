@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import api from '@utils/api';
 import { Icons, FeedbackModal } from '@shared'; 
 
-function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
+function ShipmentHistoryModal({ employee, periodID, periodName, isLocked, onClose }) {
     const [trips, setTrips] = useState([]);
     const [loading, setLoading] = useState(true);
     const [feedback, setFeedback] = useState(null);
@@ -191,7 +191,8 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
                                                     <button 
                                                         onClick={() => handleAdjustClick(trip)}
                                                         className="icon-action-btn"
-                                                        title="Modify Adjustment"
+                                                        title={isLocked ? "View Adjustments (Period Closed)" : "Modify Adjustment"}
+                                                        style={isLocked ? { color: '#2d3436' } : undefined}
                                                     >
                                                         <Icons.Edit size={14} />
                                                     </button>
@@ -212,7 +213,16 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
                             
                             <div className="payment-header">
                                 <div style={{display:'flex', gap:'15px', alignItems:'center'}}>
-                                    <div style={{width:'48px', height:'48px', borderRadius:'50%', background:'#cff1ddff', display:'flex', alignItems:'center', justifyContent:'center', color:'#1cca62ff'}}>
+                                    <div style={{
+                                        width:'48px',
+                                        height:'48px',
+                                        borderRadius:'50%',
+                                        background: isLocked ? '#ecf0f1' : '#cff1ddff',
+                                        display:'flex',
+                                        alignItems:'center',
+                                        justifyContent:'center',
+                                        color: isLocked ? '#2d3436' : '#1cca62ff'
+                                    }}>
                                         <Icons.Cash size={24} />
                                     </div>
                                     <div>
@@ -225,47 +235,55 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
 
                             <div className="payment-body">
                                 {/* FORM ROW */}
-                                <div className="payment-form-container">
-                                    <span className="form-label-small">Add New Entry</span>
-                                    <div className="payment-form">
-                                        {/* Type Select */}
-                                        <select 
-                                            className="payment-input" 
-                                            style={{width:'120px', cursor:'pointer'}}
-                                            value={adjType} 
-                                            onChange={e => setAdjType(e.target.value)}
-                                        >
-                                            <option value="DEDUCTION">Deduction</option>
-                                            <option value="BONUS">Bonus</option>
-                                        </select>
-
-                                        {/* Amount Input */}
-                                        <div className="payment-input-wrapper">
-                                            <span className="currency-symbol">₱</span>
-                                            <input 
-                                                className="payment-input amount" 
-                                                type="number" 
-                                                placeholder="0.00" 
-                                                value={adjAmount} 
-                                                onChange={e => setAdjAmount(e.target.value)}
-                                                autoFocus
-                                            />
-                                        </div>
-
-                                        {/* Reason Input */}
-                                        <input 
-                                            className="payment-input notes" 
-                                            placeholder="Reason (e.g. Damages)" 
-                                            value={adjReason} 
-                                            onChange={e => setAdjReason(e.target.value)}
-                                        />
-
-                                        {/* Button */}
-                                        <button onClick={saveAdjustment} className="btn-pay-action">
-                                            Add Entry
-                                        </button>
+                                {isLocked ? (
+                                    <div className="locked-state-message" style={{padding:'20px', background:'#f8f9fa', borderRadius:'8px', textAlign:'center', color:'#7f8c8d', marginBottom:'15px'}}>
+                                        <Icons.Lock size={20} style={{display:'block', margin:'0 auto 10px'}}/>
+                                        <strong>Period Closed</strong>
+                                        <p style={{fontSize:'12px', margin:'5px 0'}}>Shipment adjustments are read-only.</p>
                                     </div>
-                                </div>
+                                ) : (
+                                    <div className="payment-form-container">
+                                        <span className="form-label-small">Add New Entry</span>
+                                        <div className="payment-form">
+                                            {/* Type Select */}
+                                            <select 
+                                                className="payment-input" 
+                                                style={{width:'120px', cursor:'pointer'}}
+                                                value={adjType} 
+                                                onChange={e => setAdjType(e.target.value)}
+                                            >
+                                                <option value="DEDUCTION">Deduction</option>
+                                                <option value="BONUS">Bonus</option>
+                                            </select>
+
+                                            {/* Amount Input */}
+                                            <div className="payment-input-wrapper">
+                                                <span className="currency-symbol">₱</span>
+                                                <input 
+                                                    className="payment-input amount" 
+                                                    type="number" 
+                                                    placeholder="0.00" 
+                                                    value={adjAmount} 
+                                                    onChange={e => setAdjAmount(e.target.value)}
+                                                    autoFocus
+                                                />
+                                            </div>
+
+                                            {/* Reason Input */}
+                                            <input 
+                                                className="payment-input notes" 
+                                                placeholder="Reason (e.g. Damages)" 
+                                                value={adjReason} 
+                                                onChange={e => setAdjReason(e.target.value)}
+                                            />
+
+                                            {/* Button */}
+                                            <button onClick={saveAdjustment} className="btn-pay-action">
+                                                Add Entry
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* TABLE SECTION */}
                                 <div className="history-section">
@@ -298,9 +316,11 @@ function ShipmentHistoryModal({ employee, periodID, periodName, onClose }) {
                                                                 {adj.type === 'DEDUCTION' ? '-' : '+'}₱{Number(adj.amount).toLocaleString()}
                                                             </td>
                                                             <td className="text-right">
-                                                                <button onClick={() => deleteAdjustment(adj.adjustmentID)} className="action-btn">
-                                                                    <Icons.Trash size={16} />
-                                                                </button>
+                                                                {!isLocked && (
+                                                                    <button onClick={() => deleteAdjustment(adj.adjustmentID)} className="action-btn">
+                                                                        <Icons.Trash size={16} />
+                                                                    </button>
+                                                                )}
                                                             </td>
                                                         </tr>
                                                     ))

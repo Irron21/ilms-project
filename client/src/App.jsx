@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { LoginPage, DesktopApp, MobileApp } from '@pages';
+import { queueManager } from '@utils/queueManager';
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -59,6 +60,14 @@ function App() {
       bc.onmessageerror = () => {};
       return () => bc.close();
     }
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      queueManager.process();
+    };
+    window.addEventListener('online', handleOnline);
+    return () => window.removeEventListener('online', handleOnline);
   }, []);
 
   if (!user) {
