@@ -52,15 +52,12 @@ exports.uploadKPIReport = (req, res) => {
         if (!summarySheet) summarySheet = workbook.Sheets[workbook.SheetNames[0]];
 
         if (!summarySheet) {
-            workbook = null; // Free memory
             cleanup(); 
             return res.status(400).json({ error: "No valid sheet found. Please check your Excel file." });
         }
 
         const data = xlsx.utils.sheet_to_json(summarySheet, { header: 1 });
         
-        // Free memory immediately
-        workbook = null;
         summarySheet = null;
 
         // 3. Layout Validation

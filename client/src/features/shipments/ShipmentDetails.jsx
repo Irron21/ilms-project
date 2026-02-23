@@ -545,7 +545,6 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         </div>
       </div>
 
-      {/* Removed the separate drop-selector-mob div as it's now integrated in the header */}
 
       <div className={`steps-wrapper ${isOffline && offlineVisible ? 'with-snackbar' : ''}`} style={{ position: 'relative' }}>
         {isCompleted && showOverlay && (
@@ -571,7 +570,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           </div>
           )}
           
-          {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phaseName, index) => {
+          {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phaseName, index, array) => {
             const step = ALL_STEPS.find(s => s.dbStatus === phaseName);
             const dbStatus = step.dbStatus;
             
@@ -580,6 +579,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
             const timeData = getStepTimestamp(dbStatus);
             const stepPriority = getStatusPriority(dbStatus);
             const isBlocked = state === 'active' && isBlockedByDate(stepPriority);
+            const isLastWarehouseStep = phaseTab === 'warehouse' && index === array.length - 1;
 
             return (
               <button
@@ -587,7 +587,15 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                 className={`step-button step-${state} ${isBlocked ? 'disabled-transit' : ''}`}
                 disabled={state !== 'active' || isCompleted || isBlocked} 
                 onClick={() => handleStepClick(step)} 
-                style={{position: 'relative'}} // Ensure relative positioning for absolute children
+                style={{
+                  position: 'relative',
+                  ...(isLastWarehouseStep
+                    ? {
+                        gridColumn: '1 / -1',
+                        margin: '0 auto'
+                      }
+                    : {})
+                }}
               >
                 {/* Remarks Button - Only for Store Phases */}
                 {phaseTab === 'store' && (
@@ -616,10 +624,9 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
                         {state === 'done' ? (
                           <>
                             {timeData ? (
-                              <>
-                                Completed: {timeData.text} 
-                                {timeData.isPending && <span style={{color: 'orange', marginLeft: '5px'}}>(Saving...)</span>}
-                              </>
+                              <span style={timeData.isPending ? { color: '#d4853fff'} : undefined}>
+                                {timeData.text}
+                              </span>
                             ) : (
                                "Completed"
                             )}

@@ -8,6 +8,8 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
   const [isAtBottom, setIsAtBottom] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
   const containerRef = useRef(null);
+  const [lastUpdateTimestamps, setLastUpdateTimestamps] = useState({});
+  const prevShipmentsRef = useRef([]);
   const [seenShipments, setSeenShipments] = useState(() => {
     try {
       const saved = localStorage.getItem('acknowledgedShipments');
@@ -24,6 +26,29 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
     const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 20; // Added buffer
     setIsAtBottom(bottom);
   };
+
+  useEffect(() => {
+    if (prevShipmentsRef.current.length > 0 && shipments.length > 0) {
+      const updates = [];
+      shipments.forEach(newShip => {
+        const oldShip = prevShipmentsRef.current.find(s => s.shipmentID === newShip.shipmentID);
+        if (oldShip && oldShip.currentStatus !== newShip.currentStatus) {
+          updates.push(newShip.shipmentID);
+        }
+      });
+      if (updates.length > 0) {
+        const now = Date.now();
+        setLastUpdateTimestamps(prev => {
+          const next = { ...prev };
+          updates.forEach((id, idx) => {
+            next[id] = now + idx;
+          });
+          return next;
+        });
+      }
+    }
+    prevShipmentsRef.current = shipments;
+  }, [shipments]);
 
   const isNewlyAssigned = (timestamp, id) => {
     if (!timestamp || !id) return false;
@@ -99,12 +124,21 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
     return false;
   });
 
-  // SORTING: For Completed tab, show NEWEST first.
-  if (activeTab === 'COMPLETED') {
+  if (filteredShipments.length > 1) {
     filteredShipments.sort((a, b) => {
-      const dateA = getDateValue(a.deliveryDate) ? new Date(a.deliveryDate) : new Date(0);
-      const dateB = getDateValue(b.deliveryDate) ? new Date(b.deliveryDate) : new Date(0);
-      return dateB - dateA; 
+      const timeA = lastUpdateTimestamps[a.shipmentID] || 0;
+      const timeB = lastUpdateTimestamps[b.shipmentID] || 0;
+      if (timeA !== timeB) return timeB - timeA;
+
+      if (activeTab === 'COMPLETED') {
+        const dateA = getDateValue(a.deliveryDate) ? new Date(a.deliveryDate) : new Date(0);
+        const dateB = getDateValue(b.deliveryDate) ? new Date(b.deliveryDate) : new Date(0);
+        return dateB - dateA;
+      }
+
+      const dateA = getDateValue(a.loadingDate) ? new Date(a.loadingDate) : new Date(0);
+      const dateB = getDateValue(b.loadingDate) ? new Date(b.loadingDate) : new Date(0);
+      return dateB - dateA;
     });
   }
 

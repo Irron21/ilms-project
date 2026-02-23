@@ -24,12 +24,13 @@ function ShipmentView({ user, token, onLogout }) {
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
-    const rowsPerPage = 9;
+    const rowsPerPage = 7;
     // UI State
     const [expandedShipmentID, setExpandedShipmentID] = useState(null);
     const [closingId, setClosingId] = useState(null);
     const [activeLogs, setActiveLogs] = useState([]);
     const [flashingIds, setFlashingIds] = useState([]); 
+    const [lastUpdateTimestamps, setLastUpdateTimestamps] = useState({});
     const prevShipmentsRef = useRef([]); 
     const dragItem = useRef();
     const dragOverItem = useRef();
@@ -349,7 +350,17 @@ function ShipmentView({ user, token, onLogout }) {
                     const oldShip = prevShipmentsRef.current.find(s => s.shipmentID === newShip.shipmentID);
                     if (oldShip && oldShip.currentStatus !== newShip.currentStatus) updates.push(newShip.shipmentID);
                 });
-                if (updates.length > 0) triggerNotification(updates);
+                if (updates.length > 0) {
+                    const now = Date.now();
+                    setLastUpdateTimestamps(prev => {
+                        const next = { ...prev };
+                        updates.forEach((id, idx) => {
+                            next[id] = now + idx;
+                        });
+                        return next;
+                    });
+                    triggerNotification(updates);
+                }
             }
             prevShipmentsRef.current = newData;
             setShipments(newData);
@@ -759,6 +770,12 @@ function ShipmentView({ user, token, onLogout }) {
     const sortedShipments = useMemo(() => [...finalFiltered].sort((a, b) => {
         const { key, direction } = sortConfig;
 
+        if (activeTab === 'Active') {
+            const timeA = lastUpdateTimestamps[a.shipmentID] || 0;
+            const timeB = lastUpdateTimestamps[b.shipmentID] || 0;
+            if (timeA !== timeB) return timeB - timeA;
+        }
+
         // 1. STATUS SORTING
         if (key === 'currentStatus') {
             const getPhaseIndex = (status) => {
@@ -789,7 +806,7 @@ function ShipmentView({ user, token, onLogout }) {
         }
 
         return 0;
-    }), [finalFiltered, sortConfig]);
+    }), [finalFiltered, sortConfig, lastUpdateTimestamps, activeTab]);
 
     const getDisplayColor = (s) => {
         const dbStatus = s.currentStatus;
@@ -1188,7 +1205,6 @@ function ShipmentView({ user, token, onLogout }) {
                                                     <span>{currentName}</span>
                                                     {s.dropCount > 1 && !isExpanded && (
                                                         <span style={{fontSize: '10px', color: '#7f8c8d', fontWeight: '600'}}>
-                                                            <Icons.Truck size={10} style={{marginRight: '2px'}}/> 
                                                             +{s.dropCount - 1} more drops
                                                         </span>
                                                     )}
