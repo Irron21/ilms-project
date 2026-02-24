@@ -173,43 +173,78 @@ exports.generatePayroll = (req, res) => {
                     }
 
                     // 5. Calculate Fees & Allowance
-                    const valuesToInsert = shipments.map(ship => {
-                        // Find matching rate
-                        const matchedRate = rates.find(r => 
-                            ship.destLocation.toLowerCase().includes(r.routeCluster.toLowerCase()) && 
-                            ship.vehicleType === r.vehicleType
-                        );
+                    const proceedWithCalculation = (dropsMap) => {
+                        const valuesToInsert = shipments.map(ship => {
+                            const vehicleType = ship.vehicleType;
+                            const role = ship.role;
+                            const shipDrops = dropsMap.get(ship.shipmentID) || [];
+                            
+                            const matchedRates = rates.filter(r => {
+                                if (r.vehicleType !== vehicleType) return false;
+                                const rc = String(r.routeCluster || '').toLowerCase();
+                                return shipDrops.some(d => String(d).toLowerCase().includes(rc)) || 
+                                       String(ship.destLocation || '').toLowerCase().includes(rc);
+                            });
 
-                        // Defaults
-                        let baseFee = ship.role === 'Driver' ? 600 : 400;
-                        let totalAllowance = 350;
+                            // Defaults
+                            let baseFee = role === 'Driver' ? 600 : 400;
+                            let totalAllowance = 350;
 
-                        // Apply Rate if found
-                        if (matchedRate) {
-                            baseFee = ship.role === 'Driver' ? matchedRate.driverBaseFee : matchedRate.helperBaseFee;
-                            totalAllowance = matchedRate.foodAllowance;
-                        }
+                            if (matchedRates.length > 0) {
+                                const bestByRole = matchedRates.reduce((best, r) => {
+                                    const fee = (role === 'Driver') ? Number(r.driverBaseFee) : Number(r.helperBaseFee);
+                                    const bestFee = (role === 'Driver') ? Number(best.driverBaseFee) : Number(best.helperBaseFee);
+                                    return fee > bestFee ? r : best;
+                                }, matchedRates[0]);
+                                
+                                baseFee = role === 'Driver' ? Number(bestByRole.driverBaseFee) : Number(bestByRole.helperBaseFee);
+                                totalAllowance = matchedRates.reduce((max, r) => Math.max(max, Number(r.foodAllowance || 0)), 0);
+                                if (!totalAllowance) totalAllowance = Number(bestByRole.foodAllowance || 0) || totalAllowance;
+                            }
 
-                        // Split allowance
-                        const allowancePerPerson = totalAllowance / (ship.crewCount || 1);
+                            // Split allowance
+                            const allowancePerPerson = totalAllowance / (ship.crewCount || 1);
+                            return [ship.shipmentID, ship.crewID, periodID, baseFee, allowancePerPerson];
+                        });
 
-                        return [ship.shipmentID, ship.crewID, periodID, baseFee, allowancePerPerson];
-                    });
+                        // 6. Bulk Insert with Duplicate Update
+                        const insertSql = `
+                            INSERT INTO ShipmentPayroll (shipmentID, crewID, periodID, baseFee, allowance) 
+                            VALUES ?
+                            ON DUPLICATE KEY UPDATE
+                            periodID = VALUES(periodID),
+                            baseFee = VALUES(baseFee),
+                            allowance = VALUES(allowance)
+                        `;
 
-                    // 6. Bulk Insert with Duplicate Update
-                    const insertSql = `
-                        INSERT INTO ShipmentPayroll (shipmentID, crewID, periodID, baseFee, allowance) 
-                        VALUES ?
-                        ON DUPLICATE KEY UPDATE
-                        periodID = VALUES(periodID),
-                        baseFee = VALUES(baseFee),
-                        allowance = VALUES(allowance)
-                    `;
+                        db.query(insertSql, [valuesToInsert], (err, result) => {
+                            if (err) return res.status(500).json({ error: "Insert Failed: " + err.message });
+                            finishGeneration(result.affectedRows);
+                        });
+                    };
 
-                    db.query(insertSql, [valuesToInsert], (err, result) => {
-                        if (err) return res.status(500).json({ error: "Insert Failed: " + err.message });
-                        finishGeneration(result.affectedRows);
-                    });
+                    const shipmentIDs = shipments.map(s => s.shipmentID);
+                    if (shipmentIDs.length > 0) {
+                        const placeholders = shipmentIDs.map(() => '?').join(',');
+                        const dropsSql = `SELECT shipmentID, destLocation FROM ShipmentDrops WHERE shipmentID IN (${placeholders})`;
+                        db.query(dropsSql, shipmentIDs, (err, rows) => {
+                            if (err) {
+                                console.error("Failed to fetch drops for payroll calculation:", err);
+                                const emptyMap = new Map();
+                                proceedWithCalculation(emptyMap);
+                                return;
+                            }
+                            const dropsMap = new Map();
+                            rows.forEach(r => {
+                                if (!dropsMap.has(r.shipmentID)) dropsMap.set(r.shipmentID, []);
+                                dropsMap.get(r.shipmentID).push(r.destLocation);
+                            });
+                            proceedWithCalculation(dropsMap);
+                        });
+                    } else {
+                        proceedWithCalculation(new Map());
+                    }
+
                 });
             });
         });
@@ -220,12 +255,16 @@ exports.generatePayroll = (req, res) => {
 exports.getPayrollSummary = (req, res) => {
     const { periodID } = req.params;
 
+    if (!periodID) {
+        return res.status(400).json({ error: "Period ID is required" });
+    }
+
     const sql = `
         SELECT 
             u.userID, u.firstName, u.lastName, u.role,
             COUNT(DISTINCT sp.payrollID) as tripCount,
-            COALESCE(SUM(DISTINCT sp.baseFee), 0) as totalBasePay,
-            COALESCE(SUM(DISTINCT sp.allowance), 0) as totalAllowance,
+            COALESCE(SUM(sp.baseFee), 0) as totalBasePay,
+            COALESCE(SUM(sp.allowance), 0) as totalAllowance,
             
             -- Shipment-specific adjustments (Sum of all adjustments for this crew in this period's shipments)
             COALESCE((
@@ -250,12 +289,15 @@ exports.getPayrollSummary = (req, res) => {
         WHERE sp.payrollID IS NOT NULL 
            OR EXISTS (SELECT 1 FROM PayrollAdjustments pa WHERE pa.userID = u.userID AND pa.periodID = ?)
            
-        GROUP BY u.userID
+        GROUP BY u.userID, u.firstName, u.lastName, u.role
         ORDER BY u.lastName ASC
     `;
 
     db.query(sql, [periodID, periodID, periodID, periodID, periodID, periodID], (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            console.error("Payroll Summary DB Error:", err);
+            return res.status(500).json({ error: err.message });
+        }
         const finalResults = results.map(row => ({
             ...row,
             netSalary: (Number(row.totalBasePay) + Number(row.totalShipmentAdjustments) + Number(row.totalBonus)) - Number(row.totalDeductions)
