@@ -165,6 +165,12 @@ export const Icons = {
       <line x1="6" y1="6" x2="18" y2="18"></line>
     </svg>
   ),
+  RotateCcw: (props) => (
+    <svg width={props.size || 24} height={props.size || 24} viewBox="0 0 24 24" style={iconStyle} {...props}>
+      <path d="M1 4v6h6" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+    </svg>
+  ),
   Plus: (props) => (
     <svg width="24" height="24" viewBox="0 0 24 24" style={iconStyle} {...props}>
       <line x1="12" y1="5" x2="12" y2="19"></line>

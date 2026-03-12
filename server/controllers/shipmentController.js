@@ -199,51 +199,69 @@ exports.getShipmentResources = (req, res) => {
                     }
 
                     const rateData = rates.length > 0 ? rates[0] : null;
-                    const standardDriverPay = rateData ? rateData.driverBaseFee : 600.00;
-                    const standardHelperPay = rateData ? rateData.helperBaseFee : 400.00;
-                    const totalAllowance = rateData ? rateData.foodAllowance : 350.00;
+                    const standardDriverPay = rateData ? Number(rateData.driverBaseFee) : 600.00;
+                    const standardHelperPay = rateData ? Number(rateData.helperBaseFee) : 400.00;
+                    const totalAllowance = rateData ? Number(rateData.foodAllowance) : 350.00;
                     const crewCount = crewMembers.length;
                     const allowancePerPerson = crewCount > 0 ? (totalAllowance / crewCount) : 0;
 
                     log(`Rates Found: Driver=${standardDriverPay}, Helper=${standardHelperPay}, Allowance=${allowancePerPerson}`);
 
-                    const insertPromises = crewMembers.map(member => {
-                        return new Promise(resolve => {
-                            let payAmount = member.assignedRole === 'Driver' ? standardDriverPay : standardHelperPay;
-                            const insertPayrollSQL = `
-                                INSERT INTO ShipmentPayroll 
-                                (shipmentID, crewID, baseFee, allowance, periodID) 
-                                VALUES (?, ?, ?, ?, ?)
-                                ON DUPLICATE KEY UPDATE 
-                                    periodID = VALUES(periodID)
-                            `;
-                            db.query(insertPayrollSQL, [shipmentID, member.crewID, payAmount, allowancePerPerson, periodID], (err) => {
-                                if (err) {
-                                    log(`INSERT FAILED for Crew ${member.crewID}: ${err.message}`);
-                                } else {
-                                    log(`SUCCESS: Inserted/Updated payroll for Crew ${member.crewID}`);
-                                }
-                                resolve();
+                    // Fetch Drop Count for multi-drop logic
+                    const getDropCountSQL = "SELECT COUNT(*) as dropCount FROM ShipmentDrops WHERE shipmentID = ?";
+                    db.query(getDropCountSQL, [shipmentID], (err, dropResult) => {
+                        if (err) {
+                            log(`DB ERROR getting drop count: ${err.message}`);
+                            return;
+                        }
+
+                        const dropCount = (dropResult && dropResult.length > 0) ? Math.max(1, dropResult[0].dropCount) : 1;
+                        log(`Drop Count: ${dropCount}`);
+
+                        const insertPromises = crewMembers.map(member => {
+                            return new Promise(resolve => {
+                                let basePay = member.assignedRole === 'Driver' ? standardDriverPay : standardHelperPay;
+                                 
+                                 // Multi-drop logic: Additional 150 if 3 or more drops
+                                 const totalBaseFee = dropCount >= 3 ? (basePay + 150) : basePay;
+                                
+                                const insertPayrollSQL = `
+                                    INSERT INTO ShipmentPayroll 
+                                    (shipmentID, crewID, baseFee, allowance, periodID) 
+                                    VALUES (?, ?, ?, ?, ?)
+                                    ON DUPLICATE KEY UPDATE 
+                                        baseFee = VALUES(baseFee),
+                                        allowance = VALUES(allowance),
+                                        periodID = VALUES(periodID)
+                                `;
+                                db.query(insertPayrollSQL, [shipmentID, member.crewID, totalBaseFee, allowancePerPerson, periodID], (err) => {
+                                    if (err) {
+                                        log(`INSERT FAILED for Crew ${member.crewID}: ${err.message}`);
+                                    } else {
+                                        log(`SUCCESS: Inserted/Updated payroll for Crew ${member.crewID}`);
+                                    }
+                                    resolve();
+                                });
                             });
                         });
-                    });
 
-                    Promise.all(insertPromises).then(() => {
-                        const fixSql = `
-                            UPDATE ShipmentPayroll sp
-                            JOIN Shipments s ON s.shipmentID = sp.shipmentID
-                            JOIN PayrollPeriods p 
-                              ON s.deliveryDate >= p.startDate 
-                             AND s.deliveryDate < DATE_ADD(p.endDate, INTERVAL 1 DAY)
-                            SET sp.periodID = p.periodID
-                            WHERE sp.shipmentID = ? AND sp.periodID IS NULL
-                        `;
-                        db.query(fixSql, [shipmentID], (err, result) => {
-                            if (err) {
-                                log(`PERIOD FIX UPDATE ERROR: ${err.message}`);
-                            } else {
-                                log(`PERIOD FIX UPDATE AFFECTED ROWS: ${result && result.affectedRows}`);
-                            }
+                        Promise.all(insertPromises).then(() => {
+                            const fixSql = `
+                                UPDATE ShipmentPayroll sp
+                                JOIN Shipments s ON s.shipmentID = sp.shipmentID
+                                JOIN PayrollPeriods p 
+                                  ON s.deliveryDate >= p.startDate 
+                                 AND s.deliveryDate < DATE_ADD(p.endDate, INTERVAL 1 DAY)
+                                SET sp.periodID = p.periodID
+                                WHERE sp.shipmentID = ? AND sp.periodID IS NULL
+                            `;
+                            db.query(fixSql, [shipmentID], (err, result) => {
+                                if (err) {
+                                    log(`PERIOD FIX UPDATE ERROR: ${err.message}`);
+                                } else {
+                                    log(`PERIOD FIX UPDATE AFFECTED ROWS: ${result && result.affectedRows}`);
+                                }
+                            });
                         });
                     });
                 });

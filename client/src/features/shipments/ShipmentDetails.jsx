@@ -99,9 +99,14 @@ const deriveStatusFromLogs = (logs, drops) => {
 const ShipmentDetails = memo(({ shipment, onBack, token, user }) => { 
   const [showOverlay, setShowOverlay] = useState(true);
   const [phaseTab, setPhaseTab] = useState('warehouse'); 
-  const [confirmStep, setConfirmStep] = useState(null);
+  const [completionPrompt, setCompletionPrompt] = useState(null);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [offlineVisible, setOfflineVisible] = useState(!navigator.onLine);
+  
+  // Grace Period State
+  const [pendingUpdate, setPendingUpdate] = useState(null); // { step, timeLeft }
+  const timerRef = useRef(null);
+
   const containerRef = useRef(null);
   const touchStartRef = useRef(null);
 
@@ -214,65 +219,7 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
     } catch (err) { console.error("Error fetching logs:", err); }
   }, [shipment.shipmentID, token, drops]);
 
-  useEffect(() => {
-    const handleOnline = () => { 
-        setIsOffline(false); 
-        queueManager.process(); 
-        setTimeout(fetchLogs, 1000); 
-    };
-    const handleOffline = () => {
-        setOfflineVisible(true);
-        setIsOffline(true);
-    };
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    return () => {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
-    };
-  }, [fetchLogs]);
-
-  useEffect(() => {
-    if (isOffline) {
-      setOfflineVisible(true);
-      const t = setTimeout(() => setOfflineVisible(false), 3500);
-      return () => clearTimeout(t);
-    } else {
-      setOfflineVisible(false);
-    }
-  }, [isOffline]);
-
-  useEffect(() => {
-    if (isOffline) return;
-    fetchLogs(); 
-    const intervalId = setInterval(fetchLogs, 5000); // Increased interval to reduce traffic
-    return () => clearInterval(intervalId);
-  }, [isOffline, fetchLogs]);
-
-  const handleTouchStart = (e) => {
-    if (!e.touches || e.touches.length === 0) return;
-    const t = e.touches[0];
-    if (t.clientX <= 24) {
-      touchStartRef.current = { x: t.clientX, y: t.clientY };
-    } else {
-      touchStartRef.current = null;
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (!touchStartRef.current || !e.touches || e.touches.length === 0) return;
-    const t = e.touches[0];
-    const dx = t.clientX - touchStartRef.current.x;
-    const dy = Math.abs(t.clientY - touchStartRef.current.y);
-    if (dx > 60 && dy < 30) {
-      touchStartRef.current = null;
-      onBack && onBack();
-    }
-  };
-
-  const executeStepUpdate = (dbStatus) => {
+  const executeStepUpdate = useCallback((dbStatus) => {
       const isFinishing = dbStatus === 'Departure' && selectedDropIndex === drops.length - 1;
       const finalStatus = isFinishing ? 'Completed' : dbStatus;
       const now = Date.now(); 
@@ -321,11 +268,117 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
           setTimeout(fetchLogs, 1000);
       }
       
-      setConfirmStep(null);
+      // --- PHASE COMPLETION PROMPTS ---
+      const isWarehousePhase = WAREHOUSE_PHASES.includes(dbStatus);
+      const isStorePhase = STORE_PHASES.includes(dbStatus);
+
+      if (isWarehousePhase && dbStatus === 'Start Route') {
+        // Warehouse phase completed
+        setCompletionPrompt({
+          type: 'warehouse',
+          title: 'Warehouse Phase Completed',
+          message: 'Warehouse phase is completed. Proceed to store drop(s)?',
+          onConfirm: () => {
+            setPhaseTab('store');
+            setSelectedDropIndex(0);
+            setCompletionPrompt(null);
+          }
+        });
+      } else if (isStorePhase && dbStatus === 'Departure') {
+        // A store drop-off completed
+        const isLastDrop = selectedDropIndex === drops.length - 1;
+        if (!isLastDrop) {
+          setCompletionPrompt({
+            type: 'store',
+            title: `Drop ${selectedDropIndex + 1} Completed`,
+            message: `Drop ${selectedDropIndex + 1} is completed. Proceed to the next drop?`,
+            onConfirm: () => {
+              setSelectedDropIndex(prev => prev + 1);
+              setCompletionPrompt(null);
+            }
+          });
+        }
+      }
+  }, [shipment.shipmentID, selectedDropIndex, drops, phaseTab, user?.userID, stepRemarks, fetchLogs]);
+
+  // Handle countdown timer
+  useEffect(() => {
+    if (pendingUpdate && pendingUpdate.timeLeft > 0) {
+      timerRef.current = setTimeout(() => {
+        setPendingUpdate(prev => ({ ...prev, timeLeft: prev.timeLeft - 1 }));
+      }, 1000);
+    } else if (pendingUpdate && pendingUpdate.timeLeft === 0) {
+      executeStepUpdate(pendingUpdate.step.dbStatus);
+      setPendingUpdate(null);
+    }
+    return () => clearTimeout(timerRef.current);
+  }, [pendingUpdate, executeStepUpdate]);
+
+  const handleUndo = () => {
+    clearTimeout(timerRef.current);
+    setPendingUpdate(null);
+  };
+
+  useEffect(() => {
+    const handleOnline = () => { 
+        setIsOffline(false); 
+        queueManager.process(); 
+        setTimeout(fetchLogs, 1000); 
+    };
+    const handleOffline = () => {
+        setOfflineVisible(true);
+        setIsOffline(true);
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+    };
+  }, [fetchLogs]);
+
+  useEffect(() => {
+    if (isOffline) {
+      setOfflineVisible(true);
+      const t = setTimeout(() => setOfflineVisible(false), 3500);
+      return () => clearTimeout(t);
+    } else {
+      setOfflineVisible(false);
+    }
+  }, [isOffline]);
+
+  useEffect(() => {
+    if (isOffline) return;
+    fetchLogs(); 
+    const intervalId = setInterval(fetchLogs, 5000); 
+    return () => clearInterval(intervalId);
+  }, [isOffline, fetchLogs]);
+
+  const handleTouchStart = (e) => {
+    if (!e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    if (t.clientX <= 24) {
+      touchStartRef.current = { x: t.clientX, y: t.clientY };
+    } else {
+      touchStartRef.current = null;
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    if (!touchStartRef.current || !e.touches || e.touches.length === 0) return;
+    const t = e.touches[0];
+    const dx = t.clientX - touchStartRef.current.x;
+    const dy = Math.abs(t.clientY - touchStartRef.current.y);
+    if (dx > 60 && dy < 30) {
+      touchStartRef.current = null;
+      onBack && onBack();
+    }
   };
 
   const handleStepClick = (step) => {
-      setConfirmStep(step);
+      setPendingUpdate({ step, timeLeft: 10 });
   };
 
   const handleOpenRemarks = (step) => {
@@ -412,10 +465,6 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
   const deliveryDate = getDateValue(shipment.deliveryDate);
   const loadingDate = getDateValue(shipment.loadingDate);
   
-  // Explicitly In Transit if we have started the route but not yet arrived at store
-  const isInTransit = localStatus === 'Start Route' || 
-                      (WAREHOUSE_PHASES.includes(localStatus) && localStatus !== 'Pending' && localStatus !== 'Arrival at Warehouse' && deliveryDate > today);
-  
   // Block steps if not yet the correct date
   const isBlockedByDate = (priority) => {
     // Warehouse steps (priority 1-5 now that Loaded is removed)
@@ -431,8 +480,6 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
   const currentPriority = getStatusPriority(localStatus);
   const startRoutePriority = getStatusPriority('Start Route');
   const isWarehouseComplete = currentPriority >= startRoutePriority;
-
-  const canConfirmLoad = today >= loadingDate;
 
   return (
     <div className="details-container" ref={containerRef} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove}>
@@ -623,76 +670,105 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
 
             const timeData = getStepTimestamp(dbStatus);
             const stepPriority = getStatusPriority(dbStatus);
-            const isBlocked = state === 'active' && isBlockedByDate(stepPriority);
+            const isBlocked = (state === 'active' && isBlockedByDate(stepPriority)) || (!!pendingUpdate);
             const isLastWarehouseStep = phaseTab === 'warehouse' && index === array.length - 1;
 
+            const isPendingThisStep = pendingUpdate && pendingUpdate.step.dbStatus === dbStatus;
+
             return (
-              <button
+              <div 
                 key={dbStatus}
-                className={`step-button step-${state} ${isBlocked ? 'disabled-transit' : ''}`}
-                disabled={state !== 'active' || isCompleted || isBlocked} 
-                onClick={() => handleStepClick(step)} 
                 style={{
-                  position: 'relative',
-                  ...(isLastWarehouseStep
-                    ? {
-                        gridColumn: '1 / -1',
-                        margin: '0 auto'
-                      }
-                    : {})
+                    ...(isLastWarehouseStep
+                        ? {
+                            gridColumn: '1 / -1',
+                            width: '100%',
+                            display: 'flex',
+                            justifyContent: 'center'
+                          }
+                        : {})
                 }}
               >
-                {/* Remarks Button - Only for Store Phases */}
-                {phaseTab === 'store' && (
-                    <div 
-                        className="remarks-icon-btn"
+                {isPendingThisStep ? (
+                    <button
+                        className="step-button step-active undo-button"
                         onClick={(e) => {
-                            e.stopPropagation(); // Prevent triggering the main button click
-                            handleOpenRemarks(step);
+                          e.stopPropagation();
+                          handleUndo();
                         }}
                         style={{
-                            color: stepRemarks[dbStatus] ? 'var(--primary-orange)' : undefined, // Highlight if remark exists
-                            background: stepRemarks[dbStatus] ? 'white' : undefined,
-                            boxShadow: stepRemarks[dbStatus] ? '0 2px 4px rgba(0,0,0,0.1)' : undefined
+                            background: '#e67e22',
+                            color: 'white',
+                            border: 'none',
+                            width: '100%'
                         }}
                     >
-                        <Icons.MessageSquare size={16} />
-                    </div>
-                )}
+                        <div className="step-content">
+                            <span className="step-icon"><Icons.RotateCcw /></span>
+                            <div className="step-text-group">
+                                <span className="step-label">Undo {step.label}</span>
+                                <span className="step-timestamp">({pendingUpdate.timeLeft}s...)</span>
+                            </div>
+                        </div>
+                    </button>
+                ) : (
+                    <button
+                        className={`step-button step-${state} ${isBlocked ? 'disabled-transit' : ''}`}
+                        disabled={state !== 'active' || isCompleted || isBlocked} 
+                        onClick={() => handleStepClick(step)} 
+                        style={{ position: 'relative', width: '100%' }}
+                    >
+                        {/* Remarks Button Overlay */}
+                        <div 
+                            className="remarks-icon-btn"
+                            onClick={(e) => {
+                                e.stopPropagation(); 
+                                handleOpenRemarks(step);
+                            }}
+                            style={{
+                                color: stepRemarks[dbStatus] ? 'var(--primary-orange)' : undefined, 
+                                background: stepRemarks[dbStatus] ? 'white' : undefined,
+                                boxShadow: stepRemarks[dbStatus] ? '0 2px 4px rgba(0,0,0,0.1)' : undefined
+                            }}
+                        >
+                            <Icons.MessageSquare size={16} />
+                        </div>
 
-                <div className="step-content">
-                  <span className="step-icon">{step.icon}</span>
-                  <div className="step-text-group">
-                      <span className="step-label">{step.label}</span>
-                      
-                      <span className="step-timestamp">
-                        {state === 'done' ? (
-                          <>
-                            {timeData ? (
-                              <span style={timeData.isPending ? { color: '#d4853fff'} : undefined}>
-                                {timeData.text}
+                        <div className="step-content">
+                          <span className="step-icon">{step.icon}</span>
+                          <div className="step-text-group">
+                              <span className="step-label">{step.label}</span>
+                              
+                              <span className="step-timestamp">
+                                  {state === 'done' ? (
+                                  <>
+                                      {timeData ? (
+                                      <span style={timeData.isPending ? { color: '#d4853fff'} : undefined}>
+                                          {timeData.text}
+                                      </span>
+                                      ) : (
+                                      "Completed"
+                                      )}
+                                  </>
+                                  ) : state === 'active' && isBlocked && !pendingUpdate ? (
+                                  <span className="blocked-hint" style={{fontSize: '11px', color: '#e67e22'}}>
+                                      Available on {formatDateDisplay(shipment.deliveryDate)}
+                                  </span>
+                                  ) : (
+                                  "\u00A0" 
+                                  )}
                               </span>
-                            ) : (
-                               "Completed"
-                            )}
-                          </>
-                        ) : state === 'active' && isBlocked ? (
-                           <span className="blocked-hint" style={{fontSize: '11px', color: '#e67e22'}}>
-                             Available on {formatDateDisplay(shipment.deliveryDate)}
-                           </span>
-                        ) : (
-                          "\u00A0" 
-                        )}
-                      </span>
-                  </div>
-                </div>
+                          </div>
+                        </div>
 
-                <div className="step-status-icon">
-                  {state === 'done' && <Icons.Check />}
-                  {state === 'active' && <Icons.Hourglass />}
-                  {state === 'pending' && <Icons.Minus />}
-                </div>
-              </button>
+                        <div className="step-status-icon">
+                          {state === 'done' && <Icons.Check />}
+                          {state === 'active' && <Icons.Hourglass />}
+                          {state === 'pending' && <Icons.Minus />}
+                        </div>
+                    </button>
+                )}
+              </div>
             );
           })}
         </div>
@@ -728,15 +804,14 @@ const ShipmentDetails = memo(({ shipment, onBack, token, user }) => {
         </div>
       )}
 
-      {confirmStep && (
+      {completionPrompt && (
         <FeedbackModal 
-          type="warning"
-          title="Confirm Status Update"
-          message={`Are you sure you want to mark "${confirmStep.label}" as completed?`}
-          subMessage="This will update the shipment progress."
-          confirmLabel="Confirm"
-          onClose={() => setConfirmStep(null)}
-          onConfirm={() => executeStepUpdate(confirmStep.dbStatus)}
+          type="info"
+          title={completionPrompt.title}
+          message={completionPrompt.message}
+          confirmLabel="Proceed"
+          onClose={() => setCompletionPrompt(null)}
+          onConfirm={completionPrompt.onConfirm}
         />
       )}
     </div>

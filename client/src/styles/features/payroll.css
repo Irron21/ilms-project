@@ -463,6 +463,17 @@
     background: white; width: 500px; padding: 30px;
     border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     animation: slideUpFade 0.3s ease-out;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-form-body {
+    padding: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
 }
 @keyframes slideUpFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }

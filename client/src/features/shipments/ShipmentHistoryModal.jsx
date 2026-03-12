@@ -158,19 +158,41 @@ function ShipmentHistoryModal({ employee, periodID, periodName, isLocked, onClos
                                     ) : trips.length === 0 ? (
                                         <tr><td colSpan="7" style={{textAlign:'center', padding:'30px', color:'#b2bec3'}}>No trips found.</td></tr>
                                     ) : (
-                                        trips.map(trip => (
+                                        trips.map(trip => {
+                                            const isMultiDrop = trip.dropCount >= 3;
+                                            const baseFee = Number(trip.baseFee);
+                                            const originalBaseFee = isMultiDrop ? (baseFee - 150) : baseFee;
+                                            const additionalFee = isMultiDrop ? 150 : 0;
+
+                                            return (
                                             <tr key={trip.shipmentID}>
                                                 <td style={{color:'#636e72'}}>
                                                     {new Date(trip.shipmentDate).toLocaleDateString()}
                                                 </td>
-                                                <td style={{fontWeight:'600', color:'#2d3436'}}>
-                                                    {trip.routeCluster}
+                                                <td>
+                                                    <div style={{display:'flex', flexDirection:'column'}}>
+                                                        <span style={{fontWeight:'600', color:'#2d3436'}}>{trip.routeCluster}</span>
+                                                        {trip.dropCount > 1 && (
+                                                            <span style={{fontSize:'10px', color:'var(--primary-orange)', fontWeight:'700', display:'flex', alignItems:'center', gap:'3px'}}>
+                                                                <Icons.Truck size={10} /> {trip.dropCount} Drops
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td>
                                                     <span className="vehicle-badge">{trip.vehicleType}</span>
                                                 </td>
-                                                <td className="text-right" style={{color:'#27ae60', whiteSpace:'nowrap'}}>
-                                                    +₱{Number(trip.baseFee).toLocaleString()}
+                                                <td className="text-right">
+                                                    <div style={{display:'flex', flexDirection:'column', alignItems:'flex-end'}}>
+                                                        <span style={{color:'#27ae60', fontWeight:'600', whiteSpace:'nowrap'}}>
+                                                            +₱{baseFee.toLocaleString()}
+                                                        </span>
+                                                        {isMultiDrop && (
+                                                            <span style={{fontSize:'10px', color:'#95a5a6'}} title={`Base: ₱${originalBaseFee.toLocaleString()} + Addl: ₱${additionalFee.toLocaleString()}`}>
+                                                                (incl. ₱150 addl fee)
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                                 <td className="text-right" style={{color:'#f39c12'}}>
                                                     +₱{Number(trip.allowance).toLocaleString()}
@@ -198,7 +220,7 @@ function ShipmentHistoryModal({ employee, periodID, periodName, isLocked, onClos
                                                     </button>
                                                 </td>
                                             </tr>
-                                        ))
+                                        )})
                                     )}
                                 </tbody>
                             </table>

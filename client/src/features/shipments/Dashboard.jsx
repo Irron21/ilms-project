@@ -50,20 +50,30 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
     prevShipmentsRef.current = shipments;
   }, [shipments]);
 
-  const isNewlyAssigned = (timestamp, id) => {
-    if (!timestamp || !id) return false;
+  const isNewlyAssigned = (timestamp) => {
+    if (!timestamp) return false;
+    
     const shipmentDate = new Date(timestamp);
+    
+    // Fix 8-hour UTC offset for Philippine Time (UTC+8) if needed
+    const isUTC = typeof timestamp === 'string' && !timestamp.includes('Z') && !timestamp.includes('+');
+    if (isUTC) {
+        shipmentDate.setHours(shipmentDate.getHours() + 8);
+    }
+    
     const now = new Date();
     const diffInHours = (now - shipmentDate) / (1000 * 60 * 60);
-    const strId = String(id);
-    const hasBeenSeen = seenShipments.some(seenId => String(seenId) === strId);
-    return (diffInHours < 24) && !hasBeenSeen;
+    return Math.abs(diffInHours) < 2; // Time bounded to 2 hours, using Math.abs to handle minor timezone desyncs where DB time > Local time
+  };
+
+  const hasBeenAcknowledged = (id) => {
+    return seenShipments.some(seenId => String(seenId) === String(id));
   };
 
   const todayOnlyNewCount = shipments.filter(s => {
     const today = getTodayString();
     const loadDate = getDateValue(s.loadingDate);
-    return s.currentStatus === 'Pending' && isNewlyAssigned(s.creationTimestamp, s.shipmentID) && loadDate === today;
+    return s.currentStatus === 'Pending' && isNewlyAssigned(s.creationTimestamp) && !hasBeenAcknowledged(s.shipmentID) && loadDate === today;
   }).length;
 
   const handleCardClick = (shipment) => {
@@ -212,7 +222,8 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
 
         {filteredShipments.map((shipment) => {
           const style = getCardStyle(shipment);
-          const isNew = shipment.currentStatus === 'Pending' && isNewlyAssigned(shipment.creationTimestamp, shipment.shipmentID);
+          const isNew = shipment.currentStatus === 'Pending' && isNewlyAssigned(shipment.creationTimestamp);
+          const isAcknowledged = hasBeenAcknowledged(shipment.shipmentID);
           const isDelayed = activeTab === 'DELAYED';
           const isUpcoming = activeTab === 'UPCOMING';
           const isInTransit = style.label === 'IN TRANSIT';
@@ -238,7 +249,7 @@ const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => 
               ) : isInTransit ? (
                 <div className="new-badge transit">TO DELIVER</div>
               ) : (
-                isNew && <div className="new-badge">NEW</div>
+                isNew && <div className={`new-badge ${isAcknowledged ? 'acknowledged' : ''}`}>NEW</div>
               )}
               <div>
                 <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>

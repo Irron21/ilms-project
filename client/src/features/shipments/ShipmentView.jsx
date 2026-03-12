@@ -12,6 +12,7 @@ function ShipmentView({ user, token, onLogout }) {
     const [statusFilter, setStatusFilter] = useState('All');
     const [filterYear, setFilterYear] = useState(new Date().getFullYear().toString());
     const [filterMonth, setFilterMonth] = useState('All');
+    const [groupingFilter, setGroupingFilter] = useState('No Division');
 
     // Filters
     const [dateFilter, setDateFilter] = useState(''); 
@@ -105,15 +106,17 @@ function ShipmentView({ user, token, onLogout }) {
         const updatedBatch = [...batchData];
         const current = { ...updatedBatch[batchIndex] };
         const updatedDrops = [...current.drops];
-        updatedDrops[dropIdx] = { ...updatedDrops[dropIdx], [field]: value };
-        current.drops = updatedDrops;
 
-        // Sync first drop back to main fields for display/legacy
-        if (dropIdx === 0) {
-            if (field === 'destName') current.destName = value;
-            if (field === 'destLocation') {
+        if (field === 'destLocation') {
+            // Only allow changing route from the first drop
+            if (dropIdx === 0) {
+                // Update ALL drops to have the same route
+                for (let i = 0; i < updatedDrops.length; i++) {
+                    updatedDrops[i] = { ...updatedDrops[i], destLocation: value };
+                }
                 current.destLocation = value;
-                
+
+                // Update vehicle eligibility based on first drop's route
                 if (!value || value.length === 0) {
                     setFilteredRoutes([]);
                     setIsVehicleDisabled(true);
@@ -130,9 +133,21 @@ function ShipmentView({ user, token, onLogout }) {
                         setIsVehicleDisabled(true);
                     }
                 }
+            } else {
+                // If not first drop, don't allow change (should be disabled in UI anyway)
+                return;
+            }
+        } else {
+            // For other fields like destName, just update the specific drop
+            updatedDrops[dropIdx] = { ...updatedDrops[dropIdx], [field]: value };
+            
+            // Sync first drop name back to main destName for legacy/display
+            if (dropIdx === 0 && field === 'destName') {
+                current.destName = value;
             }
         }
 
+        current.drops = updatedDrops;
         updatedBatch[batchIndex] = current;
         setBatchData(updatedBatch);
     };
@@ -140,7 +155,9 @@ function ShipmentView({ user, token, onLogout }) {
     const addDrop = () => {
         const updatedBatch = [...batchData];
         const current = { ...updatedBatch[batchIndex] };
-        current.drops = [...current.drops, { destName: '', destLocation: current.drops[current.drops.length - 1]?.destLocation || '' }];
+        // Ensure new drop has the same route as the first drop
+        const baseRoute = current.drops[0]?.destLocation || '';
+        current.drops = [...current.drops, { destName: '', destLocation: baseRoute }];
         updatedBatch[batchIndex] = current;
         setBatchData(updatedBatch);
         setDropIndex(current.drops.length - 1);
@@ -560,26 +577,6 @@ function ShipmentView({ user, token, onLogout }) {
         return shipments.filter(s => getShipmentCategory(s) === activeTab);
     }, [shipments, activeTab]);
 
-    const filterOptions = useMemo(() => {
-        if (activeTab === 'Completed') {
-            const months = tabFiltered.map(s => s.loadingDate ? getMonthValue(s.loadingDate) : null).filter(Boolean);
-            const uniqueMonths = [...new Set(months)].sort().reverse();
-            return uniqueMonths.map(m => ({
-                value: m,
-                label: formatMonthDisplay(m),
-                count: tabFiltered.filter(s => s.loadingDate && getMonthValue(s.loadingDate) === m).length
-            }));
-        } else {
-            const dates = tabFiltered.map(s => s.loadingDate ? getDateValue(s.loadingDate) : null).filter(Boolean);
-            const uniqueDates = [...new Set(dates)].sort().reverse();
-            return uniqueDates.map(d => ({
-                value: d,
-                label: formatDateDisplay(d),
-                count: tabFiltered.filter(s => s.loadingDate && getDateValue(s.loadingDate) === d).length
-            }));
-        }
-    }, [tabFiltered, activeTab]);
-
     const tabRoutes = useMemo(() => {
         const routes = tabFiltered.map(s => s.destLocation).filter(Boolean);
         return [...new Set(routes)].sort();
@@ -713,7 +710,6 @@ function ShipmentView({ user, token, onLogout }) {
 
     const finalFiltered = useMemo(() => {
         // Optimize: Calculate common values once
-        const todayStr = getTodayString();
         const filterNameLower = routeFilter.toLowerCase();
         const filterCrewLower = crewFilter.toLowerCase();
         const filterIdLower = idFilter.toLowerCase();
@@ -823,6 +819,40 @@ function ShipmentView({ user, token, onLogout }) {
         return '#F2C94C'; 
     };
 
+    const groupedShipments = useMemo(() => {
+        if (groupingFilter === 'No Division' || activeTab === 'Active') {
+            return { 'All Shipments': sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage) };
+        }
+
+        const groups = {};
+        const monthNames = MONTH_NAMES;
+
+        sortedShipments.forEach(s => {
+            const dateStr = s.loadingDate || s.creationTimestamp;
+            if (!dateStr) return;
+            const date = new Date(dateStr);
+            const day = date.getDate();
+            const monthIdx = date.getMonth();
+            const monthName = monthNames[monthIdx] ? monthNames[monthIdx].substring(0, 3) : '';
+            
+            let groupName = '';
+            if (groupingFilter === 'Divide Weekly') {
+                if (day <= 7) groupName = `Week 1 (${monthName})`;
+                else if (day <= 14) groupName = `Week 2 (${monthName})`;
+                else if (day <= 21) groupName = `Week 3 (${monthName})`;
+                else groupName = `Week 4 (${monthName})`;
+            } else if (groupingFilter === 'Divide Bi-Weekly') {
+                if (day <= 15) groupName = `1st Half (${monthName})`;
+                else groupName = `2nd Half (${monthName})`;
+            }
+
+            if (!groups[groupName]) groups[groupName] = [];
+            groups[groupName].push(s);
+        });
+
+        return groups;
+    }, [sortedShipments, groupingFilter, currentPage, rowsPerPage]);
+
     const getTimelineNodeState = (phase, dbStatus, drops = [], currentDropIndex = 0) => {
         const isWarehousePhase = WAREHOUSE_PHASES.includes(phase);
         
@@ -898,8 +928,6 @@ function ShipmentView({ user, token, onLogout }) {
             remarks: log.remarks || null
         };
     };
-
-    const paginatedShipments = useMemo(() => sortedShipments.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage), [sortedShipments, currentPage]);
 
     const getCount = (tabName) => {
         return shipments.filter(s => {
@@ -1040,6 +1068,25 @@ function ShipmentView({ user, token, onLogout }) {
                                     ))}
                                 </select>
                             </div>
+
+                            {(activeTab === 'Completed' || activeTab === 'Delayed') && (
+                                <>
+                                    <div style={{width:'1px', height:'25px', background:'#eee'}}></div>
+
+                                    <div style={{display:'flex', flexDirection:'column'}}>
+                                        <label style={{fontSize:'10px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>Group By</label>
+                                        <select 
+                                            value={groupingFilter} 
+                                            onChange={(e) => { setGroupingFilter(e.target.value); setCurrentPage(1); }}
+                                            style={{border:'none', fontSize:'13px', outline:'none', background:'transparent', cursor:'pointer', minWidth:'110px'}}
+                                        >
+                                            <option value="No Division">No Division</option>
+                                            <option value="Divide Weekly">Divide Weekly</option>
+                                            <option value="Divide Bi-Weekly">Divide Bi-Weekly</option>
+                                        </select>
+                                    </div>
+                                </>
+                            )}
                             
                         </div>   
                                   
@@ -1139,251 +1186,265 @@ function ShipmentView({ user, token, onLogout }) {
                         </tr>
                     </thead>
                     <tbody>
-                        {paginatedShipments.length > 0 ? paginatedShipments.map(s => {
-                            const isOpen = expandedShipmentID === s.shipmentID;
-                            const isClosing = closingId === s.shipmentID;
-                            const displayStatus = getDisplayStatus(s);
-                            const displayColor = getDisplayColor(s);
-                            const isFlashing = flashingIds.includes(s.shipmentID);
-                            const isDelayedRow = activeTab === 'Delayed';
-                            const delayInfo = isDelayedRow ? getDaysDelayed(s) : { days: 0, type: null };
-                            const atRisk = activeTab === 'Active' && isAtRisk(s);
+                        {Object.entries(groupedShipments).length > 0 && Object.entries(groupedShipments).some(([__, items]) => items.length > 0) ? (
+                            Object.entries(groupedShipments).map(([groupName, items]) => (
+                                <React.Fragment key={groupName}>
+                                    {groupingFilter !== 'No Division' && activeTab !== 'Active' && (
+                                        <tr className="group-divider-row">
+                                            <td colSpan="10" style={{ backgroundColor: '#f5f5f5', fontWeight: '700', color: '#333', padding: '10px 15px' }}>
+                                                {groupName} <span style={{ color: '#888', fontWeight: '500', marginLeft: '5px' }}>({items.length} Shipments)</span>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {items.map(s => {
+                                        const isOpen = expandedShipmentID === s.shipmentID;
+                                        const isClosing = closingId === s.shipmentID;
+                                        const displayStatus = getDisplayStatus(s);
+                                        const displayColor = getDisplayColor(s);
+                                        const isFlashing = flashingIds.includes(s.shipmentID);
+                                        const isDelayedRow = activeTab === 'Delayed';
+                                        const delayInfo = isDelayedRow ? getDaysDelayed(s) : { days: 0, type: null };
+                                        const atRisk = activeTab === 'Active' && isAtRisk(s);
 
-                            return (
-                            <React.Fragment key={s.shipmentID}>
-                                <tr className={isOpen ? 'row-active' : ''}>
-                                    <td>{s.shipmentID}</td>
-                                    <td className="status-cell-visible">
-                                        <div className="status-cell-flex">
-                                            <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
-                                            {isDelayedRow ? (
-                                                <div className="status-cell-delayed">
-                                                    <div style={{display:'flex', flexDirection:'column'}}>
-                                                        <span style={{color: '#c0392b', fontWeight: 'bold', fontSize: '13px'}}>Delayed (+{delayInfo.days}d)</span>
-                                                        <span style={{fontSize: '10px', color: '#999', fontWeight: '700', textTransform: 'uppercase'}}>{delayInfo.type} Delay</span>
-                                                    </div>
-                                                    <span 
-                                                        className="delay-reason-link" 
-                                                        onClick={(e) => { e.stopPropagation(); updateDelayReason(s.shipmentID, s.delayReason); }}
-                                                        title={s.delayReason ? "Edit Reason" : "Add Reason"}
-                                                    >
-                                                        {s.delayReason ? <Icons.Edit size={12} /> : <span style={{fontSize:'10px', textDecoration:'underline'}}>Reason</span>}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    {displayStatus}
-                                                    {atRisk && (
-                                                        <span className="tooltip-container" style={{marginLeft:'6px', marginTop:'6px', color:'#e67e22'}}>
-                                                            <Icons.Clock size={14} />
-                                                            <span className="tooltip-text">Due Today</span>
-                                                        </span>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
-                                    <td>
-                                        {(() => {
-                                            const rowDrops = s.dropDetails?.split('|').map((d, index) => {
-                                                const [dropID, rest] = d.split(':');
-                                                const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
-                                                return { 
-                                                    dropID: parseInt(dropID), 
-                                                    name: match ? match[1] : (rest || d),
-                                                    location: match ? match[2] : '',
-                                                    index 
-                                                };
-                                            }) || [];
-                                            const isExpanded = expandedShipmentID === s.shipmentID;
-                                            const currentName = (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.name : s.destName;
-
-                                            return (
-                                                <div style={{display: 'flex', flexDirection: 'column'}}>
-                                                    <span>{currentName}</span>
-                                                    {s.dropCount > 1 && !isExpanded && (
-                                                        <span style={{fontSize: '10px', color: '#7f8c8d', fontWeight: '600'}}>
-                                                            +{s.dropCount - 1} more drops
-                                                        </span>
-                                                    )}
-                                                    {isExpanded && s.dropCount > 1 && (
-                                                        <span style={{fontSize: '10px', color: 'var(--primary-orange)', fontWeight: '700'}}>
-                                                            Drop {selectedDropIndex + 1} of {s.dropCount}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            );
-                                        })()}
-                                    </td>
-                                    <td>
-                                        {(() => {
-                                            const rowDrops = s.dropDetails?.split('|').map((d, index) => {
-                                                const [dropID, rest] = d.split(':');
-                                                const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
-                                                return { 
-                                                    dropID: parseInt(dropID), 
-                                                    name: match ? match[1] : (rest || d),
-                                                    location: match ? match[2] : '',
-                                                    index 
-                                                };
-                                            }) || [];
-                                            const isExpanded = expandedShipmentID === s.shipmentID;
-                                            return (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.location : s.destLocation;
-                                        })()}
-                                    </td>
-                                    <td style={{fontWeight:'600'}}>{formatDateDisplay(s.loadingDate)}</td>
-                                    <td style={{ color: isDelayedRow ? '#c0392b' : 'black', fontWeight: isDelayedRow ? '700' : '400' }}>
-                                        {formatDateDisplay(s.deliveryDate)}
-                                    </td>
-                                    <td>{s.plateNo || '-'}</td>
-                                    <td>
-                                        <div className="crew-avatars" onClick={(e) => handleCrewClick(e, s.crewDetails)}>
-                                            <div className="mini-avatar"><Icons.Profile/></div>
-                                            <div className="mini-avatar"><Icons.Profile/></div>
-                                        </div>
-                                    </td>
-                                    <td style={{textAlign: 'center'}}>
-                                        {showArchived ? (
-                                            <button className="icon-action-btn" onClick={(e) => { e.stopPropagation(); initiateRestore(s.shipmentID); }}><Icons.Restore /></button>
-                                        ) : (
-                                            <button className="icon-action-btn" onClick={(e) => { e.stopPropagation(); initiateArchive(s.shipmentID); }}><Icons.Trash /></button>
-                                        )}
-                                    </td>
-                                    <td><button className={`expand-btn ${isOpen && !isClosing ? 'open' : ''}`} onClick={() => toggleRow(s.shipmentID)}>▼</button></td>
-                                </tr>
-                                {(isOpen || isClosing) && (() => {
-                                    const rowDrops = s.dropDetails?.split('|').map((d, index) => {
-                                        const [dropID, rest] = d.split(':');
-                                        const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
-                                        return { 
-                                            dropID: parseInt(dropID), 
-                                            name: match ? match[1] : (rest || d),
-                                            location: match ? match[2] : '',
-                                            index 
-                                        };
-                                    }) || [];
-
-                                    return (
-                                    <tr className="expanded-row-container"><td colSpan="10">
-                                        <div className={`timeline-wrapper ${isClosing ? 'closing' : ''}`}>
-                                            <div className="timeline-inner-container">
-                                                
-                                                <div className="timeline-header-tabs">
-                                                    <div className="phase-toggle-buttons">
-                                                        <button 
-                                                            className={`phase-toggle-btn ${phaseTab === 'warehouse' ? 'active' : ''}`}
-                                                            onClick={() => setPhaseTab('warehouse')}
-                                                            title="Warehouse"
-                                                        >
-                                                            Warehouse
-                                                        </button>
-                                                        <button 
-                                                            className={`phase-toggle-btn ${phaseTab === 'store' ? 'active' : ''}`}
-                                                            onClick={() => setPhaseTab('store')}
-                                                            title="Store"
-                                                        >
-                                                            Store
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                {s.dropCount > 1 && (
-                                                    <div className="drops-info-banner">
-                                                        <div className="drop-banner-nav">
-                                                            <button 
-                                                                className="drop-nav-arrow"
-                                                                disabled={selectedDropIndex === 0}
-                                                                onClick={() => setSelectedDropIndex(prev => Math.max(0, prev - 1))}
-                                                            >
-                                                                ‹
-                                                            </button>
-                                                            
-                                                            <div className="current-drop-display">
-                                                                <span className="drop-display-label">Drop:</span>
-                                                                <span className="drop-display-number">{selectedDropIndex + 1}</span>
+                                        return (
+                                        <React.Fragment key={s.shipmentID}>
+                                            <tr className={isOpen ? 'row-active' : ''}>
+                                                <td>{s.shipmentID}</td>
+                                                <td className="status-cell-visible">
+                                                    <div className="status-cell-flex">
+                                                        <span className={`status-dot ${isFlashing ? 'flashing' : ''}`} style={{backgroundColor: isDelayedRow ? '#c0392b' : displayColor}}></span>
+                                                        {isDelayedRow ? (
+                                                            <div className="status-cell-delayed">
+                                                                <div style={{display:'flex', flexDirection:'column'}}>
+                                                                    <span style={{color: '#c0392b', fontWeight: 'bold', fontSize: '13px'}}>Delayed (+{delayInfo.days}d)</span>
+                                                                    <span style={{fontSize: '10px', color: '#999', fontWeight: '700', textTransform: 'uppercase'}}>{delayInfo.type} Delay</span>
+                                                                </div>
+                                                                <span 
+                                                                    className="delay-reason-link" 
+                                                                    onClick={(e) => { e.stopPropagation(); updateDelayReason(s.shipmentID, s.delayReason); }}
+                                                                    title={s.delayReason ? "Edit Reason" : "Add Reason"}
+                                                                >
+                                                                    {s.delayReason ? <Icons.Edit size={12} /> : <span style={{fontSize:'10px', textDecoration:'underline'}}>Reason</span>}
+                                                                </span>
                                                             </div>
-
-                                                            <button 
-                                                                className="drop-nav-arrow"
-                                                                disabled={selectedDropIndex === rowDrops.length - 1}
-                                                                onClick={() => setSelectedDropIndex(prev => Math.min(rowDrops.length - 1, prev + 1))}
-                                                            >
-                                                                ›
-                                                            </button>
-                                                        </div>
-                                                        {phaseTab !== 'store' && (
-                                                            <div className="switch-hint-overlay" onClick={() => setPhaseTab('store')}>
-                                                                <span>Switch to <br></br>Store Phase</span>
-                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                {displayStatus}
+                                                                {atRisk && (
+                                                                    <span className="tooltip-container" style={{marginLeft:'6px', marginTop:'6px', color:'#e67e22'}}>
+                                                                        <Icons.Clock size={14} />
+                                                                        <span className="tooltip-text">Due Today</span>
+                                                                    </span>
+                                                                )}
+                                                            </>
                                                         )}
                                                     </div>
-                                                )}
-                                                <div className="timeline-content">
-                                                {phaseTab === 'store' && !s.deliveryDate && (
-                                                    <div className={`store-locked-overlay ${isClosing ? 'closing' : ''}`}>
-                                                        <div className="lock-content">
-                                                            <Icons.Lock size={24} />
-                                                            <span>Pending Delivery Schedule</span>
-                                                        </div>
-                                                    </div>
-                                                )}
+                                                </td>
+                                                <td>
+                                                    {(() => {
+                                                        const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                                            const [dropID, rest] = d.split(':');
+                                                            const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                                            return { 
+                                                                dropID: parseInt(dropID), 
+                                                                name: match ? match[1] : (rest || d),
+                                                                location: match ? match[2] : '',
+                                                                index 
+                                                            };
+                                                        }) || [];
+                                                        const isExpanded = expandedShipmentID === s.shipmentID;
+                                                        const currentName = (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.name : s.destName;
 
-                                                {phaseTab === 'store' && s.deliveryDate && (() => {
-                                                    const startRouteIndex = PHASE_ORDER.indexOf('Start Route');
-                                                    const currentStatusIndex = s.currentStatus === 'Completed' ? 999 : PHASE_ORDER.indexOf(s.currentStatus);
-                                                    const isWarehouseComplete = currentStatusIndex >= startRouteIndex;
-                                                    const isDeliveryReady = s.deliveryDate <= getTodayString();
-                                                    
-                                                    // Hide overlay if warehouse is done AND delivery date is today/past
-                                                    if (isWarehouseComplete && isDeliveryReady) return null;
-
-                                                    return (
-                                                     <div className={`store-locked-overlay delivery-info-overlay ${isClosing ? 'closing' : ''}`}>
-                                                         <div className="lock-content delivery-info-content">
-                                                             <Icons.Lock size={17}/>
-                                                             <span>Scheduled Delivery: {formatDateDisplay(s.deliveryDate)}</span>
-                                                         </div>
-                                                     </div>
-                                                    );
-                                                })()}
-                                                
-                                                {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phase, index, array) => {
-                                                const state = getTimelineNodeState(phase, s.currentStatus, rowDrops, selectedDropIndex);
-                                                const meta = getPhaseMeta(phase, rowDrops, selectedDropIndex);
-                                                return (
-                                                    <div key={phase} className={`timeline-step ${state}`}>
-                                                        {index !== array.length - 1 && <div className="step-line"></div>}
-                                                        <div className="step-dot"></div>
-                                                        <div className="step-content-desc">
-                                                            <div className="step-title" style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                                                                {phase}
-                                                                {meta?.remarks && (
-                                                                    <div className="step-remark-container">
-                                                                        <Icons.MessageSquare size={14} className="remark-icon" />
-                                                                        <div className="remark-tooltip">
-                                                                            {meta.remarks}
-                                                                        </div>
-                                                                    </div>
+                                                        return (
+                                                            <div style={{display: 'flex', flexDirection: 'column'}}>
+                                                                <span>{currentName}</span>
+                                                                {s.dropCount > 1 && !isExpanded && (
+                                                                    <span style={{fontSize: '10px', color: '#7f8c8d', fontWeight: '600'}}>
+                                                                        +{s.dropCount - 1} more drops
+                                                                    </span>
+                                                                )}
+                                                                {isExpanded && s.dropCount > 1 && (
+                                                                    <span style={{fontSize: '10px', color: 'var(--primary-orange)', fontWeight: '700'}}>
+                                                                        Drop {selectedDropIndex + 1} of {s.dropCount}
+                                                                    </span>
                                                                 )}
                                                             </div>
-                                                            {meta ? (
-                                                                <>
-                                                                    <div className="step-time">{meta.time}</div>
-                                                                    <div className="step-sub">{meta.date}{meta.actorName ? ` · ${meta.actorRole}: ${meta.actorName}` : ''}</div>
-                                                                </>
-                                                            ) : (
-                                                                <div className="step-status-text">{state === 'active' ? 'In Progress' : '-'}</div>
+                                                        );
+                                                    })()}
+                                                </td>
+                                                <td>
+                                                    {(() => {
+                                                        const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                                            const [dropID, rest] = d.split(':');
+                                                            const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                                            return { 
+                                                                dropID: parseInt(dropID), 
+                                                                name: match ? match[1] : (rest || d),
+                                                                location: match ? match[2] : '',
+                                                                index 
+                                                            };
+                                                        }) || [];
+                                                        const isExpanded = expandedShipmentID === s.shipmentID;
+                                                        return (isExpanded && s.dropCount > 1) ? rowDrops[selectedDropIndex]?.location : s.destLocation;
+                                                    })()}
+                                                </td>
+                                                <td style={{fontWeight:'600'}}>{formatDateDisplay(s.loadingDate)}</td>
+                                                <td style={{ color: isDelayedRow ? '#c0392b' : 'black', fontWeight: isDelayedRow ? '700' : '400' }}>
+                                                    {formatDateDisplay(s.deliveryDate)}
+                                                </td>
+                                                <td>{s.plateNo || '-'}</td>
+                                                <td>
+                                                    <div className="crew-avatars" onClick={(e) => handleCrewClick(e, s.crewDetails)}>
+                                                        <div className="mini-avatar"><Icons.Profile/></div>
+                                                        <div className="mini-avatar"><Icons.Profile/></div>
+                                                    </div>
+                                                </td>
+                                                <td style={{textAlign: 'center'}}>
+                                                    {showArchived ? (
+                                                        <button className="icon-action-btn" onClick={(e) => { e.stopPropagation(); initiateRestore(s.shipmentID); }}><Icons.Restore /></button>
+                                                    ) : (
+                                                        <button className="icon-action-btn" onClick={(e) => { e.stopPropagation(); initiateArchive(s.shipmentID); }}><Icons.Trash /></button>
+                                                    )}
+                                                </td>
+                                                <td><button className={`expand-btn ${isOpen && !isClosing ? 'open' : ''}`} onClick={() => toggleRow(s.shipmentID)}>▼</button></td>
+                                            </tr>
+                                            {(isOpen || isClosing) && (() => {
+                                                const rowDrops = s.dropDetails?.split('|').map((d, index) => {
+                                                    const [dropID, rest] = d.split(':');
+                                                    const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                                                    return { 
+                                                        dropID: parseInt(dropID), 
+                                                        name: match ? match[1] : (rest || d),
+                                                        location: match ? match[2] : '',
+                                                        index 
+                                                    };
+                                                }) || [];
+
+                                                return (
+                                                <tr className="expanded-row-container"><td colSpan="10">
+                                                    <div className={`timeline-wrapper ${isClosing ? 'closing' : ''}`}>
+                                                        <div className="timeline-inner-container">
+                                                            
+                                                            <div className="timeline-header-tabs">
+                                                                <div className="phase-toggle-buttons">
+                                                                    <button 
+                                                                        className={`phase-toggle-btn ${phaseTab === 'warehouse' ? 'active' : ''}`}
+                                                                        onClick={() => setPhaseTab('warehouse')}
+                                                                        title="Warehouse"
+                                                                    >
+                                                                        Warehouse
+                                                                    </button>
+                                                                    <button 
+                                                                        className={`phase-toggle-btn ${phaseTab === 'store' ? 'active' : ''}`}
+                                                                        onClick={() => setPhaseTab('store')}
+                                                                        title="Store"
+                                                                    >
+                                                                        Store
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                            {s.dropCount > 1 && (
+                                                                <div className="drops-info-banner">
+                                                                    <div className="drop-banner-nav">
+                                                                        <button 
+                                                                            className="drop-nav-arrow"
+                                                                            disabled={selectedDropIndex === 0}
+                                                                            onClick={() => setSelectedDropIndex(prev => Math.max(0, prev - 1))}
+                                                                        >
+                                                                            ‹
+                                                                        </button>
+                                                                        
+                                                                        <div className="current-drop-display">
+                                                                            <span className="drop-display-label">Drop:</span>
+                                                                            <span className="drop-display-number">{selectedDropIndex + 1}</span>
+                                                                        </div>
+
+                                                                        <button 
+                                                                            className="drop-nav-arrow"
+                                                                            disabled={selectedDropIndex === rowDrops.length - 1}
+                                                                            onClick={() => setSelectedDropIndex(prev => Math.min(rowDrops.length - 1, prev + 1))}
+                                                                        >
+                                                                            ›
+                                                                        </button>
+                                                                    </div>
+                                                                    {phaseTab !== 'store' && (
+                                                                        <div className="switch-hint-overlay" onClick={() => setPhaseTab('store')}>
+                                                                            <span>Switch to <br></br>Store Phase</span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             )}
+                                                            <div className="timeline-content">
+                                                            {phaseTab === 'store' && !s.deliveryDate && (
+                                                                <div className={`store-locked-overlay ${isClosing ? 'closing' : ''}`}>
+                                                                    <div className="lock-content">
+                                                                        <Icons.Lock size={24} />
+                                                                        <span>Pending Delivery Schedule</span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {phaseTab === 'store' && s.deliveryDate && (() => {
+                                                                const startRouteIndex = PHASE_ORDER.indexOf('Start Route');
+                                                                const currentStatusIndex = s.currentStatus === 'Completed' ? 999 : PHASE_ORDER.indexOf(s.currentStatus);
+                                                                const isWarehouseComplete = currentStatusIndex >= startRouteIndex;
+                                                                const isDeliveryReady = s.deliveryDate <= getTodayString();
+                                                                
+                                                                // Hide overlay if warehouse is done AND delivery date is today/past
+                                                                if (isWarehouseComplete && isDeliveryReady) return null;
+
+                                                                return (
+                                                                <div className={`store-locked-overlay delivery-info-overlay ${isClosing ? 'closing' : ''}`}>
+                                                                    <div className="lock-content delivery-info-content">
+                                                                        <Icons.Lock size={17}/>
+                                                                        <span>Scheduled Delivery: {formatDateDisplay(s.deliveryDate)}</span>
+                                                                    </div>
+                                                                </div>
+                                                                );
+                                                            })()}
+                                                            
+                                                            {(phaseTab === 'warehouse' ? WAREHOUSE_PHASES : STORE_PHASES).map((phase, index, array) => {
+                                                            const state = getTimelineNodeState(phase, s.currentStatus, rowDrops, selectedDropIndex);
+                                                            const meta = getPhaseMeta(phase, rowDrops, selectedDropIndex);
+                                                            return (
+                                                                <div key={phase} className={`timeline-step ${state}`}>
+                                                                    {index !== array.length - 1 && <div className="step-line"></div>}
+                                                                    <div className="step-dot"></div>
+                                                                    <div className="step-content-desc">
+                                                                        <div className="step-title" style={{display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
+                                                                            {phase}
+                                                                            {meta?.remarks && (
+                                                                                <div className="step-remark-container">
+                                                                                    <Icons.MessageSquare size={14} className="remark-icon" />
+                                                                                    <div className="remark-tooltip">
+                                                                                        {meta.remarks}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                        {meta ? (
+                                                                            <>
+                                                                                <div className="step-time">{meta.time}</div>
+                                                                                <div className="step-sub">{meta.date}{meta.actorName ? ` · ${meta.actorRole}: ${meta.actorName}` : ''}</div>
+                                                                            </>
+                                                                        ) : (
+                                                                            <div className="step-status-text">{state === 'active' ? 'In Progress' : '-'}</div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </td></tr>
-                                )})()}
-                            </React.Fragment>
-                        )}) : (<tr><td colSpan="10" className="empty-state">No shipments found in {activeTab}.</td></tr>)}
+                                                </td></tr>
+                                            )})()}
+                                        </React.Fragment>
+                                        );
+                                    })}
+                                </React.Fragment>
+                            ))
+                        ) : (<tr><td colSpan="10" className="empty-state">No shipments found in {activeTab}.</td></tr>)}
                     </tbody>
                 </table>
             </div>
@@ -1391,14 +1452,12 @@ function ShipmentView({ user, token, onLogout }) {
             {showModal && (
                 <div className="modal-overlay-desktop">
                     <div className="modal-form-card">
-                        
-                        <div className="modal-header" style={{marginTop:0}}>
+                        <div className="modal-header" style={{ marginBottom: '20px' }}>
                             <h2>Create Shipment</h2>
                             <button className="close-btn" onClick={() => setShowModal(false)}>×</button>
                         </div>
-
-                        <div className="batch-nav-header">
-                            <div className="batch-indicators">
+                        <div className="modal-form-body">
+                            <div className="batch-nav-header">                            <div className="batch-indicators">
                                 <span className="batch-pill">Shipment {batchIndex + 1} of {batchData.length}</span>
                                 {batchData.length > 1 && (
                                     <button type="button" className="remove-item-btn" onClick={removeCurrentFromBatch}>
@@ -1456,7 +1515,7 @@ function ShipmentView({ user, token, onLogout }) {
                             </div>
 
                             <div className="drops-section">
-                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px'}}>
+                                <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '0px 10px'}}>
                                     <label style={{fontWeight: '700', fontSize: '13px', color: '#2c3e50', textTransform: 'uppercase', letterSpacing: '0.5px'}}>
                                         Destinations & Routes
                                     </label>
@@ -1464,7 +1523,7 @@ function ShipmentView({ user, token, onLogout }) {
                                         <Icons.Plus size={12}/> Add Drop
                                     </button>
                                 </div>
-                                <div style={{fontSize: '11px', color: '#7f8c8d', marginBottom: '12px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px'}}>
+                                <div style={{fontSize: '11px', color: '#7f8c8d', marginBottom: '12px', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px', padding: '0px 10px'}}>
                                     <Icons.AlertCircle size={12} /> The order of drops determines the crew's delivery sequence (Drop 1 is the first stop).
                                 </div>
 
@@ -1526,11 +1585,17 @@ function ShipmentView({ user, token, onLogout }) {
                                                     type="text" 
                                                     value={currentDrop.destLocation} 
                                                     onChange={(e) => handleDropChange(dropIndex, 'destLocation', e.target.value)}
-                                                    list={currentDrop.destLocation && currentDrop.destLocation.trim().length > 0 ? "route-list" : undefined}
-                                                    placeholder="Search Route..."
+                                                    list={dropIndex === 0 && currentDrop.destLocation && currentDrop.destLocation.trim().length > 0 ? "route-list" : undefined}
+                                                    placeholder={dropIndex === 0 ? "Search Route..." : "Same as 1st drop"}
                                                     required
-                                                    style={{padding: '8px 12px', fontSize: '13px'}}
+                                                    style={{
+                                                        padding: '8px 12px', 
+                                                        fontSize: '13px',
+                                                        backgroundColor: dropIndex !== 0 ? '#f5f5f5' : 'white',
+                                                        cursor: dropIndex !== 0 ? 'not-allowed' : 'text'
+                                                    }}
                                                     autoComplete="off"
+                                                    disabled={dropIndex !== 0}
                                                 />
                                             </div>
                                         </div>
@@ -1639,16 +1704,19 @@ function ShipmentView({ user, token, onLogout }) {
                                 </button>
                             </div>
                         </form>
+                        </div>
                     </div>
                 </div>
             )}
             
-            <PaginationControls 
-                currentPage={currentPage} 
-                totalItems={finalFiltered.length} 
-                rowsPerPage={rowsPerPage} 
-                onPageChange={setCurrentPage} 
-            />
+            {groupingFilter === 'No Division' && (
+                <PaginationControls 
+                    currentPage={currentPage} 
+                    totalItems={finalFiltered.length} 
+                    rowsPerPage={rowsPerPage} 
+                    onPageChange={setCurrentPage} 
+                />
+            )}
             
             {crewPopup.show && (
                 <div className="crew-popup" style={{ top: crewPopup.y, left: crewPopup.x }} onClick={(e) => e.stopPropagation()}>
@@ -1665,14 +1733,12 @@ function ShipmentView({ user, token, onLogout }) {
             {showExportModal && (
                 <div className="modal-overlay-desktop" style={{zIndex: 999}}>
                     <div className="modal-form-card" style={{width: '500px'}}>
-                        <div className="modal-header">
+                        <div className="modal-header" style={{ marginBottom: '20px' }}>
                             <h2>Extract Data</h2>
                             <button className="close-btn" onClick={() => setShowExportModal(false)}>×</button>
                         </div>
-                        
-                        <div className="export-modal-body">
-                            <div className="form-row" style={{marginBottom: '20px'}}>
-                                <div className="form-group">
+                        <div className="modal-form-body">
+                            <div className="form-row" style={{marginBottom: '20px'}}>                                <div className="form-group">
                                     <label>Start</label>
                                     <input 
                                         type="date" 
@@ -1759,12 +1825,14 @@ function ShipmentView({ user, token, onLogout }) {
             {/* Z-Index Fix: No Data Modal should be ON TOP of Export Modal */}
             {showNoDataModal && (
                 <div className="modal-overlay-desktop" style={{zIndex: 9000}}>
-                    <div className="modal-form-card small-modal" style={{textAlign: 'center', padding: '40px 30px'}}>
-                        <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
-                        <p style={{marginBottom: '20px', color: '#666', fontSize: '14px'}}>
-                           No data available for the selected period ({formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}).
-                        </p>
-                        <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
+                    <div className="modal-form-card small-modal" style={{textAlign: 'center'}}>
+                        <div className="modal-form-body">
+                            <h3 style={{margin: '0 0 10px 0'}}>No Shipments Found</h3>
+                            <p style={{marginBottom: '20px', color: '#666', fontSize: '14px'}}>
+                            No data available for the selected period ({formatDateDisplay(dateRange.start)} - {formatDateDisplay(dateRange.end)}).
+                            </p>
+                            <button className="btn-alert-shipment" onClick={() => setShowNoDataModal(false)} style={{width: '100%'}}>Okay</button>
+                        </div>
                     </div>
                 </div>
             )}

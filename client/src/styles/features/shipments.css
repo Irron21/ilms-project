@@ -242,6 +242,15 @@
 
 .empty-state { text-align: center; padding: 40px; color: #999; font-style: italic; }
 
+.group-divider-row td {
+    background-color: #f8f9fa !important;
+    border-bottom: 2px solid #eee !important;
+    border-top: 1px solid #eee !important;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
 /* --- TIMELINE ANIMATION --- */
 .expanded-row-container td { padding: 0 !important; background-color: #FAFAFA; border-bottom: 1px solid #E0E0E0; }
 
@@ -434,6 +443,17 @@
     background: white; width: 550px; padding: 30px;
     border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
     animation: slideUpFade 0.3s ease-out;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.modal-form-body {
+    padding: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 1;
 }
 @keyframes slideUpFade { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; width: 100%}
@@ -1298,6 +1318,10 @@
 .new-badge.scheduled {
   background-color: #95a5a6;
   animation: none;
+}
+.new-badge.acknowledged {
+  animation: none;
+  opacity: 0.8;
 }
 
 @keyframes pulseNew {

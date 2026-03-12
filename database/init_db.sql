@@ -149,6 +149,19 @@ CREATE TABLE ShipmentPayroll (
   FOREIGN KEY (periodID) REFERENCES PayrollPeriods (periodID) ON DELETE SET NULL
 );
 
+CREATE TABLE ShipmentAdjustments (
+  adjustmentID INT NOT NULL AUTO_INCREMENT,
+  shipmentID INT NOT NULL,
+  crewID INT NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  type ENUM('BONUS', 'DEDUCTION') NOT NULL,
+  reason VARCHAR(255) NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (adjustmentID),
+  FOREIGN KEY (shipmentID) REFERENCES Shipments (shipmentID) ON DELETE CASCADE,
+  FOREIGN KEY (crewID) REFERENCES Users (userID)
+);
+
 CREATE TABLE PayrollAdjustments (
   adjustmentID INT NOT NULL AUTO_INCREMENT,
   userID INT NOT NULL,

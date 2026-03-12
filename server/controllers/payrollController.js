@@ -125,7 +125,7 @@ exports.generatePayroll = (req, res) => {
                 db.query("SELECT * FROM PayrollRates", (err, rates) => {
                 if (err) return res.status(500).json({ error: "Failed to fetch rates" });
 
-                // 4. Find Completed Shipments (That haven't been assigned a period yet)
+                // 4. Find Completed Shipments (Regardless of whether they are already in ShipmentPayroll)
                 const shipmentSql = `
                     SELECT 
                         s.shipmentID, s.destLocation, s.deliveryDate,
@@ -136,10 +136,8 @@ exports.generatePayroll = (req, res) => {
                     JOIN ShipmentCrew sc ON s.shipmentID = sc.shipmentID
                     JOIN Users u ON sc.userID = u.userID
                     JOIN Vehicles v ON s.vehicleID = v.vehicleID
-                    LEFT JOIN ShipmentPayroll sp ON s.shipmentID = sp.shipmentID AND sc.userID = sp.crewID
                     WHERE s.currentStatus = 'Completed'
                       AND s.deliveryDate BETWEEN ? AND ?
-                      AND (sp.payrollID IS NULL OR sp.periodID IS NULL)
                 `;
 
                 db.query(shipmentSql, [start, end], (err, shipments) => {
@@ -179,11 +177,13 @@ exports.generatePayroll = (req, res) => {
                             const role = ship.role;
                             const shipDrops = dropsMap.get(ship.shipmentID) || [];
                             
+                            // 1. Get Base Fee for the 1st drop (or main shipment location if no drops)
+                            const primaryLocation = shipDrops.length > 0 ? shipDrops[0] : ship.destLocation;
+
                             const matchedRates = rates.filter(r => {
                                 if (r.vehicleType !== vehicleType) return false;
                                 const rc = String(r.routeCluster || '').toLowerCase();
-                                return shipDrops.some(d => String(d).toLowerCase().includes(rc)) || 
-                                       String(ship.destLocation || '').toLowerCase().includes(rc);
+                                return String(primaryLocation || '').toLowerCase().includes(rc);
                             });
 
                             // Defaults
@@ -202,9 +202,13 @@ exports.generatePayroll = (req, res) => {
                                 if (!totalAllowance) totalAllowance = Number(bestByRole.foodAllowance || 0) || totalAllowance;
                             }
 
+                            // 2. Multi-drop logic: Additional 150 if 3 or more drops
+                            const dropCount = Math.max(1, shipDrops.length);
+                            const totalBaseFee = dropCount >= 3 ? (baseFee + 150) : baseFee;
+
                             // Split allowance
                             const allowancePerPerson = totalAllowance / (ship.crewCount || 1);
-                            return [ship.shipmentID, ship.crewID, periodID, baseFee, allowancePerPerson];
+                            return [ship.shipmentID, ship.crewID, periodID, totalBaseFee, allowancePerPerson];
                         });
 
                         // 6. Bulk Insert with Duplicate Update
@@ -226,7 +230,7 @@ exports.generatePayroll = (req, res) => {
                     const shipmentIDs = shipments.map(s => s.shipmentID);
                     if (shipmentIDs.length > 0) {
                         const placeholders = shipmentIDs.map(() => '?').join(',');
-                        const dropsSql = `SELECT shipmentID, destLocation FROM ShipmentDrops WHERE shipmentID IN (${placeholders})`;
+                        const dropsSql = `SELECT shipmentID, destLocation FROM ShipmentDrops WHERE shipmentID IN (${placeholders}) ORDER BY sequenceOrder ASC`;
                         db.query(dropsSql, shipmentIDs, (err, rows) => {
                             if (err) {
                                 console.error("Failed to fetch drops for payroll calculation:", err);
@@ -318,6 +322,7 @@ exports.getEmployeeTrips = (req, res) => {
             v.type as vehicleType,               
             sp.baseFee,
             sp.allowance,
+            (SELECT COUNT(*) FROM ShipmentDrops WHERE shipmentID = s.shipmentID) as dropCount,
             -- Subquery to get sum of adjustments for this specific shipment/crew
             COALESCE((
                 SELECT SUM(CASE WHEN type = 'BONUS' THEN amount ELSE -amount END)

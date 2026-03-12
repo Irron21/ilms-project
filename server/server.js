@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 4000;
 const logRoutes = require('./routes/logRoutes');
 // const { ErrorReporting } = require('@google-cloud/error-reporting');
 let errors;
+/* 
 if (process.env.NODE_ENV === 'production') {
     try {
         const { ErrorReporting } = require('@google-cloud/error-reporting');
@@ -24,6 +25,7 @@ if (process.env.NODE_ENV === 'production') {
         console.warn("Google Cloud Error Reporting not found, skipping.");
     }
 }
+*/
 
 // Trust Proxy (Required for Rate Limiting behind Nginx)
 app.set('trust proxy', 1);
