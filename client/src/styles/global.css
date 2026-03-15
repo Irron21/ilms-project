@@ -1,26 +1,45 @@
-@import './variables.css';
+@import "./variables.css";
 
 /* Global reset and base layout */
-*, *::before, *::after {
-  box-sizing: border-box;
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
 }
 
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
+html,
+body,
+#root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
 }
 
 body {
-  margin: 0;
-  padding: 0;
-  min-height: 100vh;
-  background-color: var(--bg-light);
-  width: 100%;
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    background-color: var(--bg-light);
+    width: 100%;
 }
 
 #root {
-  width: 100%;
-  min-height: 100vh;
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* Temporarily enlarge chart text for PDF export */
+.pdf-export-mode .recharts-text {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    fill: #333 !important;
+}
+.pdf-export-mode .recharts-legend-item-text {
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    color: #333 !important;
+}
+.pdf-export-mode .recharts-cartesian-axis-tick-value {
+    font-size: 11px !important; /* Reduced to prevent X-axis overlap */
 }

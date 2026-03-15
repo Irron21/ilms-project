@@ -17,6 +17,8 @@ import {
 import { Icons, FeedbackModal } from "@shared";
 import "@styles/features/analytics.css";
 import ReactMarkdown from "react-markdown";
+import html2canvas from "html2canvas";
+import { exportReportToPDF } from "@utils/pdfGenerator";
 
 function KPIView() {
   const [kpiScores, setKpiScores] = useState([]);
@@ -60,6 +62,12 @@ function KPIView() {
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [compareYear, setCompareYear] = useState("none");
   const [compareData, setCompareData] = useState([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [reportHistory, setReportHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [expandedReportId, setExpandedReportId] = useState(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [exportingPdfId, setExportingPdfId] = useState(null);
 
   useEffect(() => {
     fetchMonths();
@@ -81,24 +89,36 @@ function KPIView() {
     setShowAiPanel(true);
     setAiInsight("");
     try {
-      // DEBUG: Verify merged data contains _Compare keys when YoY mode is active
-      console.log(
-        "[AI Payload] compareYear:",
-        compareYear,
-        "| primaryYear:",
-        graphYear,
-      );
-      console.log(
-        "[AI Payload] displayedData (mergedData) sample:",
-        mergedData[0],
-      );
-      console.log("[AI Payload] Full mergedData:", mergedData);
+      // ── Capture the chart as a base64 PNG snapshot BEFORE the API call.
+      // This snapshot is saved alongside the report so history exports always
+      // show the exact chart that was visible when the analysis was generated,
+      // regardless of what year is selected when the user later exports the PDF.
+      let chartImageBase64 = null;
+      const chartEl = document.getElementById("kpi-main-chart");
+      if (chartEl) {
+        try {
+          const captureCanvas = await html2canvas(chartEl, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            imageTimeout: 0,
+            logging: false,
+          });
+          chartImageBase64 = captureCanvas.toDataURL("image/png");
+        } catch (captureErr) {
+          console.warn(
+            "[AI Payload] Chart snapshot capture failed, proceeding without image:",
+            captureErr,
+          );
+        }
+      }
 
       // chartContext is the single source of truth for ALL fields including year values.
       // Do NOT add root-level primaryYear/compareYear — the backend reads from chartContext only.
       const payload = {
         chartContext: {
-          displayedData: mergedData, // mergedData has BOTH "Delivery" (primaryYear) and "Delivery_Compare" (compareYear)
+          displayedData: displayData, // This sends the data as the user sees it (monthly or quarterly)
           selectedMetrics: selectedMetrics, // e.g. ['Booking', 'Delivery']
           viewMode: viewMode, // 'monthly' or 'quarterly'
           showTarget: showTarget,
@@ -107,6 +127,7 @@ function KPIView() {
           compareYear: compareYear, // MUST be included — "none" or e.g. "2024"
         },
         timeframeLabel: headerLabel, // "Yearly Average", "Q1 (Jan-Mar)", "August 2026", etc.
+        chartImageBase64, // base64 PNG snapshot; null if capture failed
       };
       const res = await api.post("/kpi/analyze", payload, {
         headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` },
@@ -119,6 +140,23 @@ function KPIView() {
       );
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  const fetchReportHistory = async () => {
+    setHistoryLoading(true);
+    setShowHistoryModal(true);
+    setExpandedReportId(null);
+    try {
+      const res = await api.get("/kpi/reports/history", {
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("token")}` },
+      });
+      setReportHistory(res.data);
+    } catch (err) {
+      console.error("Report History Error:", err);
+      setReportHistory([]);
+    } finally {
+      setHistoryLoading(false);
     }
   };
 
@@ -212,7 +250,46 @@ function KPIView() {
     });
   };
 
-  const refreshData = async () => {
+  const handleDeleteAIReport = (reportId) => {
+    setFeedbackModal({
+      type: "warning",
+      title: "Delete AI Analysis?",
+      message:
+        "Are you sure you want to permanently delete this AI-generated analysis?",
+      subMessage: "This action cannot be undone.",
+      confirmLabel: "Yes, Delete Report",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/kpi/reports/history/${reportId}`, {
+            headers: {
+              Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+            },
+          });
+          setReportHistory((prev) =>
+            prev.filter((report) => report.id !== reportId),
+          );
+          setFeedbackModal({
+            type: "success",
+            title: "Report Deleted",
+            message: "The AI analysis report has been successfully deleted.",
+            onClose: () => setFeedbackModal(null),
+          });
+        } catch (err) {
+          console.error("Failed to delete AI report:", err);
+          setFeedbackModal({
+            type: "error",
+            title: "Deletion Failed",
+            message: "Could not delete the AI report. Please try again.",
+            subMessage: err.response?.data?.message || err.message,
+            onClose: () => setFeedbackModal(null),
+          });
+        }
+      },
+      onClose: () => setFeedbackModal(null),
+    });
+  };
+
+  const refreshData = async (filter) => {
     setLoading(true);
     try {
       // Pass BOTH 'month' (for cards) and 'year' (for graph)
@@ -884,43 +961,88 @@ function KPIView() {
           </div>
 
           <div className="chart-controls-group">
-            <button
-              className="ai-analyze-btn"
-              onClick={handleGenerateInsight}
-              disabled={
-                selectedMetrics.length === 0 ||
-                !mergedData ||
-                mergedData.length === 0 ||
-                isAnalyzing
-              }
+            {/* AI Tools Group */}
+            <div
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "5px",
-                backgroundColor: "#E97512",
-                color: "white",
-                border: "none",
+                gap: "8px",
+                backgroundColor: "#fff7ed",
                 padding: "6px 12px",
-                borderRadius: "6px",
-                fontSize: "12px",
-                cursor:
-                  selectedMetrics.length === 0 ||
-                  !mergedData ||
-                  mergedData.length === 0 ||
-                  isAnalyzing
-                    ? "not-allowed"
-                    : "pointer",
-                opacity:
-                  selectedMetrics.length === 0 ||
-                  !mergedData ||
-                  mergedData.length === 0 ||
-                  isAnalyzing
-                    ? 0.5
-                    : 1,
+                borderRadius: "8px",
+                border: "1px solid #fed7aa",
+                boxShadow: "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+                marginRight: "16px",
               }}
             >
-              {isAnalyzing ? "Analyzing..." : "AI Insight"}
-            </button>
+              <span
+                style={{
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  color: "#9a3412",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                AI Tools
+              </span>
+              <button
+                onClick={handleGenerateInsight}
+                disabled={
+                  selectedMetrics.length === 0 ||
+                  !mergedData ||
+                  mergedData.length === 0 ||
+                  isAnalyzing
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  backgroundColor: "#E97512",
+                  color: "white",
+                  border: "none",
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  cursor:
+                    selectedMetrics.length === 0 ||
+                    !mergedData ||
+                    mergedData.length === 0 ||
+                    isAnalyzing
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity:
+                    selectedMetrics.length === 0 ||
+                    !mergedData ||
+                    mergedData.length === 0 ||
+                    isAnalyzing
+                      ? 0.5
+                      : 1,
+                }}
+              >
+                {isAnalyzing ? "Analyzing..." : "AI Insight"}
+              </button>
+              <button
+                onClick={fetchReportHistory}
+                disabled={isAnalyzing}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  backgroundColor: "white",
+                  color: "#555",
+                  border: "1px solid #ccc",
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  fontWeight: "bold",
+                  fontSize: "12px",
+                  cursor: isAnalyzing ? "not-allowed" : "pointer",
+                  opacity: isAnalyzing ? 0.5 : 1,
+                }}
+              >
+                History
+              </button>
+            </div>
 
             {/* TARGET TOGGLE */}
             <div className="filter-group-bordered">
@@ -1069,7 +1191,7 @@ function KPIView() {
           </div>
         </div>
 
-        <div className="chart-content">
+        <div className="chart-content" id="kpi-main-chart">
           {trendData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               {effectiveChartType === "bar" ? (
@@ -1158,8 +1280,7 @@ function KPIView() {
                           name={`${m.label} (${compareYear})`}
                           stroke={m.color}
                           strokeWidth={2}
-                          strokeDasharray="5 5"
-                          strokeOpacity={0.7}
+                          strokeOpacity={0.4}
                           dot={{ r: 4, fill: m.color, stroke: "none" }}
                           activeDot={{ r: 6, strokeWidth: 0, fill: m.color }}
                         />
@@ -1218,18 +1339,56 @@ function KPIView() {
             >
               AI Analysis
             </h4>
-            <button
-              onClick={() => setShowAiPanel(false)}
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: "24px",
-                cursor: "pointer",
-                color: "#999",
-              }}
-            >
-              ×
-            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {!isAnalyzing && aiInsight && (
+                <button
+                  disabled={isGeneratingPDF}
+                  onClick={async () => {
+                    setIsGeneratingPDF(true);
+                    try {
+                      await exportReportToPDF({
+                        chartElementId: "kpi-main-chart",
+                        reportText: aiInsight,
+                        timeframeLabel: headerLabel,
+                        primaryYear: graphYear,
+                        compareYear: compareYear,
+                        metrics: selectedMetrics,
+                      });
+                    } finally {
+                      setIsGeneratingPDF(false);
+                    }
+                  }}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    backgroundColor: isGeneratingPDF ? "#f3f4f6" : "#fff7ed",
+                    color: isGeneratingPDF ? "#9ca3af" : "#d35400",
+                    border: "1px solid #fed7aa",
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    fontSize: "11px",
+                    fontWeight: 600,
+                    cursor: isGeneratingPDF ? "not-allowed" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {isGeneratingPDF ? "Generating…" : "Download PDF"}
+                </button>
+              )}
+              <button
+                onClick={() => setShowAiPanel(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "24px",
+                  cursor: "pointer",
+                  color: "#999",
+                }}
+              >
+                ×
+              </button>
+            </div>
           </div>
           <div style={{ padding: "25px", overflowY: "auto", flex: 1 }}>
             {isAnalyzing ? (
@@ -1268,6 +1427,410 @@ function KPIView() {
                 <ReactMarkdown>{aiInsight}</ReactMarkdown>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================
+          AI REPORT HISTORY MODAL
+          ================================================================ */}
+      {showHistoryModal && (
+        <div
+          className="modal-backdrop"
+          onClick={() => setShowHistoryModal(false)}
+        >
+          <div
+            style={{
+              background: "white",
+              width: "90%",
+              maxWidth: "780px",
+              maxHeight: "85vh",
+              borderRadius: "12px",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 20px 60px rgba(0,0,0,0.25)",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: "20px 24px",
+                borderBottom: "1px solid #eee",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexShrink: 0,
+                backgroundColor: "#fcfcfc",
+              }}
+            >
+              <div>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "18px",
+                    fontWeight: 700,
+                    color: "#1a202c",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                  }}
+                >
+                  AI Analysis History
+                </h3>
+                <p
+                  style={{
+                    margin: "4px 0 0 0",
+                    fontSize: "12px",
+                    color: "#9ca3af",
+                  }}
+                >
+                  {historyLoading
+                    ? "Loading..."
+                    : `${reportHistory.length} saved report${reportHistory.length !== 1 ? "s" : ""}`}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  fontSize: "24px",
+                  cursor: "pointer",
+                  color: "#9ca3af",
+                  lineHeight: 1,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ overflowY: "auto", flex: 1, padding: "16px 24px" }}>
+              {historyLoading ? (
+                /* Loading State */
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "60px 0",
+                    gap: "16px",
+                    color: "#9ca3af",
+                  }}
+                >
+                  <span
+                    className="mini-loader"
+                    style={{
+                      borderColor: "#f39c12",
+                      borderTopColor: "transparent",
+                      width: "32px",
+                      height: "32px",
+                      borderWidth: "3px",
+                    }}
+                  ></span>
+                  <span style={{ fontSize: "13px" }}>
+                    Loading report history...
+                  </span>
+                </div>
+              ) : reportHistory.length === 0 ? (
+                /* Empty State */
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "60px 20px",
+                    color: "#9ca3af",
+                  }}
+                >
+                  <div style={{ fontSize: "40px", marginBottom: "12px" }}>
+                    📭
+                  </div>
+                  <p
+                    style={{
+                      fontSize: "15px",
+                      fontWeight: 600,
+                      color: "#6b7280",
+                      margin: "0 0 6px 0",
+                    }}
+                  >
+                    No reports saved yet
+                  </p>
+                  <p style={{ fontSize: "13px", margin: 0 }}>
+                    Click{" "}
+                    <strong style={{ color: "#d35400" }}>AI Insight</strong> to
+                    generate and auto-save your first analysis.
+                  </p>
+                </div>
+              ) : (
+                /* Report List */
+                reportHistory.map((report) => {
+                  const isExpanded = expandedReportId === report.id;
+                  const isYoY =
+                    report.compare_year && report.compare_year !== "none";
+                  const timeframeLabel = isYoY
+                    ? `${report.primary_year} vs ${report.compare_year}`
+                    : String(report.primary_year);
+                  const formattedDate = new Date(
+                    report.created_at,
+                  ).toLocaleString("en-PH", {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  });
+                  const metrics = report.metrics_analyzed
+                    ? report.metrics_analyzed.split(", ")
+                    : [];
+
+                  return (
+                    <div
+                      key={report.id}
+                      style={{
+                        border: `1px solid ${isExpanded ? "#d35400" : "#e5e7eb"}`,
+                        borderRadius: "10px",
+                        marginBottom: "12px",
+                        overflow: "hidden",
+                        transition: "border-color 0.2s",
+                      }}
+                    >
+                      {/* Report Meta Row — click anywhere to toggle */}
+                      <div
+                        style={{
+                          padding: "14px 18px",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          backgroundColor: isExpanded ? "#fdf6f0" : "#fafafa",
+                          cursor: "pointer",
+                          borderBottom: isExpanded
+                            ? "1px solid #e5e7eb"
+                            : "none",
+                          transition: "background-color 0.2s",
+                        }}
+                        onClick={() =>
+                          setExpandedReportId(isExpanded ? null : report.id)
+                        }
+                      >
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Mode badge + timeframe */}
+                          <div
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              marginBottom: "7px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            <span
+                              style={{
+                                backgroundColor: isYoY ? "#e3f2fd" : "#f0fdf4",
+                                color: isYoY ? "#1565c0" : "#15803d",
+                                padding: "2px 8px",
+                                borderRadius: "12px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                border: `1px solid ${isYoY ? "#bbdefb" : "#bbf7d0"}`,
+                                flexShrink: 0,
+                              }}
+                            >
+                              {isYoY ? "YoY Comparison" : "Single Year"}
+                            </span>
+                            <span
+                              style={{
+                                backgroundColor: "#f3f4f6",
+                                color: "#4b5563",
+                                padding: "2px 8px",
+                                borderRadius: "12px",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                border: "1px solid #e5e7eb",
+                                flexShrink: 0,
+                                textTransform: "capitalize",
+                              }}
+                            >
+                              {report.view_mode || "monthly"}
+                            </span>
+                            <span
+                              style={{
+                                fontWeight: 700,
+                                fontSize: "15px",
+                                color: "rgb(26, 32, 44)",
+                              }}
+                            >
+                              {timeframeLabel}
+                            </span>
+                          </div>
+
+                          {/* Metric chips */}
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "4px",
+                              marginBottom: "7px",
+                            }}
+                          >
+                            {metrics.map((m) => (
+                              <span
+                                key={m}
+                                style={{
+                                  backgroundColor: "#f3f4f6",
+                                  color: "#374151",
+                                  padding: "2px 8px",
+                                  borderRadius: "10px",
+                                  fontSize: "11px",
+                                  fontWeight: 600,
+                                  border: "1px solid #e5e7eb",
+                                }}
+                              >
+                                {m.trim()}
+                              </span>
+                            ))}
+                          </div>
+
+                          {/* Timestamp */}
+                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            {formattedDate}
+                          </span>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "6px",
+                            flexShrink: 0,
+                            marginLeft: "14px",
+                          }}
+                        >
+                          {/* Expand / Collapse */}
+                          <button
+                            style={{
+                              backgroundColor: isExpanded ? "#d35400" : "white",
+                              color: isExpanded ? "white" : "#d35400",
+                              border: "1px solid #d35400",
+                              padding: "5px 12px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              transition: "background-color 0.2s, color 0.2s",
+                              whiteSpace: "nowrap",
+                              width: "128px",
+                              textAlign: "center",
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedReportId(
+                                isExpanded ? null : report.id,
+                              );
+                            }}
+                          >
+                            {isExpanded ? "▲ Collapse" : "▼ Read Report"}
+                          </button>
+
+                          {/* Export PDF */}
+                          <button
+                            disabled={exportingPdfId === report.id}
+                            style={{
+                              backgroundColor:
+                                exportingPdfId === report.id
+                                  ? "#f3f4f6"
+                                  : "#fff7ed",
+                              color:
+                                exportingPdfId === report.id
+                                  ? "#9ca3af"
+                                  : "#d35400",
+                              border: "1px solid #fed7aa",
+                              padding: "5px 12px",
+                              borderRadius: "6px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              cursor:
+                                exportingPdfId === report.id
+                                  ? "not-allowed"
+                                  : "pointer",
+                              whiteSpace: "nowrap",
+                              width: "128px",
+                              textAlign: "center",
+                            }}
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setExportingPdfId(report.id);
+                              try {
+                                await exportReportToPDF({
+                                  chartElementId: "kpi-main-chart",
+                                  reportText: report.report_text,
+                                  timeframeLabel: isYoY
+                                    ? `${report.primary_year} vs ${report.compare_year}`
+                                    : String(report.primary_year),
+                                  primaryYear: report.primary_year,
+                                  compareYear: report.compare_year,
+                                  metrics: report.metrics_analyzed
+                                    ? report.metrics_analyzed.split(", ")
+                                    : [],
+                                  // Use the saved snapshot so the PDF always shows the chart
+                                  // from when this report was generated, not the live DOM state.
+                                  savedBase64Image: report.chart_image || null,
+                                });
+                              } finally {
+                                setExportingPdfId(null);
+                              }
+                            }}
+                          >
+                            {exportingPdfId === report.id
+                              ? "Generating…"
+                              : "Export PDF"}
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteAIReport(report.id);
+                            }}
+                            title="Delete Report"
+                            style={{
+                              width: "128px",
+                              padding: "5px 12px",
+                              fontSize: "12px",
+                              fontWeight: "600",
+                              textAlign: "center",
+                              color: "#dc2626",
+                              backgroundColor: "#fee2e2",
+                              border: "1px solid #fecaca",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              transition: "background-color 0.2s, color 0.2s",
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Expanded Content */}
+                      {isExpanded && (
+                        <div
+                          style={{
+                            padding: "22px 24px",
+                            backgroundColor: "white",
+                            borderTop: "1px solid #f0f0f0",
+                          }}
+                        >
+                          <div className="ai-markdown-body">
+                            <ReactMarkdown>{report.report_text}</ReactMarkdown>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -4,6 +4,21 @@ CREATE DATABASE k2mac_ilms_db;
 USE k2mac_ilms_db;
 
 -- ==========================================
+-- AI KPI ANALYST — REPORT HISTORY
+-- ==========================================
+
+CREATE TABLE kpi_ai_reports (
+  id            INT          NOT NULL AUTO_INCREMENT,
+  report_text   LONGTEXT     NOT NULL,
+  primary_year  VARCHAR(10)  NOT NULL,
+  compare_year  VARCHAR(10)  NOT NULL DEFAULT 'none',
+  metrics_analyzed VARCHAR(255) NOT NULL,
+  created_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+);
+
+
+-- ==========================================
 -- A. CORE USERS & LOGINS
 -- ==========================================
 
@@ -102,7 +117,7 @@ CREATE TABLE ShipmentStatusLog (
   phaseName VARCHAR(50) NULL,
   status VARCHAR(50) NULL,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  remarks VARCHAR(255) NULL, 
+  remarks VARCHAR(255) NULL,
   PRIMARY KEY (statusLogID),
   FOREIGN KEY (shipmentID) REFERENCES Shipments (shipmentID),
   FOREIGN KEY (userID) REFERENCES Users (userID),
@@ -213,7 +228,7 @@ CREATE TABLE KPI_Monthly_Reports (
 -- ==========================================
 
 -- 1. Users
-INSERT INTO Users (userID, firstName, lastName, role) VALUES 
+INSERT INTO Users (userID, firstName, lastName, role) VALUES
 (1, 'System', 'Admin', 'Admin'),
 (2, 'Ops', 'Manager', 'Operations'),
 (3, 'Juan', 'Driver', 'Driver'),
@@ -222,14 +237,14 @@ INSERT INTO Users (userID, firstName, lastName, role) VALUES
 (6, 'Jose', 'Porter', 'Helper');
 
 -- 2. Logins
-INSERT INTO UserLogins (userID, employeeID, hashedPassword, isActive) VALUES 
+INSERT INTO UserLogins (userID, employeeID, hashedPassword, isActive) VALUES
 (1, 'Admin', '$2b$10$ebU6j762YqtNM1OIIqrMKOuGvZdvE5jjIbgOK00ISD7vT1LPSk.Z6', 1),
 (2, 'Ops', '$2b$10$ebU6j762YqtNM1OIIqrMKOuGvZdvE5jjIbgOK00ISD7vT1LPSk.Z6', 1),
 (3, 'DRV-001', '$2b$10$ebU6j762YqtNM1OIIqrMKOuGvZdvE5jjIbgOK00ISD7vT1LPSk.Z6', 1),
 (4, 'HLP-001', '$2b$10$ebU6j762YqtNM1OIIqrMKOuGvZdvE5jjIbgOK00ISD7vT1LPSk.Z6', 1);
 
 -- 3. Vehicles
-INSERT INTO Vehicles (vehicleID, plateNo, type, status) VALUES 
+INSERT INTO Vehicles (vehicleID, plateNo, type, status) VALUES
 (1, 'ABC-1234', 'AUV', 'Working'),
 (2, 'XYZ-9876', '6WH', 'Working'),
 (3, 'UV-0001', 'AUV', 'Maintenance'),
@@ -314,7 +329,7 @@ INSERT INTO PayrollRates (routeCluster, vehicleType, driverBaseFee, helperBaseFe
 ('Candelaria', 'AUV', 1000.00, 700.00, 350.00);
 
 -- 5. Periods
-INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES 
+INSERT INTO PayrollPeriods (periodName, startDate, endDate, status) VALUES
 ('January 1-15, 2026',  '2026-01-01', '2026-01-15', 'CLOSED'),
 ('January 16-31, 2026', '2026-01-16', '2026-01-31', 'CLOSED'),
 ('February 1-15, 2026',  '2026-02-01', '2026-02-15', 'OPEN'),

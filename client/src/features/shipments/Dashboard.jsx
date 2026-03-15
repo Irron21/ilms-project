@@ -1,302 +1,439 @@
-import { useState, useEffect, memo, useRef } from 'react';
-import { Icons } from '@shared';
-import { getTodayString, getDateValue, formatDateDisplay, WAREHOUSE_PHASES } from '@constants';
-import '@styles/features/shipments.css';
+import { useState, useEffect, memo, useRef } from "react";
+import { Icons } from "@shared";
+import {
+  getTodayString,
+  getDateValue,
+  formatDateDisplay,
+  WAREHOUSE_PHASES,
+} from "@constants";
+import "@styles/features/shipments.css";
 
-const Dashboard = memo(({ shipments, activeTab, setActiveTab, onCardClick }) => {
-  const warehousePhasesExceptLast = WAREHOUSE_PHASES.slice(0, -1);
-  const [isAtBottom, setIsAtBottom] = useState(false);
-  const [hasOverflow, setHasOverflow] = useState(false);
-  const containerRef = useRef(null);
-  const [lastUpdateTimestamps, setLastUpdateTimestamps] = useState({});
-  const prevShipmentsRef = useRef([]);
-  const [seenShipments, setSeenShipments] = useState(() => {
-    try {
-      const saved = localStorage.getItem('acknowledgedShipments');
-      return saved ? JSON.parse(saved) : [];
-    } catch (e) { return []; }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('acknowledgedShipments', JSON.stringify(seenShipments));
-  }, [seenShipments]);
-
-  // Scroll handler to toggle the safe zone/arrow visibility
-  const handleScroll = (e) => {
-    const bottom = e.target.scrollHeight - e.target.scrollTop <= e.target.clientHeight + 20; // Added buffer
-    setIsAtBottom(bottom);
-  };
-
-  useEffect(() => {
-    if (prevShipmentsRef.current.length > 0 && shipments.length > 0) {
-      const updates = [];
-      shipments.forEach(newShip => {
-        const oldShip = prevShipmentsRef.current.find(s => s.shipmentID === newShip.shipmentID);
-        if (oldShip && oldShip.currentStatus !== newShip.currentStatus) {
-          updates.push(newShip.shipmentID);
-        }
-      });
-      if (updates.length > 0) {
-        const now = Date.now();
-        setLastUpdateTimestamps(prev => {
-          const next = { ...prev };
-          updates.forEach((id, idx) => {
-            next[id] = now + idx;
-          });
-          return next;
-        });
+const Dashboard = memo(
+  ({ shipments, activeTab, setActiveTab, onCardClick }) => {
+    const warehousePhasesExceptLast = WAREHOUSE_PHASES.slice(0, -1);
+    const [isAtBottom, setIsAtBottom] = useState(false);
+    const [hasOverflow, setHasOverflow] = useState(false);
+    const containerRef = useRef(null);
+    const [lastUpdateTimestamps, setLastUpdateTimestamps] = useState({});
+    const prevShipmentsRef = useRef([]);
+    const [seenShipments, setSeenShipments] = useState(() => {
+      try {
+        const saved = localStorage.getItem("acknowledgedShipments");
+        return saved ? JSON.parse(saved) : [];
+      } catch {
+        return [];
       }
-    }
-    prevShipmentsRef.current = shipments;
-  }, [shipments]);
-
-  const isNewlyAssigned = (timestamp) => {
-    if (!timestamp) return false;
-    
-    const shipmentDate = new Date(timestamp);
-    
-    // Fix 8-hour UTC offset for Philippine Time (UTC+8) if needed
-    const isUTC = typeof timestamp === 'string' && !timestamp.includes('Z') && !timestamp.includes('+');
-    if (isUTC) {
-        shipmentDate.setHours(shipmentDate.getHours() + 8);
-    }
-    
-    const now = new Date();
-    const diffInHours = (now - shipmentDate) / (1000 * 60 * 60);
-    return Math.abs(diffInHours) < 2; // Time bounded to 2 hours, using Math.abs to handle minor timezone desyncs where DB time > Local time
-  };
-
-  const hasBeenAcknowledged = (id) => {
-    return seenShipments.some(seenId => String(seenId) === String(id));
-  };
-
-  const todayOnlyNewCount = shipments.filter(s => {
-    const today = getTodayString();
-    const loadDate = getDateValue(s.loadingDate);
-    return s.currentStatus === 'Pending' && isNewlyAssigned(s.creationTimestamp) && !hasBeenAcknowledged(s.shipmentID) && loadDate === today;
-  }).length;
-
-  const handleCardClick = (shipment) => {
-    const strId = String(shipment.shipmentID);
-    if (!seenShipments.some(id => String(id) === strId)) {
-      const newSeenList = [...seenShipments, strId];
-      setSeenShipments(newSeenList);
-      localStorage.setItem('acknowledgedShipments', JSON.stringify(newSeenList));
-    }
-    onCardClick(shipment);
-  };
-
-  const getCardStyle = (shipment) => {
-    const status = shipment.currentStatus;
-
-    if (status === 'Completed') return { class: 'card-green', label: 'COMPLETED' };
-    if (status === 'Pending') return { class: 'card-blue', label: 'TO LOAD' };
-    
-    // IN TRANSIT: Only when moving (Start Route or Departure from a drop)
-    if (status === 'Start Route' || status === 'Departure') {
-        return { class: 'card-blue', label: 'IN TRANSIT' };
-    }
-
-    // IN PROGRESS: Loading in warehouse or currently at a store (Arrival, Unloading, etc.)
-    return { class: 'card-yellow', label: 'IN PROGRESS' };
-  };
-
-  const filteredShipments = shipments.filter(s => {
-    const today = getTodayString();
-    const loadDate = getDateValue(s.loadingDate);
-    const delDate = getDateValue(s.deliveryDate);
-
-    if (activeTab === 'COMPLETED') return s.currentStatus === 'Completed';
-
-    if (s.currentStatus !== 'Completed') {
-      const isWarehousePhase = s.currentStatus === 'Pending' || warehousePhasesExceptLast.includes(s.currentStatus);
-
-      if (activeTab === 'DELAYED') {
-        const isLoadingDelayed = isWarehousePhase && loadDate && loadDate < today;
-        const isDeliveryDelayed = !isWarehousePhase && delDate && delDate < today;
-        return isLoadingDelayed || isDeliveryDelayed;
-      }
-      if (activeTab === 'UPCOMING') return loadDate > today && s.currentStatus === 'Pending';
-      if (activeTab === 'ACTIVE') {
-        const isLoadingDelayed = isWarehousePhase && loadDate && loadDate < today;
-        const isDeliveryDelayed = !isWarehousePhase && delDate && delDate < today;
-        if (isLoadingDelayed || isDeliveryDelayed) return false;
-
-        // Active if not delayed and:
-        // 1. Delivering Today
-        // 2. Loading Today
-        // 3. In Transit (Started Route or past warehouse)
-        return (delDate === today) || 
-               (loadDate === today) ||
-               (!isWarehousePhase && delDate >= today);
-      }
-    }
-    return false;
-  });
-
-  if (filteredShipments.length > 1) {
-    filteredShipments.sort((a, b) => {
-      const timeA = lastUpdateTimestamps[a.shipmentID] || 0;
-      const timeB = lastUpdateTimestamps[b.shipmentID] || 0;
-      if (timeA !== timeB) return timeB - timeA;
-
-      if (activeTab === 'COMPLETED') {
-        const dateA = getDateValue(a.deliveryDate) ? new Date(a.deliveryDate) : new Date(0);
-        const dateB = getDateValue(b.deliveryDate) ? new Date(b.deliveryDate) : new Date(0);
-        return dateB - dateA;
-      }
-
-      const dateA = getDateValue(a.loadingDate) ? new Date(a.loadingDate) : new Date(0);
-      const dateB = getDateValue(b.loadingDate) ? new Date(b.loadingDate) : new Date(0);
-      return dateB - dateA;
     });
-  }
 
-  useEffect(() => {
-    const checkOverflow = () => {
-      if (containerRef.current) {
-         // Check if scrollHeight is significantly larger than clientHeight
-         const isOverflowing = containerRef.current.scrollHeight > containerRef.current.clientHeight;
-         setHasOverflow(isOverflowing);
+    useEffect(() => {
+      localStorage.setItem(
+        "acknowledgedShipments",
+        JSON.stringify(seenShipments),
+      );
+    }, [seenShipments]);
+
+    // Scroll handler to toggle the safe zone/arrow visibility
+    const handleScroll = (e) => {
+      const bottom =
+        e.target.scrollHeight - e.target.scrollTop <=
+        e.target.clientHeight + 20; // Added buffer
+      setIsAtBottom(bottom);
+    };
+
+    useEffect(() => {
+      if (prevShipmentsRef.current.length > 0 && shipments.length > 0) {
+        const updates = [];
+        shipments.forEach((newShip) => {
+          const oldShip = prevShipmentsRef.current.find(
+            (s) => s.shipmentID === newShip.shipmentID,
+          );
+          if (oldShip && oldShip.currentStatus !== newShip.currentStatus) {
+            updates.push(newShip.shipmentID);
+          }
+        });
+        if (updates.length > 0) {
+          const now = Date.now();
+          setLastUpdateTimestamps((prev) => {
+            const next = { ...prev };
+            updates.forEach((id, idx) => {
+              next[id] = now + idx;
+            });
+            return next;
+          });
+        }
       }
+      prevShipmentsRef.current = shipments;
+    }, [shipments]);
+
+    const isNewlyAssigned = (timestamp, id) => {
+      if (!timestamp || !id) return false;
+      const shipmentDate = new Date(timestamp);
+      const now = new Date();
+      const diffInHours = (now - shipmentDate) / (1000 * 60 * 60);
+      const strId = String(id);
+      const hasBeenSeen = seenShipments.some(
+        (seenId) => String(seenId) === strId,
+      );
+      return diffInHours < 24 && !hasBeenSeen;
     };
-    
-    checkOverflow();
-    window.addEventListener('resize', checkOverflow);
-    return () => window.removeEventListener('resize', checkOverflow);
-  }, [filteredShipments, activeTab]);
 
-  const getBannerContent = () => {
-    const count = filteredShipments.length;
-    if (activeTab === 'ACTIVE' && todayOnlyNewCount > 0) {
-      return {
-        class: 'alert',
-        icon: <Icons.Truck style={{ width: 18, height: 18 }} stroke="white" fill="black" />,
-        text: `You have ${todayOnlyNewCount} new shipment assignment(s) today!`
-      };
-    }
-    if (activeTab === 'DELAYED') {
-      return {
-        class: 'delayed',
-        icon: <Icons.AlertCircle style={{ width: 18, height: 18 }} />,
-        text: count > 0 ? `${count} Shipment(s) marked as Delayed` : 'No Delayed Shipments'
-      };
-    }
-    if (activeTab === 'COMPLETED') {
-      return {
-        class: 'completed',
-        icon: <Icons.CheckCircle style={{ width: 18, height: 18 }} />,
-        text: `${count} Shipment(s) Completed`
-      };
-    }
-    return {
-      class: 'info',
-      icon: <Icons.Calendar style={{ width: 18, height: 18 }} />,
-      text: `${count} ${activeTab.toLowerCase().replace(/\b\w/g, s => s.toUpperCase())} Shipment(s)`
+    const todayOnlyNewCount = shipments.filter((s) => {
+      const today = getTodayString();
+      const loadDate = getDateValue(s.loadingDate);
+      return (
+        s.currentStatus === "Pending" &&
+        isNewlyAssigned(s.creationTimestamp, s.shipmentID) &&
+        loadDate === today
+      );
+    }).length;
+
+    const handleCardClick = (shipment) => {
+      const strId = String(shipment.shipmentID);
+      if (!seenShipments.some((id) => String(id) === strId)) {
+        const newSeenList = [...seenShipments, strId];
+        setSeenShipments(newSeenList);
+        localStorage.setItem(
+          "acknowledgedShipments",
+          JSON.stringify(newSeenList),
+        );
+      }
+      onCardClick(shipment);
     };
-  };
 
-  const banner = getBannerContent();
-  const animationKey = (activeTab === 'ACTIVE' || activeTab === 'UPCOMING') ? 'active-upcoming-group' : activeTab;
+    const getCardStyle = (shipment) => {
+      const status = shipment.currentStatus;
 
-  return (
-    <div className="dashboard-wrapper">
-      <div className={`status-bar-container ${banner.class}`}>
-        <div className="status-bar-content" key={animationKey}>
-          {banner.icon}
-          <span>{banner.text}</span>
+      if (status === "Completed")
+        return { class: "card-green", label: "COMPLETED" };
+      if (status === "Pending") return { class: "card-blue", label: "TO LOAD" };
+
+      // IN TRANSIT: Only when moving (Start Route or Departure from a drop)
+      if (status === "Start Route" || status === "Departure") {
+        return { class: "card-blue", label: "IN TRANSIT" };
+      }
+
+      // IN PROGRESS: Loading in warehouse or currently at a store (Arrival, Unloading, etc.)
+      return { class: "card-yellow", label: "IN PROGRESS" };
+    };
+
+    const filteredShipments = shipments.filter((s) => {
+      const today = getTodayString();
+      const loadDate = getDateValue(s.loadingDate);
+      const delDate = getDateValue(s.deliveryDate);
+
+      if (activeTab === "COMPLETED") return s.currentStatus === "Completed";
+
+      if (s.currentStatus !== "Completed") {
+        const isWarehousePhase =
+          s.currentStatus === "Pending" ||
+          warehousePhasesExceptLast.includes(s.currentStatus);
+
+        if (activeTab === "DELAYED") {
+          const isLoadingDelayed =
+            isWarehousePhase && loadDate && loadDate < today;
+          const isDeliveryDelayed =
+            !isWarehousePhase && delDate && delDate < today;
+          return isLoadingDelayed || isDeliveryDelayed;
+        }
+        if (activeTab === "UPCOMING")
+          return loadDate > today && s.currentStatus === "Pending";
+        if (activeTab === "ACTIVE") {
+          const isLoadingDelayed =
+            isWarehousePhase && loadDate && loadDate < today;
+          const isDeliveryDelayed =
+            !isWarehousePhase && delDate && delDate < today;
+          if (isLoadingDelayed || isDeliveryDelayed) return false;
+
+          // Active if not delayed and:
+          // 1. Delivering Today
+          // 2. Loading Today
+          // 3. In Transit (Started Route or past warehouse)
+          return (
+            delDate === today ||
+            loadDate === today ||
+            (!isWarehousePhase && delDate >= today)
+          );
+        }
+      }
+      return false;
+    });
+
+    if (filteredShipments.length > 1) {
+      filteredShipments.sort((a, b) => {
+        const timeA = lastUpdateTimestamps[a.shipmentID] || 0;
+        const timeB = lastUpdateTimestamps[b.shipmentID] || 0;
+        if (timeA !== timeB) return timeB - timeA;
+
+        if (activeTab === "COMPLETED") {
+          const dateA = getDateValue(a.deliveryDate)
+            ? new Date(a.deliveryDate)
+            : new Date(0);
+          const dateB = getDateValue(b.deliveryDate)
+            ? new Date(b.deliveryDate)
+            : new Date(0);
+          return dateB - dateA;
+        }
+
+        const dateA = getDateValue(a.loadingDate)
+          ? new Date(a.loadingDate)
+          : new Date(0);
+        const dateB = getDateValue(b.loadingDate)
+          ? new Date(b.loadingDate)
+          : new Date(0);
+        return dateB - dateA;
+      });
+    }
+
+    useEffect(() => {
+      const checkOverflow = () => {
+        if (containerRef.current) {
+          // Check if scrollHeight is significantly larger than clientHeight
+          const isOverflowing =
+            containerRef.current.scrollHeight >
+            containerRef.current.clientHeight;
+          setHasOverflow(isOverflowing);
+        }
+      };
+
+      checkOverflow();
+      window.addEventListener("resize", checkOverflow);
+      return () => window.removeEventListener("resize", checkOverflow);
+    }, [filteredShipments, activeTab]);
+
+    const getBannerContent = () => {
+      const count = filteredShipments.length;
+      if (activeTab === "ACTIVE" && todayOnlyNewCount > 0) {
+        return {
+          class: "alert",
+          icon: (
+            <Icons.Truck
+              style={{ width: 18, height: 18 }}
+              stroke="white"
+              fill="black"
+            />
+          ),
+          text: `You have ${todayOnlyNewCount} new shipment assignment(s) today!`,
+        };
+      }
+      if (activeTab === "DELAYED") {
+        return {
+          class: "delayed",
+          icon: <Icons.AlertCircle style={{ width: 18, height: 18 }} />,
+          text:
+            count > 0
+              ? `${count} Shipment(s) marked as Delayed`
+              : "No Delayed Shipments",
+        };
+      }
+      if (activeTab === "COMPLETED") {
+        return {
+          class: "completed",
+          icon: <Icons.CheckCircle style={{ width: 18, height: 18 }} />,
+          text: `${count} Shipment(s) Completed`,
+        };
+      }
+      return {
+        class: "info",
+        icon: <Icons.Calendar style={{ width: 18, height: 18 }} />,
+        text: `${count} ${activeTab.toLowerCase().replace(/\b\w/g, (s) => s.toUpperCase())} Shipment(s)`,
+      };
+    };
+
+    const banner = getBannerContent();
+    const animationKey =
+      activeTab === "ACTIVE" || activeTab === "UPCOMING"
+        ? "active-upcoming-group"
+        : activeTab;
+
+    return (
+      <div className="dashboard-wrapper">
+        <div className={`status-bar-container ${banner.class}`}>
+          <div className="status-bar-content" key={animationKey}>
+            {banner.icon}
+            <span>{banner.text}</span>
+          </div>
+        </div>
+
+        <div className="tabs">
+          <span
+            className={`tab ${activeTab === "ACTIVE" ? "active" : ""}`}
+            onClick={() => setActiveTab("ACTIVE")}
+          >
+            ACTIVE
+          </span>
+          <span
+            className={`tab ${activeTab === "UPCOMING" ? "active" : ""}`}
+            onClick={() => setActiveTab("UPCOMING")}
+          >
+            UPCOMING
+          </span>
+          <span
+            className={`tab ${activeTab === "COMPLETED" ? "active" : ""}`}
+            onClick={() => setActiveTab("COMPLETED")}
+          >
+            COMPLETED
+          </span>
+          <span
+            className={`tab delayed ${activeTab === "DELAYED" ? "active" : ""}`}
+            onClick={() => setActiveTab("DELAYED")}
+          >
+            DELAYED
+          </span>
+        </div>
+
+        <div
+          className="dashboard-container"
+          onScroll={handleScroll}
+          ref={containerRef}
+        >
+          {filteredShipments.length === 0 && (
+            <div className="empty-state">
+              No {activeTab.toLowerCase()} shipments found.
+            </div>
+          )}
+
+          {filteredShipments.map((shipment) => {
+            const style = getCardStyle(shipment);
+            const isNew =
+              shipment.currentStatus === "Pending" &&
+              isNewlyAssigned(shipment.creationTimestamp, shipment.shipmentID);
+            const isDelayed = activeTab === "DELAYED";
+            const isUpcoming = activeTab === "UPCOMING";
+            const isInTransit = style.label === "IN TRANSIT";
+            const cardClass = isDelayed ? "card-yellow" : style.class;
+
+            // Multi-drop progress calculation
+            const currentDropIndex = Math.min(
+              shipment.dropCount - 1,
+              shipment.completedDropsCount || 0,
+            );
+            const drops = shipment.dropDetails
+              ? shipment.dropDetails.split("|").map((d) => {
+                  const [id, rest] = d.split(":");
+                  const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
+                  return { name: match ? match[1] : rest || d };
+                })
+              : [];
+            const currentDropName =
+              shipment.dropCount > 1 && drops[currentDropIndex]
+                ? drops[currentDropIndex].name
+                : shipment.destName;
+
+            return (
+              <div
+                key={shipment.shipmentID}
+                className={`shipment-card ${cardClass} ${isUpcoming ? "disabled-card upcoming-card" : ""} ${isInTransit ? "transit-card" : ""}`}
+                onClick={
+                  isUpcoming ? undefined : () => handleCardClick(shipment)
+                }
+              >
+                {isUpcoming ? (
+                  <div className="new-badge scheduled">SCHEDULED</div>
+                ) : isInTransit ? (
+                  <div className="new-badge transit">TO DELIVER</div>
+                ) : (
+                  isNew && <div className="new-badge">NEW</div>
+                )}
+                <div>
+                  <div className="card-id">
+                    SHIPMENT ID: #{shipment.shipmentID}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <div
+                      className="card-client"
+                      style={{
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: "120px",
+                      }}
+                    >
+                      {shipment.dropCount > 1
+                        ? style.label === "IN TRANSIT" ||
+                          style.label === "IN PROGRESS"
+                          ? currentDropName
+                          : "Multiple Stores"
+                        : shipment.destName}
+                    </div>
+                    |
+                    <div
+                      className="card-location"
+                      style={{
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        maxWidth: "120px",
+                      }}
+                    >
+                      {shipment.dropCount > 1
+                        ? style.label === "IN TRANSIT" ||
+                          style.label === "IN PROGRESS"
+                          ? `Drop ${currentDropIndex + 1} of ${shipment.dropCount}`
+                          : `${shipment.dropCount} Drops`
+                        : shipment.destLocation}
+                    </div>
+                  </div>
+                  <div className="card-dates-row">
+                    <div className="date-line" style={{ color: "#2980b9" }}>
+                      <span className="date-label">Loading:</span>{" "}
+                      {formatDateDisplay(shipment.loadingDate)}
+                    </div>
+                    <div
+                      className="date-line"
+                      style={{
+                        color: activeTab === "DELAYED" ? "#c0392b" : "#d35400",
+                      }}
+                    >
+                      <span className="date-label">Delivery:</span>{" "}
+                      {formatDateDisplay(shipment.deliveryDate)}
+                    </div>
+                  </div>
+                </div>
+                <div className="card-status-label">
+                  {isDelayed ? (
+                    <span style={{ color: "#c0392b", fontWeight: "800" }}>
+                      DELAYED
+                    </span>
+                  ) : (
+                    style.label
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div
+          className={`safe-zone-footer ${isAtBottom || !hasOverflow ? "hidden" : ""}`}
+        >
+          {hasOverflow && (
+            <div className={`scroll-arrow ${isAtBottom ? "hidden" : ""}`}>
+              <span>Scroll for More</span>
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#333"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
+              </svg>
+            </div>
+          )}
         </div>
       </div>
-
-      <div className="tabs">
-        <span className={`tab ${activeTab === 'ACTIVE' ? 'active' : ''}`} onClick={() => setActiveTab('ACTIVE')}>ACTIVE</span>
-        <span className={`tab ${activeTab === 'UPCOMING' ? 'active' : ''}`} onClick={() => setActiveTab('UPCOMING')}>UPCOMING</span>
-        <span className={`tab ${activeTab === 'COMPLETED' ? 'active' : ''}`} onClick={() => setActiveTab('COMPLETED')}>COMPLETED</span>
-        <span className={`tab delayed ${activeTab === 'DELAYED' ? 'active' : ''}`} onClick={() => setActiveTab('DELAYED')}>DELAYED</span>
-      </div>
-
-      <div className="dashboard-container" onScroll={handleScroll} ref={containerRef}>
-        {filteredShipments.length === 0 && (
-          <div className="empty-state">No {activeTab.toLowerCase()} shipments found.</div>
-        )}
-
-        {filteredShipments.map((shipment) => {
-          const style = getCardStyle(shipment);
-          const isNew = shipment.currentStatus === 'Pending' && isNewlyAssigned(shipment.creationTimestamp);
-          const isAcknowledged = hasBeenAcknowledged(shipment.shipmentID);
-          const isDelayed = activeTab === 'DELAYED';
-          const isUpcoming = activeTab === 'UPCOMING';
-          const isInTransit = style.label === 'IN TRANSIT';
-          const cardClass = isDelayed ? 'card-yellow' : style.class;
-
-          // Multi-drop progress calculation
-          const currentDropIndex = Math.min(shipment.dropCount - 1, (shipment.completedDropsCount || 0));
-          const drops = shipment.dropDetails ? shipment.dropDetails.split('|').map(d => {
-            const [id, rest] = d.split(':');
-            const match = rest ? rest.match(/^(.*) \((.*)\)$/) : null;
-            return { name: match ? match[1] : (rest || d) };
-          }) : [];
-          const currentDropName = (shipment.dropCount > 1 && drops[currentDropIndex]) ? drops[currentDropIndex].name : shipment.destName;
-
-          return (
-            <div
-              key={shipment.shipmentID}
-              className={`shipment-card ${cardClass} ${isUpcoming ? 'disabled-card upcoming-card' : ''} ${isInTransit ? 'transit-card' : ''}`}
-              onClick={isUpcoming ? undefined : () => handleCardClick(shipment)}
-            >
-              {isUpcoming ? (
-                <div className="new-badge scheduled">SCHEDULED</div>
-              ) : isInTransit ? (
-                <div className="new-badge transit">TO DELIVER</div>
-              ) : (
-                isNew && <div className={`new-badge ${isAcknowledged ? 'acknowledged' : ''}`}>NEW</div>
-              )}
-              <div>
-                <div className="card-id">SHIPMENT ID: #{shipment.shipmentID}</div>
-                <div style={{ display: "flex", flexDirection: "row", alignItems: "center", gap: "10px" }}>
-                  <div className="card-client" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
-                    {shipment.dropCount > 1 
-                      ? (style.label === 'IN TRANSIT' || style.label === 'IN PROGRESS' ? currentDropName : 'Multiple Stores')
-                      : shipment.destName}
-                  </div>
-                  |
-                  <div className="card-location" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px' }}>
-                    {shipment.dropCount > 1 
-                      ? (style.label === 'IN TRANSIT' || style.label === 'IN PROGRESS' 
-                          ? `Drop ${currentDropIndex + 1} of ${shipment.dropCount}`
-                          : `${shipment.dropCount} Drops`)
-                      : shipment.destLocation}
-                  </div>
-                </div>
-                <div className="card-dates-row">
-                  <div className="date-line" style={{ color: '#2980b9' }}>
-                    <span className="date-label">Loading:</span> {formatDateDisplay(shipment.loadingDate)}
-                  </div>
-                  <div className="date-line" style={{ color: activeTab === 'DELAYED' ? '#c0392b' : '#d35400' }}>
-                    <span className="date-label">Delivery:</span> {formatDateDisplay(shipment.deliveryDate)}
-                  </div>
-                </div>
-              </div>
-              <div className="card-status-label">
-                {isDelayed ? <span style={{ color: '#c0392b', fontWeight: '800' }}>DELAYED</span> : style.label}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className={`safe-zone-footer ${isAtBottom || !hasOverflow ? 'hidden' : ''}`}>
-        {hasOverflow && (
-          <div className={`scroll-arrow ${isAtBottom ? 'hidden' : ''}`}>
-            <span>Scroll for More</span>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#333" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M7 13l5 5 5-5M7 6l5 5 5-5" />
-            </svg>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-});
+    );
+  },
+);
 
 export default Dashboard;

@@ -1,8 +1,9 @@
 const { GoogleGenAI } = require("@google/genai");
+const db = require("../config/db");
 
 const analyzeKPI = async (req, res) => {
   try {
-    const { chartContext, timeframeLabel } = req.body;
+    const { chartContext, timeframeLabel, chartImageBase64 } = req.body;
 
     // Full body log so we can verify exactly what the frontend is sending
     console.log("[AI Controller] Full req.body keys:", Object.keys(req.body));
@@ -131,7 +132,33 @@ CRITICAL: Do NOT use any conversational greetings (e.g., no "Good morning", "Let
       contents: prompt,
     });
 
-    res.status(200).json({ insight: response.text });
+    const insightText = response.text;
+
+    // Fire-and-forget: persist the report to the database without blocking the response
+    const metricsStr = Array.isArray(chartContext.selectedMetrics)
+      ? chartContext.selectedMetrics.join(", ")
+      : String(chartContext.selectedMetrics);
+
+    db.query(
+      "INSERT INTO kpi_ai_reports (report_text, primary_year, compare_year, metrics_analyzed, chart_image, view_mode) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        insightText,
+        chartContext.primaryYear || "unknown",
+        chartContext.compareYear || "none",
+        metricsStr,
+        chartImageBase64 || null,
+        chartContext.viewMode || "monthly",
+      ],
+      (dbErr) => {
+        if (dbErr) {
+          console.error("[AI Controller] Failed to save report to DB:", dbErr);
+        } else {
+          console.log("[AI Controller] Report saved to kpi_ai_reports.");
+        }
+      },
+    );
+
+    res.status(200).json({ insight: insightText });
   } catch (error) {
     console.error("AI Analysis Error Details:", error);
     if (error.response) {
@@ -144,6 +171,66 @@ CRITICAL: Do NOT use any conversational greetings (e.g., no "Good morning", "Let
   }
 };
 
+// ---------------------------------------------------------------------------
+// GET REPORT HISTORY
+// Returns all saved AI reports, newest first.
+// ---------------------------------------------------------------------------
+const getReportHistory = (req, res) => {
+  const sql =
+    "SELECT id, report_text, primary_year, compare_year, metrics_analyzed, chart_image, view_mode, created_at FROM kpi_ai_reports ORDER BY created_at DESC";
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error("[AI Controller] Failed to fetch report history:", err);
+      return res
+        .status(500)
+        .json({ message: "Failed to fetch report history." });
+    }
+    res.status(200).json(results);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// GET SINGLE REPORT (full text for expand)
+// ---------------------------------------------------------------------------
+const getReportById = (req, res) => {
+  const { id } = req.params;
+  const sql = "SELECT * FROM kpi_ai_reports WHERE id = ?";
+
+  db.query(sql, [id], (err, results) => {
+    if (err) {
+      console.error("[AI Controller] Failed to fetch report:", err);
+      return res.status(500).json({ message: "Failed to fetch report." });
+    }
+    if (!results || results.length === 0) {
+      return res.status(404).json({ message: "Report not found." });
+    }
+    res.status(200).json(results[0]);
+  });
+};
+
+// ---------------------------------------------------------------------------
+// DELETE AI REPORT
+// ---------------------------------------------------------------------------
+const deleteAIReport = (req, res) => {
+  const { id } = req.params;
+  const sql = "DELETE FROM kpi_ai_reports WHERE id = ?";
+
+  db.query(sql, [id], (err, result) => {
+    if (err) {
+      console.error("[AI Controller] Failed to delete AI report:", err);
+      return res.status(500).json({ message: "Failed to delete report." });
+    }
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ message: "Report not found." });
+    }
+    res.status(200).json({ message: "AI report deleted successfully." });
+  });
+};
+
 module.exports = {
   analyzeKPI,
+  getReportHistory,
+  getReportById,
+  deleteAIReport,
 };
